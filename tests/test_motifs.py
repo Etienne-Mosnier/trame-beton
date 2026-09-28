@@ -12,7 +12,7 @@ import pytest
 from shapely.geometry import LineString, box
 
 from trame.moteur.chemin import calculer_chemin
-from trame.parametres import Parametre, Point, valeurs
+from trame.parametres import TYPES, Parametre, Points, valeurs
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 # un motif = un dossier qui contient motif.py : motifs/exemple/ ou motifs/groupe_1/vagues/
@@ -52,7 +52,7 @@ def test_forme_du_fichier(nom):
 @pytest.mark.parametrize("nom", MOTIFS)
 def test_parametres_complets(nom):
     for cle, parametre in charger(nom).PARAMETRES.items():
-        assert isinstance(parametre, (Parametre, Point)), cle
+        assert isinstance(parametre, TYPES), cle
         assert parametre.aide, "le paramètre « %s » n'a pas d'aide" % cle
         if isinstance(parametre, Parametre):
             assert parametre.mini <= parametre.valeur <= parametre.maxi, cle
@@ -79,8 +79,17 @@ def test_imports_autorises(nom):
 @pytest.mark.parametrize("reglage", ["defaut", "mini", "maxi"])
 def test_series_valides(nom, reglage):
     motif = charger(nom)
-    choix = {cle: getattr(p, "valeur" if reglage == "defaut" else reglage, p.valeur)
-             for cle, p in motif.PARAMETRES.items()}
+    def essai(p):
+        # curseurs à leur minimum / maximum ; listes de points avec le moins / le plus de points
+        if reglage == "defaut":
+            return p.valeur
+        if isinstance(p, Parametre):
+            return getattr(p, reglage)
+        if isinstance(p, Points):
+            return p.valeur[:p.mini] if reglage == "mini" else p.valeur
+        return p.valeur
+
+    choix = {cle: essai(p) for cle, p in motif.PARAMETRES.items()}
     for forme in FORMES:
         S = motif.series(forme, valeurs(motif.PARAMETRES, choix))
         assert 2 <= len(S) <= 5, "il faut de 2 à 5 séries"

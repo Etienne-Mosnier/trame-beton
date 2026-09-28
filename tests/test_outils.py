@@ -6,7 +6,7 @@ import pytest
 from shapely.geometry import box
 
 from trame import outils
-from trame.parametres import Parametre, Point, valeurs
+from trame.parametres import Case, Choix, Parametre, Point, Points, valeurs
 
 FORME = box(0, 0, 400, 200)
 
@@ -51,3 +51,19 @@ def test_point():
     # valeur venue de l'aperçu (liste JSON), ramenée sur la palette
     assert valeurs(P, {"attraction": [1500, -20]})["attraction"] == (1200.0, 0.0)
     assert P["attraction"].vers_dict() == {"type": "point", "valeur": [400.0, 300.0], "aide": "point"}
+
+
+def test_choix_case_points():
+    P = {
+        "forme": Choix("vagues", ["vagues", "zigzag"], aide="forme"),
+        "inverser": Case(False, aide="sens"),
+        "attractions": Points([(400, 400), (800, 400)], mini=1, maxi=3, aide="points"),
+    }
+    assert valeurs(P) == {"forme": "vagues", "inverser": False, "attractions": [(400.0, 400.0), (800.0, 400.0)]}
+    v = valeurs(P, {"forme": "spirale", "inverser": True,
+                    "attractions": [[100, 100], [2000, 50], [300, 300], [500, 500]]})
+    assert v["forme"] == "vagues"                                   # option inconnue : défaut
+    assert v["inverser"] is True
+    assert v["attractions"] == [(100.0, 100.0), (1200.0, 50.0), (300.0, 300.0)]   # 3 au plus, sur la palette
+    assert valeurs(P, {"attractions": []})["attractions"] == [(400.0, 400.0)]    # 1 au moins
+    assert P["attractions"].vers_dict()["type"] == "points"

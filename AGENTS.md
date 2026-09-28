@@ -56,7 +56,10 @@ Un motif = un dossier. Chaque groupe peut en avoir plusieurs : `motifs/groupe_1/
 NOM = "Nom lisible du motif"
 PARAMETRES = {
     "espacement": Parametre(50, mini=20, maxi=150, unite="mm", aide="Écart entre deux lignes"),
-    "attraction": Point(400, 300, aide="Point vers lequel les lignes sont attirées"),
+    "forme": Choix("vagues", ["vagues", "zigzag"], aide="Forme des lignes de la série B"),
+    "inverser": Case(False, aide="Inverser le sens des vagues"),
+    "centre": Point(600, 400, aide="Centre des cercles"),
+    "attractions": Points([(400, 400)], mini=0, maxi=8, aide="Points qui attirent les lignes"),
     ...
 }
 
@@ -67,17 +70,27 @@ def series(contour, p):
 Règles :
 - **Un motif = un dossier avec un fichier `motif.py`**, plus un `aide.md` qui explique le motif.
 - `NOM` : le nom affiché dans l'aperçu, court et parlant (ex. « Vagues serrées au centre »).
-- Seulement `math`, `shapely`, `Parametre` et `Point` (de `trame/parametres.py`) et les
-  fonctions de `trame/outils.py`. Aucune autre dépendance.
+- Seulement `math`, `shapely`, les types de `trame/parametres.py` et les fonctions de
+  `trame/outils.py`. Aucune autre dépendance. Tu peux écrire tes propres fonctions dans `motif.py`.
 - Pas de classes, pas de métaprogrammation, pas d'astuce : des fonctions courtes et des boucles.
 - Noms de variables et commentaires **en français**. Chaque paramètre a une `aide` compréhensible
   par un designer.
 - Tout paramètre qu'un étudiant voudrait régler dans l'aperçu doit être dans `PARAMETRES`,
   jamais écrit en dur dans le code.
-- Un **point à placer à la souris** sur la palette (point d'attraction, centre, départ…) est un
-  `Point(x, y, aide=...)` (import : `from trame.parametres import Parametre, Point`) : l'aperçu
-  affiche une poignée orange que l'on déplace. `p["nom"]` vaut `(x, y)` en mm, repère palette.
-  N'utilise pas deux curseurs x et y pour ça.
+- **Tout ce que l'étudiant veut régler passe par ces 5 types** (`from trame.parametres import …`) ;
+  l'aperçu sait tous les afficher. **Tu n'as jamais besoin de modifier `web/` pour un motif.**
+
+  | Type | Dans l'aperçu | Valeur dans `p["nom"]` |
+  |---|---|---|
+  | `Parametre(valeur, mini, maxi, unite, aide)` | un curseur | un nombre |
+  | `Choix(valeur, [options], aide)` | une liste déroulante | le texte choisi |
+  | `Case(valeur, aide)` | une case oui / non | `True` / `False` |
+  | `Point(x, y, aide)` | une poignée orange à déplacer sur la palette | `(x, y)` en mm |
+  | `Points([(x, y), …], mini, maxi, aide)` | des poignées que l'on **ajoute** (double-clic sur la palette), **déplace** (clic) et **supprime** (double-clic sur le point) | liste de `(x, y)` en mm |
+
+  Points en mm, repère palette (origine au coin, x le long du grand côté). Pour des points
+  d'attraction, centres, départs… utilise `Point` ou `Points`, jamais deux curseurs x et y.
+  Avec `Points` et `mini=0`, le motif doit marcher aussi sans aucun point.
 - Unités : **millimètres** et **degrés**, partout.
 - Les courbes peuvent dépasser du contour : le moteur les découpe.
 
