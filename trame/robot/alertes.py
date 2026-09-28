@@ -141,17 +141,21 @@ def analyser(angles, hors_portee, points, tcp, vers_palette, palette):
     ]
 
 
-def zone_atteignable(repere_vers_robot, palette, hauteurs, orientation, tcp_inverse, pas=50.0):
-    """Grille de la palette : pour chaque case, True si le robot atteint le point avec la buse
-    verticale à toutes les hauteurs données. repere_vers_robot(p) : point palette (mm) -> robot (mm)."""
+def zone_atteignable(repere_vers_robot, bornes, hauteurs, orientation, tcp_inverse, pas=50.0):
+    """Grille sur le plan de la palette : pour chaque case, True si le robot atteint le point avec
+    la buse verticale à toutes les hauteurs données.
+    bornes : (xmin, xmax, ymin, ymax) en mm dans le repère palette, ou (longueur, largeur) de la palette.
+    repere_vers_robot(p) : point palette (mm) -> robot (mm)."""
     from trame.robot.cinematique import inverse
 
-    lx, ly = palette
+    if len(bornes) == 2:
+        bornes = (0.0, bornes[0], 0.0, bornes[1])
+    xmin, xmax, ymin, ymax = bornes
     cases = []
-    y = pas / 2
-    while y < ly:
-        x = pas / 2
-        while x < lx:
+    y = ymin + pas / 2
+    while y < ymax:
+        x = xmin + pas / 2
+        while x < xmax:
             ok = True
             for h in hauteurs:
                 T = np.eye(4)

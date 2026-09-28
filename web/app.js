@@ -41,8 +41,9 @@ const groupeTrame = new THREE.Group();
 const groupeAlertes = new THREE.Group(); // endroits à problème, en rouge
 const groupeCordon = new THREE.Group();  // cordon déposé pendant l'animation du robot
 const groupeAlertesRobot = new THREE.Group(); // alertes robot, en rouge
-const groupeZone = new THREE.Group();    // zone atteignable (mode placement)
-scene.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon, groupeAlertesRobot, groupeZone);
+const groupeZone = new THREE.Group();    // cases de la palette hors de portée (mode placement)
+const groupePortee = new THREE.Group();  // portée du robot, ses axes et la boussole
+scene.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon, groupeAlertesRobot, groupeZone, groupePortee);
 const materiaux = [];
 
 let palette = [1200, 800];
@@ -62,7 +63,7 @@ function vue3d() {
     const [bx, by] = robot.donnees.base.position;
     const cx = (lx / 2 + bx) / 2, cy = (ly / 2 + by) / 2;
     controles.target.set(cx, cy, 200);
-    camera.position.set(cx + 1300, cy - 2700, 2000);
+    camera.position.set(cx + 1500, cy - 3300, 2500);
     controles.update();
     activer("vue-3d");
     return;
@@ -197,6 +198,7 @@ async function montrerRobot(visible) {
   groupeCordon.visible = visible;
   groupeAlertesRobot.visible = visible;
   groupeAlertes.visible = !visible;
+  groupePortee.visible = visible && $("montrer-portee").checked;
   if (robot.racine) robot.racine.visible = visible;
   if (!visible) { arreterLecture(); return; }
   if (!robot.modele) {
@@ -214,6 +216,7 @@ async function montrerRobot(visible) {
     etat.textContent = "";
   }
   calculerRobot();
+  montrerPortee();
   vue3d();
 }
 
@@ -299,19 +302,97 @@ function arreterLecture() {
   $("lecture").textContent = "▶ Lecture";
 }
 
+// texte toujours face à la caméra
+function etiquette(texte, couleur, taille = 60) {
+  const toile = document.createElement("canvas");
+  const c = toile.getContext("2d");
+  const police = "bold 40px system-ui, sans-serif";
+  c.font = police;
+  toile.width = Math.ceil(c.measureText(texte).width) + 16;   // support à la taille du texte
+  toile.height = 64;
+  c.font = police;
+  c.fillStyle = couleur;
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.fillText(texte, toile.width / 2, 32);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(toile), depthTest: false }));
+  sprite.scale.set((taille * toile.width) / toile.height, taille, 1);
+  return sprite;
+}
+
+// portée du robot (cases vertes), cercle de portée maximale, axes X/Y du robot, boussole
+function dessinerPortee(p) {
+  vider(groupePortee);
+  if (!p) return;
+  const [bx, by] = p.base;
+  const z = -30;  // au sol, sous la palette : la palette cache la zone qu'elle recouvre
+
+  // cases atteignables, en une seule géométrie (rapide à dessiner)
+  const cases = new THREE.InstancedMesh(
+    new THREE.PlaneGeometry(p.pas * 0.92, p.pas * 0.92),
+    new THREE.MeshBasicMaterial({ color: "#16a34a", transparent: true, opacity: 0.18, depthWrite: false }),
+    p.cases.length);
+  const m = new THREE.Matrix4();
+  p.cases.forEach(([x, y], i) => cases.setMatrixAt(i, m.makeTranslation(x, y, z)));
+  groupePortee.add(cases);
+
+  // cercle de portée maximale
+  const cercle = [];
+  for (let k = 0; k <= 128; k++) {
+    const a = (2 * Math.PI * k) / 128;
+    cercle.push([bx + p.portee_max * Math.cos(a), by + p.portee_max * Math.sin(a), z + 1]);
+  }
+  groupePortee.add(trait(cercle, "#16a34a", 3, true));
+  const texte = etiquette("portée max 1,3 m", "#15803d", 80);
+  texte.position.set(bx - p.portee_max * 0.71, by + p.portee_max * 0.71, 40);
+  groupePortee.add(texte);
+
+  // axes du robot (comme sur le pendant) : X rouge, Y vert, 40 cm
+  const fleche = (v, couleur, nom) => {
+    const d = new THREE.Vector3(v[0], v[1], 0);
+    groupePortee.add(new THREE.ArrowHelper(d, new THREE.Vector3(bx, by, 5), 400, couleur, 60, 35));
+    const e = etiquette(nom, couleur, 90);
+    e.position.set(bx + v[0] * 560, by + v[1] * 560, 30);
+    groupePortee.add(e);
+  };
+  fleche(p.axe_x, "#dc2626", "X robot");
+  fleche(p.axe_y, "#16a34a", "Y robot");
+
+  // boussole : N et S, au-delà du cercle de portée
+  const [nx, ny] = p.nord;
+  const r = p.portee_max + 150;
+  groupePortee.add(trait([[bx - nx * r, by - ny * r, z + 1], [bx + nx * r, by + ny * r, z + 1]], "#1f2328", 3, true));
+  const n = etiquette("N", "#1f2328", 160);
+  n.position.set(bx + nx * (r + 60), by + ny * (r + 60), 30);
+  const s = etiquette("S", "#6b7280", 120);
+  s.position.set(bx - nx * (r + 60), by - ny * (r + 60), 30);
+  groupePortee.add(n, s);
+}
+
+function montrerPortee() {
+  groupePortee.visible = robot.visible && $("montrer-portee").checked;
+  if (groupePortee.visible && !robot.portee && app) {
+    robot.portee = JSON.parse(app.portee_robot());
+    dessinerPortee(robot.portee);
+  }
+}
+
 // Mode enseignant : placer la palette et voir la zone atteignable
 async function placer(reglages) {
   if (!app) return;
   if (!robot.visible) { $("montrer-robot").checked = true; await montrerRobot(true); }
   const r = JSON.parse(app.placement(reglages ? JSON.stringify(reglages) : ""));
   vider(groupeZone);
-  const vert = new THREE.MeshBasicMaterial({ color: "#16a34a", transparent: true, opacity: 0.25, side: THREE.DoubleSide });
   const rouge = new THREE.MeshBasicMaterial({ color: "#e11d48", transparent: true, opacity: 0.35, side: THREE.DoubleSide });
   for (const [x, y, ok] of r.zone) {
-    const c = new THREE.Mesh(new THREE.PlaneGeometry(46, 46), ok ? vert : rouge);
+    if (ok) continue;                    // le vert vient de la portée du robot
+    const c = new THREE.Mesh(new THREE.PlaneGeometry(46, 46), rouge);
     c.position.set(x, y, 1);
     groupeZone.add(c);
   }
+  robot.portee = r.portee;
+  dessinerPortee(r.portee);
+  montrerPortee();
   $("resultat-placement").textContent = `${r.atteignable} % de la palette est atteignable.`;
   const c = r.calibration;
   $("calibration-placement").textContent = reglages
@@ -469,6 +550,7 @@ async function demarrer() {
   $("vue-dessus").onclick = vueDessus;
   $("vue-3d").onclick = vue3d;
   $("montrer-robot").addEventListener("change", (e) => montrerRobot(e.target.checked));
+  $("montrer-portee").addEventListener("change", montrerPortee);
   $("lecture").onclick = () => {
     if (!robot.donnees) return;
     if (robot.lecture) { arreterLecture(); return; }
