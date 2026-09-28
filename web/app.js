@@ -240,8 +240,7 @@ const robot = { modele: null, racine: null, donnees: null, lecture: false, t: In
 // charge le bras une fois (maillages officiels, quelques secondes)
 async function chargerRobot() {
   try {
-    // deux essais : une coupure réseau passagère ne doit pas priver la page du robot
-    robot.modele = await creerRobot("robot/ur10e").catch(() => creerRobot("robot/ur10e"));
+    robot.modele = await creerRobot("robot/ur10e");
   } catch (erreur) {
     $("message-robot").textContent = "Le robot n'a pas pu être chargé (" + erreur.message + "). Recharge la page.";
     console.error(erreur);
@@ -619,6 +618,13 @@ async function demarrer() {
       else placerDepuisGizmo();
     });
   }
+  // un seul gizmo à la fois : au moment d'appuyer (avant les gizmos, phase de capture),
+  // les flèches et le carré ont priorité ; l'anneau ne tourne que si l'on est seulement sur lui
+  $("scene").addEventListener("pointerdown", () => {
+    if (gizmoDeplacer.axis) gizmoTourner.enabled = false;
+    else if (gizmoTourner.axis) gizmoDeplacer.enabled = false;
+  }, true);
+  window.addEventListener("pointerup", () => setTimeout(() => { for (const g of gizmos) g.enabled = true; }, 0));
   rendu.domElement.addEventListener("pointerdown", (e) => (appui = [e.clientX, e.clientY]));
   rendu.domElement.addEventListener("pointerup", selectionner);
   $("export-dxf").onclick = () => telecharger("dxf");

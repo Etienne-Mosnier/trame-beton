@@ -29,12 +29,22 @@ function origine(xyz, rpy) {
 export async function creerRobot(dossier) {
   const chargeur = new ColladaLoader();
   const noms = ["base", ...ARTICULATIONS.map((a) => a.maillage)];
-  const scenes = Object.fromEntries(await Promise.all(noms.map(async (n) => {
-    const collada = await chargeur.loadAsync(`${dossier}/visuel/${n}.dae`);
+  // un fichier après l'autre, trois essais chacun : un petit serveur local refuse les
+  // connexions quand trop de gros fichiers sont demandés en même temps
+  const scenes = {};
+  for (const n of noms) {
+    let collada = null;
+    for (let essai = 1; !collada; essai++) {
+      try {
+        collada = await chargeur.loadAsync(`${dossier}/visuel/${n}.dae`);
+      } catch (erreur) {
+        if (essai === 3) throw erreur;
+      }
+    }
     // le chargeur tourne les fichiers « Z en haut » pour three.js ; notre scène est déjà Z en haut
     collada.scene.rotation.set(0, 0, 0);
-    return [n, collada.scene];
-  })));
+    scenes[n] = collada.scene;
+  }
 
   const maillage = (nom, decalage) => {
     const g = origine(decalage.xyz, decalage.rpy);
