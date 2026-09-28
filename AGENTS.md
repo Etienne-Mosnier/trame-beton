@@ -56,6 +56,7 @@ Un motif = un dossier. Chaque groupe peut en avoir plusieurs : `motifs/groupe_1/
 NOM = "Nom lisible du motif"
 PARAMETRES = {
     "espacement": Parametre(50, mini=20, maxi=150, unite="mm", aide="Écart entre deux lignes"),
+    "attraction": Point(400, 300, aide="Point vers lequel les lignes sont attirées"),
     ...
 }
 
@@ -66,13 +67,17 @@ def series(contour, p):
 Règles :
 - **Un motif = un dossier avec un fichier `motif.py`**, plus un `aide.md` qui explique le motif.
 - `NOM` : le nom affiché dans l'aperçu, court et parlant (ex. « Vagues serrées au centre »).
-- Seulement `math`, `shapely`, `Parametre` (de `trame/parametres.py`) et les fonctions de
-  `trame/outils.py`. Aucune autre dépendance.
+- Seulement `math`, `shapely`, `Parametre` et `Point` (de `trame/parametres.py`) et les
+  fonctions de `trame/outils.py`. Aucune autre dépendance.
 - Pas de classes, pas de métaprogrammation, pas d'astuce : des fonctions courtes et des boucles.
 - Noms de variables et commentaires **en français**. Chaque paramètre a une `aide` compréhensible
   par un designer.
 - Tout paramètre qu'un étudiant voudrait régler dans l'aperçu doit être dans `PARAMETRES`,
   jamais écrit en dur dans le code.
+- Un **point à placer à la souris** sur la palette (point d'attraction, centre, départ…) est un
+  `Point(x, y, aide=...)` (import : `from trame.parametres import Parametre, Point`) : l'aperçu
+  affiche une poignée orange que l'on déplace. `p["nom"]` vaut `(x, y)` en mm, repère palette.
+  N'utilise pas deux curseurs x et y pour ça.
 - Unités : **millimètres** et **degrés**, partout.
 - Les courbes peuvent dépasser du contour : le moteur les découpe.
 

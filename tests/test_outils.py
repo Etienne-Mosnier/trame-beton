@@ -6,7 +6,7 @@ import pytest
 from shapely.geometry import box
 
 from trame import outils
-from trame.parametres import Parametre, valeurs
+from trame.parametres import Parametre, Point, valeurs
 
 FORME = box(0, 0, 400, 200)
 
@@ -43,3 +43,11 @@ def test_valeurs_bornees():
     assert valeurs(P, {"espacement": 500, "inconnu": 3}) == {"espacement": 150}
     assert P["espacement"].pas == 1
     assert Parametre(0.5, mini=0.0, maxi=1.0).pas == pytest.approx(0.01)
+
+
+def test_point():
+    P = {"attraction": Point(400, 300, aide="point"), "force": Parametre(30, mini=0, maxi=80)}
+    assert valeurs(P) == {"attraction": (400.0, 300.0), "force": 30}
+    # valeur venue de l'aperçu (liste JSON), ramenée sur la palette
+    assert valeurs(P, {"attraction": [1500, -20]})["attraction"] == (1200.0, 0.0)
+    assert P["attraction"].vers_dict() == {"type": "point", "valeur": [400.0, 300.0], "aide": "point"}
