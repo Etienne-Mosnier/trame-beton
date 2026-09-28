@@ -273,6 +273,19 @@ function calculer() {
   }, 20);
 }
 
+// télécharge le fichier DXF ou SVG du dernier calcul
+function telecharger(format) {
+  if (!app) return;
+  const r = JSON.parse(app.exporter(format));
+  if (r.erreur) { alert(r.erreur); return; }
+  const type = format === "svg" ? "image/svg+xml" : "application/dxf";
+  const lien = document.createElement("a");
+  lien.href = URL.createObjectURL(new Blob([r.texte], { type }));
+  lien.download = r.nom;
+  lien.click();
+  URL.revokeObjectURL(lien.href);
+}
+
 async function lireTexte(chemin) {
   const reponse = await fetch("../" + chemin);
   if (!reponse.ok) throw new Error(`Fichier introuvable : ${chemin}`);
@@ -289,6 +302,8 @@ async function demarrer() {
   boucle();
   $("vue-dessus").onclick = vueDessus;
   $("vue-3d").onclick = vue3d;
+  $("export-dxf").onclick = () => telecharger("dxf");
+  $("export-svg").onclick = () => telecharger("svg");
   $("montrer-alertes").addEventListener("change", () => {
     if (dernierResultat) dessinerAlertes(dernierResultat, Number($("exageration").value));
   });

@@ -22,3 +22,5 @@ include = ["trame*"]
 testpaths = ["tests"]
 # trame/ importable même sans installation (macOS peut ignorer le .pth de .venv)
 pythonpath = ["."]
+# avertissement interne d'ezdxf avec numpy récent : pas de notre ressort
+filterwarnings = ["ignore::DeprecationWarning:ezdxf.*"]

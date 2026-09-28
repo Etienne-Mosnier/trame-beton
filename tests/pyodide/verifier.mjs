@@ -34,4 +34,11 @@ console.log(`aperçu : ${r.path?.length} points, ${r.controle?.sauts} saut(s), $
 if (r.erreur) throw new Error(r.erreur);
 if (r.controle.sauts !== 0) throw new Error("Le chemin devrait être continu");
 
+// exports DXF et SVG du dernier calcul
+for (const format of ["dxf", "svg"]) {
+  const e = JSON.parse(app.exporter(format));
+  if (e.erreur || e.texte.length < 1000) throw new Error(`Export ${format} raté : ${e.erreur}`);
+  console.log(`export ${format} : ${Math.round(e.texte.length / 1024)} Ko`);
+}
+
 console.log("OK");

@@ -17,6 +17,8 @@ import traceback
 
 from trame.contour import charger_contour
 from trame.controles import controler, quantites
+from trame.export.dxf import exporter_dxf
+from trame.export.svg import exporter_svg
 from trame.moteur.chemin import calculer_chemin
 from trame.parametres import Parametre, valeurs
 
@@ -77,6 +79,7 @@ def reglages_moteur():
 
 
 _contours = {}
+_dernier = {}   # dernier calcul, pour les exports
 
 
 def lire_contour(texte, nom):
@@ -120,6 +123,8 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
         })
         q = quantites(r, BETON["largeur_cordon"], moteur["amp"], CONFIG["impression"]["vitesse"])
         path = r["path"] or []
+        _dernier.update(resultat=r, contour=forme, motif=motif_id, lane=moteur["lane"],
+                        amp=moteur["amp"], palette=(palette["longueur"], palette["largeur"]))
         return json.dumps({
             "palette": [CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]],
             "contour": arrondir(forme.exterior.coords),
@@ -142,6 +147,20 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
     except Exception as e:
         return json.dumps({"erreur": "%s : %s" % (type(e).__name__, e),
                            "details": traceback.format_exc()})
+
+
+def exporter(format_fichier):
+    """Fichier DXF ou SVG du dernier calcul : {"nom": ..., "texte": ...} ou {"erreur": ...}."""
+    if not _dernier:
+        return json.dumps({"erreur": "Rien à exporter : lance d'abord un calcul."})
+    d = _dernier
+    if format_fichier == "dxf":
+        texte = exporter_dxf(d["resultat"], d["contour"], d["palette"], d["lane"])
+    elif format_fichier == "svg":
+        texte = exporter_svg(d["resultat"], d["contour"], d["palette"], d["lane"], d["amp"])
+    else:
+        return json.dumps({"erreur": "Format inconnu : %s" % format_fichier})
+    return json.dumps({"nom": "trame_%s.%s" % (d["motif"], format_fichier), "texte": texte})
 
 
 def verifier():
