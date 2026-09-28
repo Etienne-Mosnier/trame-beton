@@ -117,3 +117,6 @@ p.erreur, span.erreur { color: var(--erreur); white-space: pre-wrap; }
 .grille input { width: 100%; font: inherit; padding: 4px 6px; border: 1px solid var(--bord); border-radius: 6px; }
 #calibration-placement { white-space: pre-wrap; background: var(--fond); padding: 6px; border-radius: 6px; }
 #calibration-placement:empty { display: none; }
+
+.pastille-point { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  background: #f97316; margin-right: 6px; vertical-align: middle; }

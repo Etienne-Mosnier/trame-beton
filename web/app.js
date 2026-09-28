@@ -51,7 +51,8 @@ const groupeTrame = new THREE.Group();
 const groupeAlertes = new THREE.Group(); // endroits à problème, en rouge
 const groupeCordon = new THREE.Group();  // cordon déposé pendant l'animation du robot
 const groupeAlertesRobot = new THREE.Group(); // alertes robot, en rouge
-contenuPalette.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon, groupeAlertesRobot);
+const groupePoints = new THREE.Group();  // poignées des paramètres « Point » du motif
+contenuPalette.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon, groupeAlertesRobot, groupePoints);
 // groupes fixes par rapport au robot
 const groupeZone = new THREE.Group();    // partie de la palette hors de portée (mode placement)
 const groupePortee = new THREE.Group();  // portée du robot, ses axes et la boussole
@@ -446,10 +447,46 @@ function selectionner(e) {
   const souris = new THREE.Vector2(((e.clientX - cadre.left) / cadre.width) * 2 - 1,
                                    -((e.clientY - cadre.top) / cadre.height) * 2 + 1);
   rayon.setFromCamera(souris, camera);
+  // une poignée de point : seulement les flèches (un point ne se tourne pas)
+  const surPoint = rayon.intersectObjects(groupePoints.children, true)[0];
+  if (surPoint) {
+    let poignee = surPoint.object;
+    while (!poignee.userData.nomParametre) poignee = poignee.parent;
+    gizmoTourner.detach();
+    gizmoDeplacer.attach(poignee);
+    return;
+  }
   const surPalette = rayon.intersectObjects(groupePalette.children, true).length > 0;
   for (const g of gizmos) {
     if (surPalette) g.attach(paletteMobile); else g.detach();
   }
+}
+
+// poignée d'un paramètre « Point » : une boule orange et son nom, posées sur la palette
+function creerPoignee(nom, [x, y]) {
+  const poignee = new THREE.Group();
+  poignee.position.set(x, y, 0);
+  poignee.userData.nomParametre = nom;
+  const boule = new THREE.Mesh(new THREE.SphereGeometry(18, 24, 16),
+                               new THREE.MeshStandardMaterial({ color: "#f97316", roughness: 0.4 }));
+  boule.position.z = 18;
+  const nomAffiche = etiquette(nom.replaceAll("_", " "), "#c2410c", 40);
+  nomAffiche.position.z = 70;
+  poignee.add(boule, nomAffiche);
+  return poignee;
+}
+
+// fin du déplacement d'une poignée : nouvelle valeur du point, sur la palette, puis recalcul
+function deplacerPoint(poignee) {
+  const [lx, ly] = palette;
+  const x = Math.round(Math.min(Math.max(poignee.position.x, 0), lx));
+  const y = Math.round(Math.min(Math.max(poignee.position.y, 0), ly));
+  poignee.position.set(x, y, 0);
+  const nom = poignee.userData.nomParametre;
+  reglages.motif[nom] = [x, y];
+  const texte = document.querySelector(`[data-point="${nom}"] output`);
+  if (texte) texte.textContent = `${x}, ${y} mm`;
+  calculer();
 }
 
 // ---------------------------------------------------------------------------
@@ -485,6 +522,20 @@ function curseur(conteneur, nom, p, cible) {
   conteneur.appendChild(bloc);
 }
 
+// paramètre « Point » : une ligne dans le panneau, une poignée sur la palette
+function point(conteneur, nom, p) {
+  reglages.motif[nom] = [...p.valeur];
+  const bloc = document.createElement("div");
+  bloc.className = "reglage";
+  bloc.dataset.point = nom;
+  bloc.innerHTML = `
+    <div class="ligne"><span><span class="pastille-point"></span>${nom.replaceAll("_", " ")}</span>
+      <output>${p.valeur[0]}, ${p.valeur[1]} mm</output></div>
+    <p class="aide">${p.aide} Clique sur la boule orange pour la déplacer.</p>`;
+  conteneur.appendChild(bloc);
+  groupePoints.add(creerPoignee(nom, p.valeur));
+}
+
 // petit convertisseur Markdown -> HTML (titres, listes, gras, code)
 function markdown(texte) {
   const enLigne = (t) => t
@@ -514,7 +565,12 @@ function choisirMotif(id) {
   conteneur.innerHTML = "";
   reglages.motif = {};
   if (motif.erreur) conteneur.innerHTML = `<p class="erreur">${motif.erreur}</p>`;
-  for (const [nom, p] of Object.entries(motif.parametres)) curseur(conteneur, nom, p, reglages.motif);
+  vider(groupePoints);
+  for (const g of gizmos) if (g.object?.userData.nomParametre) g.detach();
+  for (const [nom, p] of Object.entries(motif.parametres)) {
+    if (p.type === "point") point(conteneur, nom, p);
+    else curseur(conteneur, nom, p, reglages.motif);
+  }
   $("aide-motif").hidden = !motif.aide;
   $("aide-motif").querySelector("div").innerHTML = markdown(motif.aide);
 }
@@ -614,6 +670,11 @@ async function demarrer() {
   for (const g of gizmos) {
     g.addEventListener("dragging-changed", (e) => {
       controles.enabled = !e.value;
+      const objet = g.object;
+      if (objet?.userData.nomParametre) {       // une poignée de point
+        if (!e.value) deplacerPoint(objet);
+        return;
+      }
       if (e.value) groupeZone.visible = false;
       else placerDepuisGizmo();
     });
