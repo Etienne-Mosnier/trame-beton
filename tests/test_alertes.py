@@ -100,5 +100,6 @@ def test_robot_renvoie_les_alertes():
     s = statuts(r["alertes"])
     assert s["Tout est à portée du robot"] == "ok"
     assert s["Pas de collision"] == "ok"
-    # buse orientée comme le .ghx : poignet proche de l'alignement par endroits
-    assert s["Poignet jamais aligné"] == "alerte"
+    # buse tournée de 45° (config) : le poignet ne s'aligne jamais sur le haricot
+    assert s["Poignet jamais aligné"] == "ok"
+    assert all(a["statut"] == "ok" for a in r["alertes"])
