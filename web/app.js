@@ -1,7 +1,7 @@
 // Aperçu de la trame : curseurs générés depuis PARAMETRES, calcul en Python (Pyodide),
 // dessin avec three.js. Unités : mm, z vers le haut.
-// Repère de la scène : celui de la palette ; quand le robot est affiché, celui du robot, et la
-// palette (avec tout ce qu'elle porte) est un objet que l'on peut déplacer avec un gizmo.
+// Repère de la scène : celui du robot. La palette (avec tout ce qu'elle porte) est un objet
+// que l'on sélectionne d'un clic et que l'on déplace ou tourne avec un gizmo.
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -57,22 +57,29 @@ const groupeZone = new THREE.Group();    // partie de la palette hors de portée
 const groupePortee = new THREE.Group();  // portée du robot, ses axes et la boussole
 scene.add(groupeZone, groupePortee);
 
-// gizmo pour déplacer et tourner la palette (mode placement)
-const gizmo = new TransformControls(camera, rendu.domElement);
-gizmo.showZ = false;
-gizmo.setTranslationSnap(10);
-gizmo.setRotationSnap(THREE.MathUtils.degToRad(5));
-gizmo.setSize(1.6);
-scene.add(gizmo.getHelper());
+// gizmos de la palette : l'un déplace à plat (flèches), l'autre tourne autour de la verticale
+const gizmoDeplacer = new TransformControls(camera, rendu.domElement);
+gizmoDeplacer.setMode("translate");
+gizmoDeplacer.showZ = false;
+gizmoDeplacer.setTranslationSnap(10);
+gizmoDeplacer.setSize(1.6);
+const gizmoTourner = new TransformControls(camera, rendu.domElement);
+gizmoTourner.setMode("rotate");
+gizmoTourner.showX = gizmoTourner.showY = false;
+gizmoTourner.setRotationSnap(THREE.MathUtils.degToRad(5));
+gizmoTourner.setSize(1.6);
+const gizmos = [gizmoDeplacer, gizmoTourner];
+for (const g of gizmos) scene.add(g.getHelper());
 const materiaux = [];
 
 let palette = [1200, 800];
 
-// place la palette : dans le repère du robot quand il est affiché, sinon à l'origine de la scène
+// place la palette dans le repère du robot (repère de la calibration en cours)
+let repereCourant = null;
 function positionnerPalette() {
   const [lx, ly] = palette;
   contenuPalette.position.set(-lx / 2, -ly / 2, 0);
-  const rep = robot.visible && robot.donnees?.repere;
+  const rep = repereCourant;
   if (!rep) {
     paletteMobile.position.set(lx / 2, ly / 2, 0);
     paletteMobile.quaternion.identity();
@@ -88,7 +95,7 @@ function vueDessus() {
   const [lx, ly] = palette;
   const c = paletteMobile.position;
   controles.target.copy(c);
-  camera.position.set(c.x, c.y - 1, c.z + Math.max(lx, ly) * (robot.visible ? 2.6 : 1.6));
+  camera.position.set(c.x, c.y - 1, c.z + Math.max(lx, ly) * 2.6);
   controles.update();
   activer("vue-dessus");
 }
@@ -96,7 +103,7 @@ function vueDessus() {
 function vue3d() {
   const [lx, ly] = palette;
   const c = paletteMobile.position;
-  if (robot.visible) {
+  if (repereCourant) {
     // le robot (à l'origine) et la palette dans le cadre, vus de derrière le robot
     const milieu = new THREE.Vector3(c.x / 2, c.y / 2, 200);
     const recul = new THREE.Vector3(-c.x, -c.y, 0).normalize();
@@ -228,46 +235,41 @@ function marquer(groupe, liste, exageration) {
 // Robot : bras UR10e animé le long du chemin
 // ---------------------------------------------------------------------------
 
-const robot = { modele: null, racine: null, donnees: null, visible: false, lecture: false, t: 0, lignes: [] };
+const robot = { modele: null, racine: null, donnees: null, lecture: false, t: Infinity, lignes: [] };
 
-async function montrerRobot(visible) {
-  robot.visible = visible;
-  $("commandes-robot").hidden = !visible;
-  groupeTrame.visible = !visible;
-  groupeCordon.visible = visible;
-  groupeAlertesRobot.visible = visible;
-  groupeAlertes.visible = !visible;
-  groupePortee.visible = visible && $("montrer-portee").checked;
-  groupeZone.visible = visible && $("placement").open;
-  if (robot.racine) robot.racine.visible = visible;
-  if (!visible) { arreterLecture(); gizmo.detach(); positionnerPalette(); vue3d(); return; }
-  if (!robot.modele) {
-    robot.t = Infinity;     // première fois : la trame entière est déjà imprimée (Lecture repart de 0)
-    etat.textContent = "Chargement du robot…";
-    robot.modele = await creerRobot("robot/ur10e");
-    // matériaux du bras (pour le teinter en rouge pendant une alerte)
-    robot.materiaux = new Set();
-    robot.modele.groupe.traverse((o) => {
-      for (const m of [].concat(o.material || [])) robot.materiaux.add(m);
-    });
-    robot.racine = new THREE.Group();
-    robot.racine.scale.setScalar(1000);          // le bras est en mètres, la scène en mm
-    robot.racine.add(robot.modele.groupe);
-    scene.add(robot.racine);
-    etat.textContent = "";
+// charge le bras une fois (maillages officiels, quelques secondes)
+async function chargerRobot() {
+  try {
+    // deux essais : une coupure réseau passagère ne doit pas priver la page du robot
+    robot.modele = await creerRobot("robot/ur10e").catch(() => creerRobot("robot/ur10e"));
+  } catch (erreur) {
+    $("message-robot").textContent = "Le robot n'a pas pu être chargé (" + erreur.message + "). Recharge la page.";
+    console.error(erreur);
+    return;
   }
+  // matériaux du bras (pour le teinter en rouge pendant une alerte)
+  robot.materiaux = new Set();
+  robot.modele.groupe.traverse((o) => {
+    for (const m of [].concat(o.material || [])) robot.materiaux.add(m);
+  });
+  robot.racine = new THREE.Group();
+  robot.racine.scale.setScalar(1000);          // le bras est en mètres, la scène en mm
+  robot.racine.add(robot.modele.groupe);
+  scene.add(robot.racine);
   calculerRobot();
-  montrerPortee();
-  vue3d();
 }
 
 // angles du bras le long du chemin (calcul Python) et cordon à déposer
 function calculerRobot() {
-  if (!robot.visible || !app || !dernierResultat) return;
+  if (!robot.modele || !app || !dernierResultat) return;
   const d = JSON.parse(app.robot());
   if (d.erreur) { $("message-robot").textContent = d.erreur; return; }
   robot.donnees = d;
+  repereCourant = d.repere;
   positionnerPalette();
+  // le cordon du robot remplace la trame dessinée en attendant
+  groupeTrame.visible = false;
+  groupeCordon.visible = true;
   robot.modele.tool0.clear();
   robot.modele.tool0.add(creerBuse(d.tcp));
 
@@ -301,11 +303,8 @@ function calculerRobot() {
   const fin = d.temps.at(-1);
   $("temps").max = fin;
   $("temps").step = fin / 1000;
-  const hors = d.hors_portee.length;
-  $("message-robot").textContent =
-    `Impression de ${Math.round(fin / 60)} min.` +
-    (hors ? ` ⚠ ${hors} point(s) hors de portée du robot.` : "") +
-    (d.simulation ? " Robot placé selon la calibration de simulation." : "");
+  $("message-robot").textContent = d.simulation
+    ? "Palette placée selon la calibration de simulation (pas encore relevée sur le robot)." : "";
   robot.t = Math.min(robot.t, fin);
   poserRobot(robot.t);
 }
@@ -409,55 +408,49 @@ function dessinerPortee(p) {
   groupePortee.add(n, s);
 }
 
-function montrerPortee() {
-  groupePortee.visible = robot.visible && $("montrer-portee").checked;
-  if (groupePortee.visible && !robot.portee && app) {
-    robot.portee = JSON.parse(app.portee_robot());
-    dessinerPortee(robot.portee);
-  }
-}
-
-// Mode enseignant : placer la palette et voir la zone atteignable
-async function placer(reglages) {
+// Placement de la palette : zone d'impression du robot, partie de la palette hors de portée.
+// reglages = null : calibration en cours (simulation) ; sinon {x, y, z, rotation} du gizmo.
+function placer(reglages) {
   if (!app) return;
-  if (!robot.visible) { $("montrer-robot").checked = true; await montrerRobot(true); }
   const r = JSON.parse(app.placement(reglages ? JSON.stringify(reglages) : ""));
+  repereCourant = r.repere;
+  positionnerPalette();
+  dessinerPortee(r.portee);
   // partie de la palette hors de portée, en rouge, juste au-dessus de la bâche
   vider(groupeZone);
   groupeZone.add(surfaces(r.portee.hors_palette, "#e11d48", 0.35, r.portee.z + 1));
-  groupeZone.visible = $("placement").open;
-  robot.portee = r.portee;
-  dessinerPortee(r.portee);
-  montrerPortee();
-  $("resultat-placement").textContent = `${r.atteignable} % de la palette est atteignable.`;
+  groupeZone.visible = true;
+  $("resultat-placement").textContent = `${r.atteignable} % de la palette est dans la zone d'impression.`;
   const c = r.calibration;
   $("calibration-placement").textContent = reglages
-    ? `À recopier dans config/cellule.toml, [calibration_simulation] :\n` +
+    ? `Palette déplacée. À recopier dans config/cellule.toml, [calibration_simulation] :\n` +
       `origine = [${c.origine.join(", ")}]\ngrand_cote = [${c.grand_cote.join(", ")}]\npetit_cote = [${c.petit_cote.join(", ")}]`
     : "";
   calculerRobot();
-  if ($("placement").open) gizmo.attach(paletteMobile);
-  if (!reglages) vue3d();
 }
 
 // fin d'un déplacement au gizmo : position du coin (0, 0) et rotation -> placement
 function placerDepuisGizmo() {
   const [lx, ly] = palette;
-  const rotation = THREE.MathUtils.radToDeg(new THREE.Euler().setFromQuaternion(paletteMobile.quaternion).z);
+  const rotation = Math.round(THREE.MathUtils.radToDeg(new THREE.Euler().setFromQuaternion(paletteMobile.quaternion).z));
   const coin = new THREE.Vector3(-lx / 2, -ly / 2, 0).applyQuaternion(paletteMobile.quaternion).add(paletteMobile.position);
-  $("placement-x").value = Math.round(coin.x);
-  $("placement-y").value = Math.round(coin.y);
-  $("placement-rotation").value = Math.round(rotation);
-  placer({ x: Math.round(coin.x), y: Math.round(coin.y), z: Number($("placement-z").value), rotation: Math.round(rotation) });
+  placer({ x: Math.round(coin.x), y: Math.round(coin.y), z: Math.round(repereCourant.origine[2] * 10) / 10, rotation });
 }
 
-function modeGizmo(mode) {
-  gizmo.setMode(mode);
-  // tourner : seulement autour de la verticale ; déplacer : seulement à plat
-  gizmo.showX = gizmo.showY = mode === "translate";
-  gizmo.showZ = mode === "rotate";
-  $("gizmo-deplacer").classList.toggle("actif", mode === "translate");
-  $("gizmo-tourner").classList.toggle("actif", mode === "rotate");
+// un clic sur la palette montre le gizmo ; un clic ailleurs le cache
+const rayon = new THREE.Raycaster();
+let appui = null;
+function selectionner(e) {
+  if (!appui || Math.hypot(e.clientX - appui[0], e.clientY - appui[1]) > 5) return;   // c'était un glisser
+  if (gizmos.some((g) => g.dragging || g.axis)) return;                                // clic sur le gizmo
+  const cadre = rendu.domElement.getBoundingClientRect();
+  const souris = new THREE.Vector2(((e.clientX - cadre.left) / cadre.width) * 2 - 1,
+                                   -((e.clientY - cadre.top) / cadre.height) * 2 + 1);
+  rayon.setFromCamera(souris, camera);
+  const surPalette = rayon.intersectObjects(groupePalette.children, true).length > 0;
+  for (const g of gizmos) {
+    if (surPalette) g.attach(paletteMobile); else g.detach();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -571,9 +564,12 @@ function calculer() {
     dessinerPalette(r.contour);
     dessinerTrame(r, Number($("exageration").value));
     afficherBilan(r);
-    if (!dejaCadre) { vue3d(); dejaCadre = true; }
-    calculerRobot();
+    if (!dejaCadre) { placer(null); vue3d(); dejaCadre = true; }
+    // la nouvelle trame tout de suite ; le robot (plus long) juste après
+    groupeTrame.visible = true;
+    groupeCordon.visible = false;
     etat.textContent = "";
+    setTimeout(calculerRobot, 30);
     console.log(`calcul : ${((performance.now() - debut) / 1000).toFixed(2)} s`);
   }, 20);
 }
@@ -607,8 +603,6 @@ async function demarrer() {
   boucle();
   $("vue-dessus").onclick = vueDessus;
   $("vue-3d").onclick = vue3d;
-  $("montrer-robot").addEventListener("change", (e) => montrerRobot(e.target.checked));
-  $("montrer-portee").addEventListener("change", montrerPortee);
   $("lecture").onclick = () => {
     if (!robot.donnees) return;
     if (robot.lecture) { arreterLecture(); return; }
@@ -617,23 +611,16 @@ async function demarrer() {
     $("lecture").textContent = "⏸ Pause";
   };
   $("temps").addEventListener("input", (e) => { arreterLecture(); robot.t = Number(e.target.value); poserRobot(robot.t); });
-  $("placement-appliquer").onclick = () => placer({
-    x: Number($("placement-x").value), y: Number($("placement-y").value),
-    z: Number($("placement-z").value), rotation: Number($("placement-rotation").value),
-  });
-  $("placement-annuler").onclick = () => placer(null);
-  $("placement").addEventListener("toggle", (e) => {
-    groupeZone.visible = e.target.open;
-    if (e.target.open) { modeGizmo("translate"); placer(null); } else gizmo.detach();
-  });
-  $("gizmo-deplacer").onclick = () => modeGizmo("translate");
-  $("gizmo-tourner").onclick = () => modeGizmo("rotate");
-  // pendant qu'on tire le gizmo, la vue ne tourne pas ; au lâcher, tout est recalculé
-  gizmo.addEventListener("dragging-changed", (e) => {
-    controles.enabled = !e.value;
-    if (e.value) groupeZone.visible = false;
-    else placerDepuisGizmo();
-  });
+  // pendant qu'on tire un gizmo, la vue ne tourne pas ; au lâcher, tout est recalculé
+  for (const g of gizmos) {
+    g.addEventListener("dragging-changed", (e) => {
+      controles.enabled = !e.value;
+      if (e.value) groupeZone.visible = false;
+      else placerDepuisGizmo();
+    });
+  }
+  rendu.domElement.addEventListener("pointerdown", (e) => (appui = [e.clientX, e.clientY]));
+  rendu.domElement.addEventListener("pointerup", selectionner);
   $("export-dxf").onclick = () => telecharger("dxf");
   $("export-svg").onclick = () => telecharger("svg");
   $("export-script").onclick = () => telecharger("script");
@@ -644,7 +631,7 @@ async function demarrer() {
   $("exageration").addEventListener("input", (e) => {
     $("valeur-exageration").textContent = "× " + e.target.value;
     if (dernierResultat) dessinerTrame(dernierResultat, Number(e.target.value));
-    if (robot.visible) calculerRobot();
+    if (robot.donnees) calculerRobot();
   });
 
   try {
@@ -687,6 +674,7 @@ async function demarrer() {
       calculer();
     };
     await choisirExemple(parDefaut);
+    chargerRobot();
   } catch (erreur) {
     etat.innerHTML = `<span class="erreur">Erreur : ${erreur.message}</span>`;
     console.error(erreur);
