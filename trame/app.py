@@ -19,6 +19,8 @@ from trame.contour import charger_contour
 from trame.controles import controler, quantites
 from trame.export.dxf import exporter_dxf
 from trame.export.svg import exporter_svg
+from trame.robot import urscript
+from trame.robot.calibration import repere_palette
 from trame.moteur.chemin import calculer_chemin
 from trame.parametres import Parametre, valeurs
 
@@ -123,7 +125,8 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
         })
         q = quantites(r, BETON["largeur_cordon"], moteur["amp"], CONFIG["impression"]["vitesse"])
         path = r["path"] or []
-        _dernier.update(resultat=r, contour=forme, motif=motif_id, lane=moteur["lane"],
+        _dernier.update(resultat=r, contour=forme, motif=motif_id, nom_contour=contour_nom,
+                        lane=moteur["lane"],
                         amp=moteur["amp"], palette=(palette["longueur"], palette["largeur"]))
         return json.dumps({
             "palette": [CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]],
@@ -149,12 +152,50 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
                            "details": traceback.format_exc()})
 
 
+def calibration():
+    """Repère de la palette : la calibration relevée si elle est complète, sinon celle de
+    simulation. Renvoie (repere, simulation)."""
+    c = CONFIG["calibration"]
+    simulation = not (c["origine"] and c["grand_cote"] and c["petit_cote"])
+    if simulation:
+        c = CONFIG["calibration_simulation"]
+    return repere_palette(c["origine"], c["grand_cote"], c["petit_cote"]), simulation
+
+
+def programme_robot(d):
+    """Texte URScript du dernier calcul."""
+    repere, simulation = calibration()
+    imp = dict(CONFIG["impression"])
+    entete = ["Motif : %s, contour : %s" % (d["motif"], d["nom_contour"])]
+    if not imp["hauteur_buse"]:
+        imp["hauteur_buse"] = BETON["hauteur_couche"]
+        entete.append("PROVISOIRE : hauteur de la buse = hauteur de couche (%g mm)" % imp["hauteur_buse"])
+    for nom in PROVISOIRES:
+        entete.append("PROVISOIRE : %s = %g mm" % (nom, BETON[nom]))
+    entete.append("A MESURER : masse de la buse (%g kg declares)" % CONFIG["outil"]["masse_kg"])
+    if simulation:
+        entete.append("SIMULATION : calibration de simulation (config/cellule.toml, calibration vide)")
+    if repere["defaut_angle"] > 2:
+        entete.append("ATTENTION : les cotes releves font %.1f degres d'ecart avec l'equerre"
+                      % repere["defaut_angle"])
+    if not CONFIG["extrusion"]["active"]:
+        entete.append("Extrusion desactivee : la buse suit le chemin sans pomper")
+    reglages = {"outil": CONFIG["outil"], "impression": imp, "extrusion": CONFIG["extrusion"]}
+    return urscript.generer(d["resultat"]["path"] or [], repere, reglages, entete, simulation)
+
+
 def exporter(format_fichier):
-    """Fichier DXF ou SVG du dernier calcul : {"nom": ..., "texte": ...} ou {"erreur": ...}."""
+    """Fichier du dernier calcul : DXF, SVG ou programme du robot (script).
+    Renvoie {"nom": ..., "texte": ...} ou {"erreur": ...}."""
     if not _dernier:
         return json.dumps({"erreur": "Rien à exporter : lance d'abord un calcul."})
     d = _dernier
-    if format_fichier == "dxf":
+    if format_fichier == "script":
+        try:
+            texte = programme_robot(d)
+        except ValueError as e:
+            return json.dumps({"erreur": str(e)})
+    elif format_fichier == "dxf":
         texte = exporter_dxf(d["resultat"], d["contour"], d["palette"], d["lane"])
     elif format_fichier == "svg":
         texte = exporter_svg(d["resultat"], d["contour"], d["palette"], d["lane"], d["amp"])

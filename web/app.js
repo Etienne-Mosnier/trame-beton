@@ -278,7 +278,7 @@ function telecharger(format) {
   if (!app) return;
   const r = JSON.parse(app.exporter(format));
   if (r.erreur) { alert(r.erreur); return; }
-  const type = format === "svg" ? "image/svg+xml" : "application/dxf";
+  const type = { svg: "image/svg+xml", dxf: "application/dxf", script: "text/plain" }[format];
   const lien = document.createElement("a");
   lien.href = URL.createObjectURL(new Blob([r.texte], { type }));
   lien.download = r.nom;
@@ -304,6 +304,7 @@ async function demarrer() {
   $("vue-3d").onclick = vue3d;
   $("export-dxf").onclick = () => telecharger("dxf");
   $("export-svg").onclick = () => telecharger("svg");
+  $("export-script").onclick = () => telecharger("script");
   $("montrer-alertes").addEventListener("change", () => {
     if (dernierResultat) dessinerAlertes(dernierResultat, Number($("exageration").value));
   });

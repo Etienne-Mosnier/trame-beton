@@ -11,10 +11,16 @@ polyscope = "5"                       # numéro exact à préciser
 tcp = [174.4, 0.0, 28.86, 1.2092, 1.2092, 1.2092]
 masse_kg = 0.1                        # À MESURER : valeur provisoire du .script
 centre_gravite = [174.4, 0.0, 28.86]  # mm
+rotation_z = 0.0                      # degrés, orientation de la buse autour de la verticale
 
 [impression]
 vitesse = 72.0                        # mm/s (valeur du .ghx)
 rayon_raccord = 1.5                   # mm, rayon r de movep/movel (1 à 2 mm)
+acceleration = 500.0                  # mm/s²
+hauteur_buse = 0.0                    # mm au-dessus de la bâche pour la 1re couche, À FIXER (0 = hauteur de couche)
+hauteur_approche = 50.0               # mm, la buse arrive et repart à cette hauteur au-dessus du chemin
+vitesse_approche = 20.0               # mm/s, descente et dégagement
+longueur_max_segment = 100.0          # mm, au-delà on ajoute des points intermédiaires
 largeur_cordon = 0.0                  # mm, À FIXER pendant les essais
 hauteur_couche = 0.0                  # mm, À FIXER pendant les essais (amp du .ghx : 5)
 rayon_courbure_min = 0.0              # mm, virage le plus serré possible, À FIXER pendant les essais
@@ -23,6 +29,7 @@ rayon_courbure_min = 0.0              # mm, virage le plus serré possible, À F
 active = false                        # désactivée tant que la sortie n'est pas connue
 type = ""                             # "digitale" ou "analogique", à préciser
 sortie = -1                           # numéro de sortie, à préciser
+valeur_analogique = 0.0               # si type = "analogique" : consigne de la pompe (0 à 1)
 delai_depart = 0.0                    # s
 delai_arret = 0.0                     # s
 
@@ -37,3 +44,11 @@ marge = 20.0                          # mm, marge de sécurité au bord
 origine = []
 grand_cote = []
 petit_cote = []
+
+[calibration_simulation]
+# Pour tester dans URSim tant que la palette n'est pas installée : la palette est placée
+# comme le haricot du .ghx (centre vers x = -597, y = 163 mm), grand côté le long de +Y du robot.
+# Le programme généré avec ces valeurs affiche un message d'avertissement au démarrage.
+origine = [-197.0, -437.0, 8.7]
+grand_cote = [-197.0, 763.0, 8.7]
+petit_cote = [-997.0, -437.0, 8.7]
