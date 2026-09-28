@@ -177,6 +177,44 @@ def calibration():
     return repere_palette(c["origine"], c["grand_cote"], c["petit_cote"]), simulation
 
 
+PORTEE_MAX = 1300.0   # mm, portée annoncée de l'UR10e
+PIED = 200.0          # mm autour de l'axe du robot : la buse y toucherait le pied du robot
+
+
+def portee(repere):
+    """Ce qu'il faut pour dessiner les limites et l'orientation du robot, dans le repère palette :
+    cases atteignables autour du robot (buse verticale, hauteur d'impression et d'approche),
+    position de la base, directions de ses axes X et Y et du nord."""
+    imp = reglages_impression()
+    outil = CONFIG["outil"]
+    tcp = cinematique.matrice_pose([v / 1000 for v in outil["tcp"][:3]] + list(outil["tcp"][3:]))
+    Rp = np.array([repere["x"], repere["y"], repere["z"]])           # robot -> palette
+    base = -Rp @ np.array(repere["origine"])
+    r = PORTEE_MAX + 100
+    cases = alertes.zone_atteignable(
+        lambda p: vers_robot(repere, p),
+        (base[0] - r, base[0] + r, base[1] - r, base[1] + r),
+        [imp["hauteur_buse"], imp["hauteur_buse"] + imp["hauteur_approche"]],
+        np.array(urscript.buse_dans_base(outil.get("rotation_z", 0.0))).T,
+        np.linalg.inv(tcp), pas=50.0)
+    nord = math.radians(CONFIG["robot"].get("nord", 90.0))
+    direction = lambda v: [round(float(c), 6) for c in (Rp @ np.array(v))[:2]]
+    return {
+        "cases": [c[:2] for c in cases if c[2] and math.dist(c[:2], base[:2]) > PIED],
+        "pas": 50.0,
+        "base": [round(float(v), 1) for v in base],
+        "axe_x": direction([1, 0, 0]),
+        "axe_y": direction([0, 1, 0]),
+        "nord": direction([math.cos(nord), math.sin(nord), 0]),
+        "portee_max": PORTEE_MAX,
+    }
+
+
+def portee_robot():
+    """Limites et orientation du robot pour la calibration en cours (texte JSON)."""
+    return json.dumps(portee(calibration()[0]))
+
+
 def placement(reglages_json):
     """Mode enseignant : place la palette (x, y, z en mm, rotation en degrés, repère du robot),
     ou revient à la calibration de simulation si reglages_json est vide.
@@ -198,6 +236,7 @@ def placement(reglages_json):
     c = _placement or CONFIG["calibration_simulation"]
     return json.dumps({
         "zone": zone,
+        "portee": portee(repere),
         "atteignable": round(100 * sum(1 for z in zone if z[2]) / len(zone)),
         "calibration": {k: [round(v, 1) for v in c[k]] for k in ("origine", "grand_cote", "petit_cote")},
         "simulation": simulation,

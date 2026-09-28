@@ -103,3 +103,17 @@ def test_robot_renvoie_les_alertes():
     # buse tournée de 45° (config) : le poignet ne s'aligne jamais sur le haricot
     assert s["Poignet jamais aligné"] == "ok"
     assert all(a["statut"] == "ok" for a in r["alertes"])
+
+
+def test_portee_et_orientation_du_robot():
+    json.loads(app.placement(""))
+    p = json.loads(app.portee_robot())
+    assert p["base"] == [437.0, -197.0, -8.7]          # robot vu depuis la palette (simulation)
+    assert p["axe_x"] == pytest.approx([0, -1])        # X du robot : vers -y de la palette
+    assert p["axe_y"] == pytest.approx([1, 0])
+    assert p["nord"] == pytest.approx(p["axe_y"], abs=1e-6)   # nord par défaut : +Y du robot
+    cases = p["cases"]
+    assert len(cases) > 1000
+    # rien au pied du robot ; la buse décalée de 174 mm dépasse à peine 1,3 m
+    distances = [math.dist(c, p["base"][:2]) for c in cases]
+    assert min(distances) > 200 and max(distances) < 1350

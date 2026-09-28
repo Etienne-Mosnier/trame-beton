@@ -5,6 +5,8 @@
 [robot]
 modele = "UR10e"
 polyscope = "5"                       # numéro exact à préciser
+nord = 90.0                           # degrés : direction du nord géographique, mesurée depuis l'axe
+                                      # +X du robot vers +Y. À MESURER dans l'atelier (90 = vers +Y)
 
 [outil]
 # TCP de la buse, repris de betonrobot.script (x, y, z en mm ; rx, ry, rz en radians)
