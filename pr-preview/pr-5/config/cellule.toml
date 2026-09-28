@@ -1,0 +1,58 @@
+# Réglages physiques de la cellule robot.
+# Fichier de l'enseignant : ne jamais le modifier dans une issue d'étudiant.
+# Unités : millimètres, degrés, secondes, sauf mention contraire.
+
+[robot]
+modele = "UR10e"
+polyscope = "5"                       # numéro exact à préciser
+nord = 90.0                           # degrés : direction du nord géographique, mesurée depuis l'axe
+                                      # +X du robot vers +Y. À MESURER dans l'atelier (90 = vers +Y)
+
+[outil]
+# TCP de la buse, repris de betonrobot.script (x, y, z en mm ; rx, ry, rz en radians)
+tcp = [174.4, 0.0, 28.86, 1.2092, 1.2092, 1.2092]
+masse_kg = 0.1                        # À MESURER : valeur provisoire du .script
+centre_gravite = [174.4, 0.0, 28.86]  # mm
+rotation_z = 45.0                     # degrés, orientation de la buse autour de la verticale,
+                                      # dans le repère du robot (0 = comme le .ghx). 45 : évite que le
+                                      # poignet s'aligne (singularité) ; à confirmer avec les ingénieurs
+
+[impression]
+vitesse = 72.0                        # mm/s (valeur du .ghx)
+rayon_raccord = 1.5                   # mm, rayon r de movep/movel (1 à 2 mm)
+acceleration = 500.0                  # mm/s²
+hauteur_buse = 0.0                    # mm au-dessus de la bâche pour la 1re couche, À FIXER (0 = hauteur de couche)
+hauteur_approche = 50.0               # mm, la buse arrive et repart à cette hauteur au-dessus du chemin
+vitesse_approche = 20.0               # mm/s, descente et dégagement
+longueur_max_segment = 100.0          # mm, au-delà on ajoute des points intermédiaires
+largeur_cordon = 0.0                  # mm, À FIXER pendant les essais
+hauteur_couche = 0.0                  # mm, À FIXER pendant les essais (amp du .ghx : 5)
+rayon_courbure_min = 0.0              # mm, virage le plus serré possible, À FIXER pendant les essais
+
+[extrusion]
+active = false                        # désactivée tant que la sortie n'est pas connue
+type = ""                             # "digitale" ou "analogique", à préciser
+sortie = -1                           # numéro de sortie, à préciser
+valeur_analogique = 0.0               # si type = "analogique" : consigne de la pompe (0 à 1)
+delai_depart = 0.0                    # s
+delai_arret = 0.0                     # s
+
+[palette]
+longueur = 1200.0                     # EPAL
+largeur = 800.0
+marge = 20.0                          # mm, marge de sécurité au bord
+
+[calibration]
+# Trois points relevés sur le pendant (repère base robot, mm), voir CDC §7.
+# Vides tant que la palette n'est pas installée.
+origine = []
+grand_cote = []
+petit_cote = []
+
+[calibration_simulation]
+# Pour tester dans URSim tant que la palette n'est pas installée : la palette est placée
+# comme le haricot du .ghx (centre vers x = -597, y = 163 mm), grand côté le long de +Y du robot.
+# Le programme généré avec ces valeurs affiche un message d'avertissement au démarrage.
+origine = [-197.0, -437.0, 8.7]
+grand_cote = [-197.0, 763.0, 8.7]
+petit_cote = [-997.0, -437.0, 8.7]
