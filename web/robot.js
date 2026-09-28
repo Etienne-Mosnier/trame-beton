@@ -1,9 +1,9 @@
-// Le bras UR10e dans la scène : maillages officiels (web/robot/ur10e, licence BSD-3),
+// Le bras UR10e dans la scène : maillages visuels officiels (web/robot/ur10e/visuel, licence BSD-3),
 // assemblés comme dans Universal_Robots_ROS2_Description (ur_macro.xacro), plus une buse
 // simplifiée. Unités du bras : mètres (le groupe est mis à l'échelle ×1000 pour la scène en mm).
 
 import * as THREE from "three";
-import { STLLoader } from "three/addons/loaders/STLLoader.js";
+import { ColladaLoader } from "three/addons/loaders/ColladaLoader.js";
 
 const PI = Math.PI;
 
@@ -27,18 +27,18 @@ function origine(xyz, rpy) {
 
 // Crée le bras. Renvoie { groupe, articulations } ; articulations[i].rotation.z = angle i.
 export async function creerRobot(dossier) {
-  const chargeur = new STLLoader();
+  const chargeur = new ColladaLoader();
   const noms = ["base", ...ARTICULATIONS.map((a) => a.maillage)];
-  const geometries = Object.fromEntries(await Promise.all(
-    noms.map(async (n) => [n, await chargeur.loadAsync(`${dossier}/${n}.stl`)])));
+  const scenes = Object.fromEntries(await Promise.all(noms.map(async (n) => {
+    const collada = await chargeur.loadAsync(`${dossier}/visuel/${n}.dae`);
+    // le chargeur tourne les fichiers « Z en haut » pour three.js ; notre scène est déjà Z en haut
+    collada.scene.rotation.set(0, 0, 0);
+    return [n, collada.scene];
+  })));
 
-  const gris = new THREE.MeshStandardMaterial({ color: "#c9ccd1", metalness: 0.2, roughness: 0.5 });
-  const bleu = new THREE.MeshStandardMaterial({ color: "#2f5d8a", metalness: 0.2, roughness: 0.5 });
-  const maillage = (nom, decalage, materiau) => {
+  const maillage = (nom, decalage) => {
     const g = origine(decalage.xyz, decalage.rpy);
-    const m = new THREE.Mesh(geometries[nom], materiau);
-    m.castShadow = true;
-    g.add(m);
+    g.add(scenes[nom]);
     return g;
   };
 
@@ -48,15 +48,15 @@ export async function creerRobot(dossier) {
   const inertie = origine([0, 0, 0], [0, 0, PI]);
   groupe.add(baseLink);
   baseLink.add(inertie);
-  inertie.add(maillage("base", { xyz: [0, 0, 0], rpy: [0, 0, PI] }, bleu));
+  inertie.add(maillage("base", { xyz: [0, 0, 0], rpy: [0, 0, PI] }));
 
   let parent = inertie;
   const articulations = [];
-  ARTICULATIONS.forEach((a, i) => {
+  ARTICULATIONS.forEach((a) => {
     const o = origine(a.xyz, a.rpy);
     const rotation = new THREE.Group();          // tourne autour de son axe z
     o.add(rotation);
-    rotation.add(maillage(a.maillage, a.decalage, i % 2 === 0 ? bleu : gris));
+    rotation.add(maillage(a.maillage, a.decalage));
     parent.add(o);
     articulations.push(rotation);
     parent = rotation;

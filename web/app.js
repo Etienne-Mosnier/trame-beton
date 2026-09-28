@@ -204,7 +204,9 @@ async function montrerRobot(visible) {
     robot.modele = await creerRobot("robot/ur10e");
     // matériaux du bras (pour le teinter en rouge pendant une alerte)
     robot.materiaux = new Set();
-    robot.modele.groupe.traverse((o) => o.material && robot.materiaux.add(o.material));
+    robot.modele.groupe.traverse((o) => {
+      for (const m of [].concat(o.material || [])) robot.materiaux.add(m);
+    });
     robot.racine = new THREE.Group();
     robot.racine.matrixAutoUpdate = false;
     robot.racine.add(robot.modele.groupe);
@@ -283,7 +285,7 @@ function poserRobot(t) {
   robot.modele.articulations.forEach((a, i) => (a.rotation.z = q0[i] + (q1[i] - q0[i]) * u));
   // bras teinté en rouge quand la pose actuelle déclenche une alerte
   const rouge = robot.enAlerte?.has(bas) && $("montrer-alertes").checked;
-  for (const m of robot.materiaux) m.emissive.set(rouge ? "#b00020" : "#000000");
+  for (const m of robot.materiaux) m.emissive?.set(rouge ? "#b00020" : "#000000");
   for (const { ligne, debut, fin } of robot.lignes) {
     ligne.geometry.instanceCount = Math.max(0, Math.min(bas, fin) - debut);
   }
