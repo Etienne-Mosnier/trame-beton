@@ -76,8 +76,13 @@ pre#info {
 }
 
 #bilan p { margin: 4px 0; }
-#bilan .ok { color: var(--ok); }
-#bilan .alerte { color: var(--alerte); }
+.controle { margin: 6px 0; }
+.controle .symbole { display: inline-block; width: 1.2em; font-weight: bold; }
+.controle.ok .symbole { color: var(--ok); }
+.controle.alerte .symbole, .controle.alerte > p:first-child { color: var(--alerte); }
+.controle.erreur .symbole, .controle.erreur > p:first-child { color: var(--erreur); }
+.controle .petit { margin-left: 1.2em; }
+.case { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; cursor: pointer; }
 .erreur { color: var(--erreur); white-space: pre-wrap; }
 
 #scene { position: relative; flex: 1; height: 100%; overflow: hidden; }

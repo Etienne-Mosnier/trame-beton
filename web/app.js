@@ -9,7 +9,7 @@ import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs";
 
 // une couleur par série, dans l'ordre d'impression
-const COULEURS = ["#6b7280", "#2563eb", "#dc2626", "#16a34a", "#d97706"];
+const COULEURS = ["#6b7280", "#2563eb", "#16a34a", "#9333ea", "#d97706"]; // le rouge est gardé pour les problèmes
 const NOMS_SERIES = ["A", "B", "C", "D", "E"];
 const LARGEUR_CORDON = 4; // mm, pour le dessin seulement
 
@@ -37,7 +37,8 @@ scene.add(soleil);
 // groupes redessinés à chaque calcul
 const groupePalette = new THREE.Group();
 const groupeTrame = new THREE.Group();
-scene.add(groupePalette, groupeTrame);
+const groupeAlertes = new THREE.Group(); // endroits à problème, en rouge
+scene.add(groupePalette, groupeTrame, groupeAlertes);
 const materiaux = [];
 
 let palette = [1200, 800];
@@ -131,7 +132,29 @@ function dessinerTrame(resultat, exageration) {
   for (const saut of resultat.jumps) {
     groupeTrame.add(trait(saut.map((p) => [p[0], p[1], p[2] * exageration + 2]), "#000000", 2, true));
   }
+  dessinerAlertes(resultat, exageration);
   redimensionner();
+}
+
+// les endroits signalés par les contrôles : anneaux et traits rouges, un peu au-dessus
+function dessinerAlertes(resultat, exageration) {
+  vider(groupeAlertes);
+  if (!$("montrer-alertes").checked) return;
+  const rouge = "#e11d48";
+  for (const c of resultat.controles) {
+    if (c.statut === "ok") continue;
+    for (const s of c.segments) {
+      groupeAlertes.add(trait(s.map((p) => [p[0], p[1], (p[2] ?? 0) * exageration + 3]), rouge, 6));
+    }
+    for (const p of c.points) {
+      const anneau = new THREE.Mesh(
+        new THREE.RingGeometry(9, 13, 24),
+        new THREE.MeshBasicMaterial({ color: rouge, side: THREE.DoubleSide }),
+      );
+      anneau.position.set(p[0], p[1], 4);
+      groupeAlertes.add(anneau);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -202,16 +225,21 @@ function choisirMotif(id) {
 }
 
 function afficherBilan(r) {
-  const c = r.controle;
   const minutes = r.duree != null ? Math.round(r.duree / 60) : "?";
-  const ligne = (ok, texte) => `<p class="${ok ? "ok" : "alerte"}">${ok ? "✓" : "⚠"} ${texte}</p>`;
+  const symbole = { ok: "✓", alerte: "⚠", erreur: "✕" };
+  const provisoire = (nom) => r.provisoires.includes(nom) ? " (provisoire)" : "";
   $("bilan").innerHTML = `
     <p>Longueur de cordon : <strong>${(r.longueur / 1000).toFixed(1)} m</strong></p>
     <p>Durée d'impression : environ <strong>${minutes} min</strong></p>
-    ${ligne(c.sauts === 0, c.sauts === 0 ? "Chemin continu" : `${c.sauts} saut(s) : le chemin est coupé`)}
-    ${ligne(c.hors_forme === 0, c.hors_forme === 0 ? "Tout est dans la forme" : `${c.hors_forme} segment(s) hors de la forme`)}
-    ${ligne(c.superpositions === 0, c.superpositions === 0 ? "Aucun passage en double"
-      : `${c.superpositions} petit(s) segment(s) imprimé(s) deux fois (${c.sur_le_bord} sur le bord)`)}`;
+    <p>Béton : environ <strong>${r.volume} L</strong></p>
+    ${r.controles.map((c) => `
+      <div class="controle ${c.statut}">
+        <p><span class="symbole">${symbole[c.statut]}</span> ${c.titre}</p>
+        ${c.statut === "ok" ? "" : `<p class="petit">${c.message}</p>`}
+      </div>`).join("")}
+    <p class="petit">Cordon de ${r.beton.largeur_cordon} mm${provisoire("largeur_cordon")},
+      virage le plus serré ${r.beton.rayon_courbure_min} mm${provisoire("rayon_courbure_min")}.
+      Les valeurs provisoires seront fixées pendant les essais.</p>`;
   $("info").textContent = r.info;
   $("message-contour").textContent = r.message_contour;
   $("legende").innerHTML = r.waves.map((_, i) => {
@@ -261,6 +289,9 @@ async function demarrer() {
   boucle();
   $("vue-dessus").onclick = vueDessus;
   $("vue-3d").onclick = vue3d;
+  $("montrer-alertes").addEventListener("change", () => {
+    if (dernierResultat) dessinerAlertes(dernierResultat, Number($("exageration").value));
+  });
   $("exageration").addEventListener("input", (e) => {
     $("valeur-exageration").textContent = "× " + e.target.value;
     if (dernierResultat) dessinerTrame(dernierResultat, Number(e.target.value));

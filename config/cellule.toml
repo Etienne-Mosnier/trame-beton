@@ -17,6 +17,7 @@ vitesse = 72.0                        # mm/s (valeur du .ghx)
 rayon_raccord = 1.5                   # mm, rayon r de movep/movel (1 à 2 mm)
 largeur_cordon = 0.0                  # mm, À FIXER pendant les essais
 hauteur_couche = 0.0                  # mm, À FIXER pendant les essais (amp du .ghx : 5)
+rayon_courbure_min = 0.0              # mm, virage le plus serré possible, À FIXER pendant les essais
 
 [extrusion]
 active = false                        # désactivée tant que la sortie n'est pas connue

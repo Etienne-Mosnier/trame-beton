@@ -779,7 +779,8 @@ def enchainer_chrono(ctx, polys, paths):
 
 def bilan_controle(ctx, P):
     """Segments superposés et segments hors de la forme (fin du script).
-    Renvoie (nb superpositions, dont sur le bord, nb hors forme, segments fautifs)."""
+    Renvoie (nb superpositions, dont sur le bord, nb hors forme,
+             segments superposés, segments hors forme)."""
     reg = ctx["reg"]
     tol, res = reg["tol"], reg["res"]
     segs = [(P[k], P[k + 1]) for k in range(len(P) - 1) if math.dist(P[k], P[k + 1]) > tol]
@@ -793,7 +794,7 @@ def bilan_controle(ctx, P):
                 grid.setdefault((gx, gy), []).append(si)
     eps = max(10 * tol, 0.05)
     n_over = n_over_b = 0
-    bad = []
+    bad_over, bad_out = [], []
     seen_pairs = set()
     for ids in grid.values():
         for x in range(len(ids)):
@@ -825,15 +826,15 @@ def bilan_controle(ctx, P):
                     if ctx["bord"] is not None and \
                             position_bord(ctx, entre(a, b, 0.5))[1] < 10 * tol:
                         n_over_b += 1
-                    bad.append([segs[i1][0], segs[i1][1]])
+                    bad_over.append([segs[i1][0], segs[i1][1]])
     n_out = 0
     if ctx["bord"] is not None:
         for a, b in segs:
             m = entre(a, b, 0.5)
             if not dedans(ctx, m) and not (position_bord(ctx, m)[1] < 2 * res):
                 n_out += 1
-                bad.append([a, b])
-    return n_over, n_over_b, n_out, bad
+                bad_out.append([a, b])
+    return n_over, n_over_b, n_out, bad_over, bad_out
 
 
 # --- tout le calcul -----------------------------------------------------------------
@@ -852,7 +853,7 @@ def calculer_chemin(series, contour=None, **reglages):
         waves : une liste de polylignes 3D par série
         jumps : liaisons ajoutées entre morceaux (sauts)
         hits  : points des croisements au sol
-        bad   : segments signalés par le CONTRÔLE
+        bad   : segments signalés par le CONTRÔLE (superposes + hors_forme)
         controle : {"superpositions", "sur_le_bord", "hors_forme", "sauts"}
         info  : texte de diagnostic (commence par la ligne CONTROLE)
     """
@@ -1005,9 +1006,9 @@ def calculer_chemin(series, contour=None, **reglages):
         log.append("   -> branche 'boundary' pour que les sauts longent le contour")
 
     n_over = n_over_b = n_out = 0
-    bad = []
+    bad_over, bad_out = [], []
     if path is not None:
-        n_over, n_over_b, n_out, bad = bilan_controle(ctx, path)
+        n_over, n_over_b, n_out, bad_over, bad_out = bilan_controle(ctx, path)
         log.insert(0, "CONTROLE : %d superposition(s) dont %d sur le bord (liaisons), "
                       "%d dans la forme (courbes) ; %d segment(s) hors forme"
                    % (n_over, n_over_b, n_over - n_over_b, n_out))
@@ -1017,7 +1018,9 @@ def calculer_chemin(series, contour=None, **reglages):
         "waves": waves,
         "jumps": jumps,
         "hits": hits,
-        "bad": bad,
+        "bad": bad_over + bad_out,
+        "superposes": bad_over,
+        "hors_forme": bad_out,
         "controle": {"superpositions": n_over, "sur_le_bord": n_over_b,
                      "hors_forme": n_out, "sauts": len(jumps)},
         "info": "\n".join(log),

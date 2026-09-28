@@ -10,13 +10,13 @@ Toutes les fonctions renvoient un texte JSON. En cas d'erreur, calculer() renvoi
 
 import importlib
 import json
-import math
 import pathlib
 import sys
 import tomllib
 import traceback
 
 from trame.contour import charger_contour
+from trame.controles import controler, quantites
 from trame.moteur.chemin import calculer_chemin
 from trame.parametres import Parametre, valeurs
 
@@ -29,8 +29,13 @@ def lire_config():
 
 
 CONFIG = lire_config()
-# amp vaut la hauteur de couche quand elle sera fixée ; en attendant, 5 mm comme le .ghx
-HAUTEUR_COUCHE = CONFIG["impression"]["hauteur_couche"] or 5.0
+
+# Valeurs du béton pas encore mesurées (0 dans config/cellule.toml) : valeurs provisoires,
+# signalées dans l'aperçu. hauteur_couche = amp du .ghx.
+PROVISOIRE = {"largeur_cordon": 10.0, "hauteur_couche": 5.0, "rayon_courbure_min": 20.0}
+BETON = {nom: CONFIG["impression"][nom] or defaut for nom, defaut in PROVISOIRE.items()}
+PROVISOIRES = [nom for nom in PROVISOIRE if not CONFIG["impression"][nom]]
+HAUTEUR_COUCHE = BETON["hauteur_couche"]
 
 # Réglages du moteur proposés dans l'aperçu (les autres gardent les valeurs du .ghx).
 # Les noms affichés sont en français ; NOMS_MOTEUR donne le nom du réglage dans le moteur.
@@ -105,22 +110,30 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
 
         r = calculer_chemin([[list(c.coords) for c in serie] for serie in series], forme, **moteur)
 
+        palette = CONFIG["palette"]
+        controles = controler(r, forme, series, {
+            "largeur_cordon": BETON["largeur_cordon"],
+            "rayon_courbure_min": BETON["rayon_courbure_min"],
+            "lane": moteur["lane"],
+            "palette": (palette["longueur"], palette["largeur"]),
+            "marge": 0.0,     # le contour est déjà placé avec sa marge ; ici : rester sur la palette
+        })
+        q = quantites(r, BETON["largeur_cordon"], moteur["amp"], CONFIG["impression"]["vitesse"])
         path = r["path"] or []
-        longueur = sum(math.dist(a, b) for a, b in zip(path, path[1:]))
-        vitesse = CONFIG["impression"]["vitesse"]
         return json.dumps({
             "palette": [CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]],
             "contour": arrondir(forme.exterior.coords),
             "message_contour": place["message"],
-            "series": [[arrondir(c.coords) for c in serie] for serie in series],
             "waves": [[arrondir(v) for v in serie] for serie in r["waves"]],
             "path": arrondir(path),
             "jumps": [arrondir(j) for j in r["jumps"]],
-            "bad": [arrondir(b) for b in r["bad"]],
             "controle": r["controle"],
+            "controles": [dict(c, points=arrondir(c["points"]), segments=[arrondir(s) for s in c["segments"]])
+                          for c in controles],
             "info": r["info"],
-            "longueur": round(longueur),
-            "duree": round(longueur / vitesse) if vitesse > 0 else None,
+            **q,
+            "beton": BETON,
+            "provisoires": PROVISOIRES,
             "amp": moteur["amp"],
         })
     except ValueError as e:

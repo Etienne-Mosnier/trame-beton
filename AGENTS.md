@@ -90,4 +90,6 @@ ingénieurs du groupe.
 - Décris le résultat **visuellement** (« les lignes forment maintenant des losanges plus serrés
   au centre »), pas le code.
 - Les tests doivent passer (`pytest`). Si un contrôle d'imprimabilité échoue, dis-le clairement.
+- Colle dans la pull request le bilan des contrôles du motif :
+  `python -m trame.bilan <groupe>` (contour haricot) ou `python -m trame.bilan <groupe> rectangle.svg`.
 - Ne touche jamais aux fichiers d'un autre groupe.

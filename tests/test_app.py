@@ -40,3 +40,10 @@ def test_calculer_erreur_en_francais():
     svg = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L 10 0"/></svg>'
     r = json.loads(app.calculer("exemple", "{}", svg, "trait.svg"))
     assert r["erreur"].startswith("Aucun contour fermé")
+
+
+def test_bilan_texte():
+    from trame.bilan import bilan
+    texte = bilan("exemple", "rectangle.svg")
+    assert "OK        Chemin continu" in texte
+    assert "ATTENTION Virages assez doux (contour)" in texte
