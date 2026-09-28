@@ -10,7 +10,7 @@ from trame.contour import charger_contour
 from trame.moteur.chemin import calculer_chemin, decaler_vers_exterieur
 
 RECT = box(0, 0, 300, 200)
-DOSSIER = pathlib.Path(__file__).resolve().parent / "contours"
+DOSSIER = pathlib.Path(__file__).resolve().parent.parent / "contours"
 
 
 def lignes(forme, angle, pas):

@@ -7,7 +7,7 @@ from shapely.geometry import Polygon, box
 
 from trame.contour import charger_contour, placer
 
-DOSSIER = pathlib.Path(__file__).resolve().parent / "contours"
+DOSSIER = pathlib.Path(__file__).resolve().parent.parent / "contours"
 PALETTE_UTILE = box(20, 20, 1180, 780)  # palette 1200 × 800 avec 20 mm de marge
 
 

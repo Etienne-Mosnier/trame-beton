@@ -1,24 +1,25 @@
-"""Vérifie que la page web connaît tous les fichiers Python de trame/."""
+"""La page web : liste des fichiers copiés dans Pyodide."""
 
-import json
+import importlib.util
 import pathlib
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 
 
-def test_fichiers_json_a_jour():
-    # web/fichiers.json liste les fichiers copiés dans Pyodide :
-    # un module oublié dans cette liste manquerait dans le navigateur.
-    liste = json.loads((RACINE / "web" / "fichiers.json").read_text(encoding="utf-8"))
-    sur_disque = sorted(
-        p.relative_to(RACINE).as_posix() for p in (RACINE / "trame").rglob("*.py")
-    )
-    assert sorted(liste) == sur_disque
+def charger_construire():
+    spec = importlib.util.spec_from_file_location("construire", RACINE / "web" / "construire.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def test_verifier_hors_navigateur():
-    from trame.app import verifier
-
-    resultat = json.loads(verifier())
-    assert resultat["ok"]
-    assert resultat["croisement"] == [50.0, 50.0]
+def test_liste_complete():
+    # tous les modules de trame/, tous les motifs, les contours exemples et la config
+    fichiers = charger_construire().lister()
+    for p in (RACINE / "trame").rglob("*.py"):
+        assert p.relative_to(RACINE).as_posix() in fichiers
+    for p in (RACINE / "motifs").glob("*/motif.py"):
+        assert p.relative_to(RACINE).as_posix() in fichiers
+    assert "config/cellule.toml" in fichiers
+    assert "contours/haricot.dxf" in fichiers
+    assert not any("__pycache__" in f for f in fichiers)

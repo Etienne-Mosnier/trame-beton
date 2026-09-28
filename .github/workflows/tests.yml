@@ -24,5 +24,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - run: python3 web/construire.py
       - run: npm install --no-save pyodide@314.0.7
       - run: node tests/pyodide/verifier.mjs

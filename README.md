@@ -14,3 +14,10 @@ python3 -m venv .venv
 .venv/bin/pip install -e ".[test]"
 .venv/bin/pytest
 ```
+
+## Ouvrir l'aperçu sur son ordinateur (enseignant)
+
+```sh
+python3 web/construire.py          # liste les fichiers à charger (motifs, contours…)
+python3 -m http.server 8000        # puis ouvrir http://localhost:8000/web/
+```

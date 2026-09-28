@@ -11,6 +11,7 @@ const PAQUETS_PYPI = ["ezdxf", "svgelements"];
 // pyodide : instance déjà chargée
 // lireTexte(chemin) : renvoie le contenu d'un fichier du dépôt (chemin depuis la racine)
 // annoncer(message) : affiche l'avancement
+// Renvoie { app, fichiers } : le module trame.app et la liste des fichiers copiés.
 export async function preparer(pyodide, lireTexte, annoncer = () => {}) {
   annoncer("Chargement de shapely…");
   await pyodide.loadPackage(PAQUETS_PYODIDE);
@@ -19,7 +20,7 @@ export async function preparer(pyodide, lireTexte, annoncer = () => {}) {
   const micropip = pyodide.pyimport("micropip");
   await micropip.install(PAQUETS_PYPI);
 
-  annoncer("Copie du package trame/…");
+  annoncer("Copie de trame/, des motifs et des contours…");
   const fichiers = JSON.parse(await lireTexte("web/fichiers.json"));
   for (const chemin of fichiers) {
     const dossier = chemin.split("/").slice(0, -1).join("/");
@@ -27,5 +28,5 @@ export async function preparer(pyodide, lireTexte, annoncer = () => {}) {
     pyodide.FS.writeFile(chemin, await lireTexte(chemin));
   }
   // les fichiers sont écrits dans le dossier courant de Pyodide, déjà dans sys.path
-  return pyodide.pyimport("trame.app");
+  return { app: pyodide.pyimport("trame.app"), fichiers };
 }

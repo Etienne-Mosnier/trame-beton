@@ -4,48 +4,66 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Trame béton</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem; background: #fafafa; color: #222; }
-    #etat { font-size: 1.4rem; }
-    .ok { color: #1a7f37; }
-    .erreur { color: #cf222e; white-space: pre-wrap; }
-    pre { background: #eee; padding: 1rem; }
-  </style>
-</head>
-<body>
-  <h1>Trame béton</h1>
-  <p id="etat">Démarrage de Python dans le navigateur…</p>
-  <pre id="details" hidden></pre>
-
-  <script type="module">
-    import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs";
-
-    const etat = document.getElementById("etat");
-    const details = document.getElementById("details");
-    const debut = performance.now();
-
-    // la page est dans web/, les fichiers du dépôt sont un niveau au-dessus
-    async function lireTexte(chemin) {
-      const reponse = await fetch("../" + chemin);
-      if (!reponse.ok) throw new Error(`Fichier introuvable : ${chemin}`);
-      return reponse.text();
-    }
-
-    try {
-      const { loadPyodide } = await import(URL_PYODIDE + "pyodide.mjs");
-      const pyodide = await loadPyodide({ indexURL: URL_PYODIDE });
-      const app = await preparer(pyodide, lireTexte, (m) => (etat.textContent = m));
-      const resultat = JSON.parse(app.verifier());
-      const secondes = ((performance.now() - debut) / 1000).toFixed(1);
-      etat.textContent = `OK (chargé en ${secondes} s)`;
-      etat.className = "ok";
-      details.textContent = JSON.stringify(resultat, null, 2);
-      details.hidden = false;
-    } catch (erreur) {
-      etat.textContent = "Erreur : " + erreur.message;
-      etat.className = "erreur";
-      console.error(erreur);
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+      }
     }
   </script>
+</head>
+<body>
+  <aside id="panneau">
+    <h1>Trame béton</h1>
+
+    <section>
+      <h2>Motif</h2>
+      <select id="choix-motif"></select>
+      <div id="reglages-motif"></div>
+      <details id="aide-motif"><summary>Aide du motif</summary><div></div></details>
+    </section>
+
+    <section>
+      <h2>Contour</h2>
+      <select id="choix-contour"></select>
+      <label class="bouton-fichier">Importer un SVG ou un DXF…
+        <input id="fichier-contour" type="file" accept=".svg,.dxf">
+      </label>
+      <p id="message-contour" class="petit"></p>
+    </section>
+
+    <section>
+      <h2>Béton</h2>
+      <div id="reglages-moteur"></div>
+    </section>
+
+    <section>
+      <h2>Vue</h2>
+      <div class="boutons">
+        <button id="vue-dessus" type="button">Dessus</button>
+        <button id="vue-3d" type="button">3D</button>
+      </div>
+      <div class="reglage">
+        <div class="ligne"><span>Bosses exagérées</span><output id="valeur-exageration">× 1</output></div>
+        <input id="exageration" type="range" min="1" max="10" step="1" value="1">
+      </div>
+    </section>
+
+    <section>
+      <h2>Bilan</h2>
+      <div id="bilan"></div>
+      <details><summary>Détail du calcul</summary><pre id="info"></pre></details>
+    </section>
+  </aside>
+
+  <main id="scene">
+    <div id="legende"></div>
+    <div id="etat">Démarrage de Python dans le navigateur…</div>
+  </main>
+
+  <script type="module" src="app.js"></script>
 </body>
 </html>
