@@ -20,3 +20,5 @@ include = ["trame*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# trame/ importable même sans installation (macOS peut ignorer le .pth de .venv)
+pythonpath = ["."]

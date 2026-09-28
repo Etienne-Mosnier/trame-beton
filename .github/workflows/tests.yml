@@ -8,14 +8,21 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        # versions de Python proches de Pyodide (à confirmer à l'étape 2)
-        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[test]"
+          # même version que Pyodide 314.0.7 (web/pyodide_trame.mjs)
+          python-version: "3.14"
+      - run: pip install -e ".[test,import]"
       - run: pytest -q
+
+  pyodide:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-save pyodide@314.0.7
+      - run: node tests/pyodide/verifier.mjs
