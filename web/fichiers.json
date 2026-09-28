@@ -8,6 +8,8 @@
  "motifs/exemple/motif.py",
  "motifs/groupe_1/depart/aide.md",
  "motifs/groupe_1/depart/motif.py",
+ "motifs/groupe_1/point_d_attraction/aide.md",
+ "motifs/groupe_1/point_d_attraction/motif.py",
  "motifs/groupe_2/depart/aide.md",
  "motifs/groupe_2/depart/motif.py",
  "motifs/groupe_3/depart/aide.md",
