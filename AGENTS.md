@@ -34,7 +34,7 @@ contour (SVG/DXF, mis à l'échelle de la palette)
 
 | Dossier | Qui | Règle |
 |---|---|---|
-| `motifs/<groupe>/` | étudiants + agent | **seule zone de travail des étudiants** |
+| `motifs/<groupe>/<motif>/` | étudiants + agent | **seule zone de travail des étudiants** |
 | `motifs/exemple/` | enseignant | modèle à copier, ne pas modifier |
 | `trame/moteur/`, `trame/robot/`, `trame/contour.py`, `trame/export/` | enseignant | **ne jamais modifier** dans une issue d'étudiant |
 | `web/` | enseignant | ne pas modifier, sauf demande explicite de l'enseignant |
@@ -47,7 +47,10 @@ simple, et mentionne l'enseignant.
 
 ## Écrire un motif
 
-Copie `motifs/exemple/motif.py` et garde exactement la même forme :
+Un motif = un dossier. Chaque groupe peut en avoir plusieurs : `motifs/groupe_1/depart/`,
+`motifs/groupe_1/vagues/`… Nom de dossier court, en minuscules, sans accents ni espaces
+(lettres, chiffres, `_`). Pour un nouveau motif, copie le dossier de départ indiqué dans l'issue
+(sinon `motifs/<groupe>/depart/`, sinon `motifs/exemple/`) et garde exactement la même forme :
 
 ```python
 NOM = "Nom lisible du motif"
@@ -61,7 +64,8 @@ def series(contour, p):
 ```
 
 Règles :
-- **Un motif = un fichier `motif.py`**, plus éventuellement un `aide.md` qui explique le motif.
+- **Un motif = un dossier avec un fichier `motif.py`**, plus un `aide.md` qui explique le motif.
+- `NOM` : le nom affiché dans l'aperçu, court et parlant (ex. « Vagues serrées au centre »).
 - Seulement `math`, `shapely`, `Parametre` (de `trame/parametres.py`) et les fonctions de
   `trame/outils.py`. Aucune autre dépendance.
 - Pas de classes, pas de métaprogrammation, pas d'astuce : des fonctions courtes et des boucles.
@@ -74,12 +78,14 @@ Règles :
 
 ## Traiter une issue « Idée de motif »
 
-1. Le groupe est indiqué dans l'issue : modifie **uniquement** `motifs/<groupe>/motif.py` et
-   `motifs/<groupe>/aide.md`.
-2. Pars du motif **actuel** du groupe, pas de l'exemple : garde ce qui marche déjà.
+1. Le groupe et le motif sont indiqués dans l'issue : modifie **uniquement** le dossier
+   `motifs/<groupe>/<motif>/` (le créer si c'est un nouveau motif). Ne touche jamais aux autres
+   motifs, même du même groupe.
+2. Motif existant : pars de sa version **actuelle** et garde ce qui marche déjà. Nouveau motif :
+   copie le motif de départ indiqué dans l'issue.
 3. Tout ce que l'étudiant veut pouvoir régler devient un `Parametre` avec une `aide`.
 4. Mets à jour `aide.md` : ce que l'on voit, ce que fait chaque réglage, ce qu'il faut éviter.
-5. Lance `pytest` et `python -m trame.bilan <groupe>` ; colle le bilan dans la pull request.
+5. Lance `pytest` et `python -m trame.bilan <groupe>/<motif>` ; colle le bilan dans la pull request.
 6. L'aperçu de la pull request est publié automatiquement : un lien apparaît en commentaire.
    Rappelle à l'étudiant de l'ouvrir pour juger le résultat.
 
@@ -102,5 +108,6 @@ ingénieurs du groupe.
   au centre »), pas le code.
 - Les tests doivent passer (`pytest`). Si un contrôle d'imprimabilité échoue, dis-le clairement.
 - Colle dans la pull request le bilan des contrôles du motif :
-  `python -m trame.bilan <groupe>` (contour haricot) ou `python -m trame.bilan <groupe> rectangle.svg`.
+  `python -m trame.bilan <groupe>/<motif>` (contour haricot) ou
+  `python -m trame.bilan <groupe>/<motif> rectangle.svg`.
 - Ne touche jamais aux fichiers d'un autre groupe.

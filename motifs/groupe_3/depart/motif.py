@@ -7,7 +7,7 @@ Décrivez vos idées dans une issue « Idée de motif » : Copilot transforme ce
 from trame.outils import lignes_paralleles
 from trame.parametres import Parametre
 
-NOM = "Groupe 3 : trois séries de lignes (à transformer)"
+NOM = "Départ : trois séries de lignes (à transformer)"
 
 PARAMETRES = {
     "espacement": Parametre(50, mini=20, maxi=150, unite="mm",

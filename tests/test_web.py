@@ -18,7 +18,7 @@ def test_liste_complete():
     fichiers = charger_construire().lister()
     for p in (RACINE / "trame").rglob("*.py"):
         assert p.relative_to(RACINE).as_posix() in fichiers
-    for p in (RACINE / "motifs").glob("*/motif.py"):
+    for p in (RACINE / "motifs").rglob("motif.py"):
         assert p.relative_to(RACINE).as_posix() in fichiers
     assert "config/cellule.toml" in fichiers
     assert "contours/haricot.dxf" in fichiers

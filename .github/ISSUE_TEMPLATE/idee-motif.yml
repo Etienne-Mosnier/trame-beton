@@ -16,6 +16,26 @@ body:
       options: [groupe_1, groupe_2, groupe_3, groupe_4]
     validations:
       required: true
+  - type: dropdown
+    id: nouveau
+    attributes:
+      label: Nouveau motif ou motif existant ?
+      options:
+        - Je modifie un motif existant de mon groupe
+        - Je crée un nouveau motif
+    validations:
+      required: true
+  - type: input
+    id: motif
+    attributes:
+      label: Nom du motif
+      description: |
+        Motif existant : son nom de dossier (ex. depart). Nouveau motif : un nom court,
+        en minuscules, sans accents ni espaces (ex. vagues, spirale_dense), et dis de quel
+        motif partir (ex. « vagues, à partir de depart »).
+      placeholder: "vagues, à partir de depart"
+    validations:
+      required: true
   - type: textarea
     id: idee
     attributes:

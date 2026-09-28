@@ -1,4 +1,4 @@
-"""Motif du groupe 1 : pour l'instant une copie du motif exemple.
+"""Motif du groupe 4 : pour l'instant une copie du motif exemple.
 
 C'est le motif de la définition Grasshopper d'origine (betonrobot.ghx).
 Décrivez vos idées dans une issue « Idée de motif » : Copilot transforme ce fichier.
@@ -7,7 +7,7 @@ Décrivez vos idées dans une issue « Idée de motif » : Copilot transforme ce
 from trame.outils import lignes_paralleles
 from trame.parametres import Parametre
 
-NOM = "Groupe 1 : trois séries de lignes (à transformer)"
+NOM = "Départ : trois séries de lignes (à transformer)"
 
 PARAMETRES = {
     "espacement": Parametre(50, mini=20, maxi=150, unite="mm",

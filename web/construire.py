@@ -15,6 +15,7 @@ import sys
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 MOTIFS = ["trame/**/*.py", "motifs/*/motif.py", "motifs/*/aide.md",
+          "motifs/*/*/motif.py", "motifs/*/*/aide.md",
           "contours/*.svg", "contours/*.dxf", "config/cellule.toml"]
 
 # page d'accueil du site : renvoie vers l'aperçu
