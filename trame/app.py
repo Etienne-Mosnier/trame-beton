@@ -181,32 +181,73 @@ PORTEE_MAX = 1300.0   # mm, portée annoncée de l'UR10e
 PIED = 200.0          # mm autour de l'axe du robot : la buse y toucherait le pied du robot
 
 
+def lisser(geometrie, tours=3):
+    """Arrondit les bords d'un polygone (coupe les coins, méthode de Chaikin)."""
+    from shapely.geometry import Polygon
+
+    def anneau(points):
+        points = list(points)[:-1]
+        for _ in range(tours):
+            nouveaux = []
+            for a, b in zip(points, points[1:] + points[:1]):
+                nouveaux += [(0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]),
+                             (0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1])]
+            points = nouveaux
+        return points
+
+    polygones = [Polygon(anneau(p.exterior.coords), [anneau(t.coords) for t in p.interiors])
+                 for p in getattr(geometrie, "geoms", [geometrie]) if not p.is_empty]
+    from shapely.ops import unary_union
+    return unary_union([p.buffer(0) for p in polygones])
+
+
+def formes(geometrie):
+    """Polygone(s) shapely -> [[contour extérieur, trou, trou…], …] en listes de points (mm)."""
+    polygones = getattr(geometrie, "geoms", [geometrie])
+    return [[[[round(x, 1), round(y, 1)] for x, y in anneau.coords]
+             for anneau in [p.exterior, *p.interiors]]
+            for p in polygones if not p.is_empty and p.area > 0]
+
+
 def portee(repere):
-    """Ce qu'il faut pour dessiner les limites et l'orientation du robot, dans le repère palette :
-    cases atteignables autour du robot (buse verticale, hauteur d'impression et d'approche),
-    position de la base, directions de ses axes X et Y et du nord."""
+    """Limites et orientation du robot, dans le repère du ROBOT (mm), au niveau de la palette :
+    zone où il amène la buse verticale (hauteurs d'impression et d'approche), partie de la
+    palette hors de portée, cercle de portée maximale, directions du nord."""
+    from shapely.geometry import Point, Polygon, box
+    from shapely.ops import unary_union
+
     imp = reglages_impression()
     outil = CONFIG["outil"]
     tcp = cinematique.matrice_pose([v / 1000 for v in outil["tcp"][:3]] + list(outil["tcp"][3:]))
-    Rp = np.array([repere["x"], repere["y"], repere["z"]])           # robot -> palette
-    base = -Rp @ np.array(repere["origine"])
+    z_plan = repere["origine"][2]            # hauteur du dessus de la palette (repère robot)
+    pas = 50.0
     r = PORTEE_MAX + 100
     cases = alertes.zone_atteignable(
-        lambda p: vers_robot(repere, p),
-        (base[0] - r, base[0] + r, base[1] - r, base[1] + r),
+        lambda p: (p[0], p[1], z_plan + p[2]),
+        (-r, r, -r, r),
         [imp["hauteur_buse"], imp["hauteur_buse"] + imp["hauteur_approche"]],
         np.array(urscript.buse_dans_base(outil.get("rotation_z", 0.0))).T,
-        np.linalg.inv(tcp), pas=50.0)
+        np.linalg.inv(tcp), pas=pas)
+    # cases atteignables réunies en une forme, bords en escalier lissés, pied du robot retiré
+    zone = unary_union([box(x - pas / 2, y - pas / 2, x + pas / 2, y + pas / 2)
+                        for x, y, ok in cases if ok])
+    zone = zone.buffer(pas).buffer(-2 * pas).buffer(pas).simplify(12)
+    zone = lisser(zone).difference(Point(0, 0).buffer(PIED)).simplify(1)
+
+    # la palette dans le repère du robot, et sa partie hors de portée
+    lx, ly = CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]
+    coins = [vers_robot(repere, (x, y, 0))[:2] for x, y in ((0, 0), (lx, 0), (lx, ly), (0, ly))]
+    palette = Polygon(coins)
+    hors = palette.difference(zone)
+
     nord = math.radians(CONFIG["robot"].get("nord", 90.0))
-    direction = lambda v: [round(float(c), 6) for c in (Rp @ np.array(v))[:2]]
     return {
-        "cases": [c[:2] for c in cases if c[2] and math.dist(c[:2], base[:2]) > PIED],
-        "pas": 50.0,
-        "base": [round(float(v), 1) for v in base],
-        "axe_x": direction([1, 0, 0]),
-        "axe_y": direction([0, 1, 0]),
-        "nord": direction([math.cos(nord), math.sin(nord), 0]),
+        "zone": formes(zone),
+        "hors_palette": formes(hors),
+        "atteignable": round(100 * (1 - hors.area / palette.area)),
+        "z": round(z_plan, 1),
         "portee_max": PORTEE_MAX,
+        "nord": [round(math.cos(nord), 6), round(math.sin(nord), 6)],
     }
 
 
@@ -224,20 +265,11 @@ def placement(reglages_json):
     if reglages:
         _placement.update(points_placement(reglages["x"], reglages["y"], reglages["z"], reglages["rotation"]))
     repere, simulation = calibration()
-    imp = reglages_impression()
-    outil = CONFIG["outil"]
-    tcp = cinematique.matrice_pose([v / 1000 for v in outil["tcp"][:3]] + list(outil["tcp"][3:]))
-    zone = alertes.zone_atteignable(
-        lambda p: vers_robot(repere, p),
-        (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]),
-        [imp["hauteur_buse"], imp["hauteur_buse"] + imp["hauteur_approche"]],
-        np.array(urscript.buse_dans_base(outil.get("rotation_z", 0.0))).T,
-        np.linalg.inv(tcp))
+    p = portee(repere)
     c = _placement or CONFIG["calibration_simulation"]
     return json.dumps({
-        "zone": zone,
-        "portee": portee(repere),
-        "atteignable": round(100 * sum(1 for z in zone if z[2]) / len(zone)),
+        "portee": p,
+        "atteignable": p["atteignable"],
         "calibration": {k: [round(v, 1) for v in c[k]] for k in ("origine", "grand_cote", "petit_cote")},
         "simulation": simulation,
     })
@@ -349,6 +381,8 @@ def robot():
     base = vers_palette[:3, 3]
     return json.dumps({
         "base": {"position": [round(v, 2) for v in base], "rotation": np.round(Rp, 6).tolist()},
+        # repère de la palette dans celui du robot (mm) : l'aperçu y place la palette
+        "repere": {k: [round(float(v), 6) for v in repere[k]] for k in ("origine", "x", "y", "z")},
         "tcp": outil["tcp"],
         "points": [[round(p[0], 2), round(p[1], 2), round(p[2] - hb, 2)] for p in tous],
         "series": series,

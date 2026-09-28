@@ -75,8 +75,14 @@
       </div>
       <details id="placement">
         <summary>Placer la palette (enseignant)</summary>
-        <p class="petit">Position du coin (0, 0) de la palette dans le repère du robot, et
-          direction du grand côté. La zone verte est atteignable avec la buse verticale.</p>
+        <p class="petit">Tire les flèches du gizmo pour déplacer la palette, ou son anneau pour
+          la tourner. Au lâcher, tout est recalculé. Vert : zone atteignable avec la buse
+          verticale ; rouge : partie de la palette hors de portée.</p>
+        <div class="boutons">
+          <button id="gizmo-deplacer" type="button">Déplacer</button>
+          <button id="gizmo-tourner" type="button">Tourner</button>
+        </div>
+        <p class="petit">Ou saisis la position du coin (0, 0) dans le repère du robot :</p>
         <div class="grille">
           <label>X (mm) <input id="placement-x" type="number" step="10" value="-197"></label>
           <label>Y (mm) <input id="placement-y" type="number" step="10" value="-437"></label>

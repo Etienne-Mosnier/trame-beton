@@ -106,14 +106,17 @@ def test_robot_renvoie_les_alertes():
 
 
 def test_portee_et_orientation_du_robot():
+    from shapely.geometry import Point, Polygon
+
     json.loads(app.placement(""))
     p = json.loads(app.portee_robot())
-    assert p["base"] == [437.0, -197.0, -8.7]          # robot vu depuis la palette (simulation)
-    assert p["axe_x"] == pytest.approx([0, -1])        # X du robot : vers -y de la palette
-    assert p["axe_y"] == pytest.approx([1, 0])
-    assert p["nord"] == pytest.approx(p["axe_y"], abs=1e-6)   # nord par défaut : +Y du robot
-    cases = p["cases"]
-    assert len(cases) > 1000
-    # rien au pied du robot ; la buse décalée de 174 mm dépasse à peine 1,3 m
-    distances = [math.dist(c, p["base"][:2]) for c in cases]
-    assert min(distances) > 200 and max(distances) < 1350
+    assert p["nord"] == pytest.approx([0, 1], abs=1e-6)      # nord par défaut : +Y du robot
+    assert p["z"] == 8.7                                       # niveau de la palette (simulation)
+    # zone atteignable : un anneau autour du robot (repère du robot), sans le pied
+    exterieur, *trous = p["zone"][0]
+    zone = Polygon(exterieur, trous)
+    assert zone.contains(Point(700, 0))
+    assert not zone.contains(Point(0, 0))
+    assert not zone.contains(Point(1400, 0))
+    # la palette de simulation est presque entièrement atteignable
+    assert p["atteignable"] >= 90

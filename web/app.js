@@ -1,8 +1,11 @@
 // Aperçu de la trame : curseurs générés depuis PARAMETRES, calcul en Python (Pyodide),
-// dessin avec three.js. Repère : celui de la palette, en mm, z vers le haut.
+// dessin avec three.js. Unités : mm, z vers le haut.
+// Repère de la scène : celui de la palette ; quand le robot est affiché, celui du robot, et la
+// palette (avec tout ce qu'elle porte) est un objet que l'on peut déplacer avec un gizmo.
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
@@ -35,41 +38,77 @@ const soleil = new THREE.DirectionalLight("#ffffff", 1.5);
 soleil.position.set(300, -600, 1200);
 scene.add(soleil);
 
-// groupes redessinés à chaque calcul
+// La palette : un pivot à son centre (déplacé par le gizmo), et son contenu en coordonnées
+// palette (origine au coin). Tout ce qui est dessiné sur la palette va dans « contenuPalette ».
+const paletteMobile = new THREE.Group();
+const contenuPalette = new THREE.Group();
+paletteMobile.add(contenuPalette);
+scene.add(paletteMobile);
+
+// groupes redessinés à chaque calcul, sur la palette
 const groupePalette = new THREE.Group();
 const groupeTrame = new THREE.Group();
 const groupeAlertes = new THREE.Group(); // endroits à problème, en rouge
 const groupeCordon = new THREE.Group();  // cordon déposé pendant l'animation du robot
 const groupeAlertesRobot = new THREE.Group(); // alertes robot, en rouge
-const groupeZone = new THREE.Group();    // cases de la palette hors de portée (mode placement)
+contenuPalette.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon, groupeAlertesRobot);
+// groupes fixes par rapport au robot
+const groupeZone = new THREE.Group();    // partie de la palette hors de portée (mode placement)
 const groupePortee = new THREE.Group();  // portée du robot, ses axes et la boussole
-scene.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon, groupeAlertesRobot, groupeZone, groupePortee);
+scene.add(groupeZone, groupePortee);
+
+// gizmo pour déplacer et tourner la palette (mode placement)
+const gizmo = new TransformControls(camera, rendu.domElement);
+gizmo.showZ = false;
+gizmo.setTranslationSnap(10);
+gizmo.setRotationSnap(THREE.MathUtils.degToRad(5));
+gizmo.setSize(1.6);
+scene.add(gizmo.getHelper());
 const materiaux = [];
 
 let palette = [1200, 800];
 
+// place la palette : dans le repère du robot quand il est affiché, sinon à l'origine de la scène
+function positionnerPalette() {
+  const [lx, ly] = palette;
+  contenuPalette.position.set(-lx / 2, -ly / 2, 0);
+  const rep = robot.visible && robot.donnees?.repere;
+  if (!rep) {
+    paletteMobile.position.set(lx / 2, ly / 2, 0);
+    paletteMobile.quaternion.identity();
+    return;
+  }
+  const [x, y, z] = [rep.x, rep.y, rep.z].map((v) => new THREE.Vector3(...v));
+  const centre = new THREE.Vector3(...rep.origine).addScaledVector(x, lx / 2).addScaledVector(y, ly / 2);
+  paletteMobile.position.copy(centre);
+  paletteMobile.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+}
+
 function vueDessus() {
   const [lx, ly] = palette;
-  controles.target.set(lx / 2, ly / 2, 0);
-  camera.position.set(lx / 2, ly / 2 - 1, Math.max(lx, ly) * 1.6);
+  const c = paletteMobile.position;
+  controles.target.copy(c);
+  camera.position.set(c.x, c.y - 1, c.z + Math.max(lx, ly) * (robot.visible ? 2.6 : 1.6));
   controles.update();
   activer("vue-dessus");
 }
 
 function vue3d() {
   const [lx, ly] = palette;
-  if (robot.visible && robot.donnees) {
-    // la palette et le robot dans le cadre
-    const [bx, by] = robot.donnees.base.position;
-    const cx = (lx / 2 + bx) / 2, cy = (ly / 2 + by) / 2;
-    controles.target.set(cx, cy, 200);
-    camera.position.set(cx + 1500, cy - 3300, 2500);
+  const c = paletteMobile.position;
+  if (robot.visible) {
+    // le robot (à l'origine) et la palette dans le cadre, vus de derrière le robot
+    const milieu = new THREE.Vector3(c.x / 2, c.y / 2, 200);
+    const recul = new THREE.Vector3(-c.x, -c.y, 0).normalize();
+    const cote = new THREE.Vector3(-recul.y, recul.x, 0);
+    controles.target.copy(milieu);
+    camera.position.copy(milieu).addScaledVector(recul, 2600).addScaledVector(cote, 1400).setZ(2600);
     controles.update();
     activer("vue-3d");
     return;
   }
-  controles.target.set(lx / 2, ly / 2, 0);
-  camera.position.set(lx / 2 + 250, -ly * 1.25, Math.max(lx, ly) * 1.05);
+  controles.target.copy(c);
+  camera.position.set(c.x + 250, c.y - ly * 1.75, Math.max(lx, ly) * 1.05);
   controles.update();
   activer("vue-3d");
 }
@@ -199,9 +238,11 @@ async function montrerRobot(visible) {
   groupeAlertesRobot.visible = visible;
   groupeAlertes.visible = !visible;
   groupePortee.visible = visible && $("montrer-portee").checked;
+  groupeZone.visible = visible && $("placement").open;
   if (robot.racine) robot.racine.visible = visible;
-  if (!visible) { arreterLecture(); return; }
+  if (!visible) { arreterLecture(); gizmo.detach(); positionnerPalette(); vue3d(); return; }
   if (!robot.modele) {
+    robot.t = Infinity;     // première fois : la trame entière est déjà imprimée (Lecture repart de 0)
     etat.textContent = "Chargement du robot…";
     robot.modele = await creerRobot("robot/ur10e");
     // matériaux du bras (pour le teinter en rouge pendant une alerte)
@@ -210,7 +251,7 @@ async function montrerRobot(visible) {
       for (const m of [].concat(o.material || [])) robot.materiaux.add(m);
     });
     robot.racine = new THREE.Group();
-    robot.racine.matrixAutoUpdate = false;
+    robot.racine.scale.setScalar(1000);          // le bras est en mètres, la scène en mm
     robot.racine.add(robot.modele.groupe);
     scene.add(robot.racine);
     etat.textContent = "";
@@ -226,14 +267,7 @@ function calculerRobot() {
   const d = JSON.parse(app.robot());
   if (d.erreur) { $("message-robot").textContent = d.erreur; return; }
   robot.donnees = d;
-  // position du robot vue depuis la palette (mètres -> mm)
-  const R = d.base.rotation, p = d.base.position;
-  robot.racine.matrix.set(
-    R[0][0] * 1000, R[0][1] * 1000, R[0][2] * 1000, p[0],
-    R[1][0] * 1000, R[1][1] * 1000, R[1][2] * 1000, p[1],
-    R[2][0] * 1000, R[2][1] * 1000, R[2][2] * 1000, p[2],
-    0, 0, 0, 1);
-  robot.racine.matrixWorldNeedsUpdate = true;
+  positionnerPalette();
   robot.modele.tool0.clear();
   robot.modele.tool0.add(creerBuse(d.tcp));
 
@@ -320,52 +354,58 @@ function etiquette(texte, couleur, taille = 60) {
   return sprite;
 }
 
-// portée du robot (cases vertes), cercle de portée maximale, axes X/Y du robot, boussole
+// forme(s) plate(s) à la hauteur z : [[extérieur, trou…], …] en points (x, y)
+function surfaces(formes, couleur, opacite, z) {
+  const groupe = new THREE.Group();
+  const materiau = new THREE.MeshBasicMaterial({
+    color: couleur, transparent: true, opacity: opacite, depthWrite: false, side: THREE.DoubleSide });
+  for (const [exterieur, ...trous] of formes) {
+    const forme = new THREE.Shape(exterieur.map(([x, y]) => new THREE.Vector2(x, y)));
+    for (const t of trous) forme.holes.push(new THREE.Path(t.map(([x, y]) => new THREE.Vector2(x, y))));
+    const m = new THREE.Mesh(new THREE.ShapeGeometry(forme), materiau);
+    m.position.z = z;
+    groupe.add(m);
+    for (const anneau of [exterieur, ...trous]) groupe.add(trait(anneau.map(([x, y]) => [x, y, z + 0.5]), couleur, 4));
+  }
+  return groupe;
+}
+
+// portée du robot, cercle de portée maximale, axes X/Y du robot, boussole (repère du robot)
 function dessinerPortee(p) {
   vider(groupePortee);
   if (!p) return;
-  const [bx, by] = p.base;
-  const z = -30;  // au sol, sous la palette : la palette cache la zone qu'elle recouvre
-
-  // cases atteignables, en une seule géométrie (rapide à dessiner)
-  const cases = new THREE.InstancedMesh(
-    new THREE.PlaneGeometry(p.pas * 0.92, p.pas * 0.92),
-    new THREE.MeshBasicMaterial({ color: "#16a34a", transparent: true, opacity: 0.18, depthWrite: false }),
-    p.cases.length);
-  const m = new THREE.Matrix4();
-  p.cases.forEach(([x, y], i) => cases.setMatrixAt(i, m.makeTranslation(x, y, z)));
-  groupePortee.add(cases);
+  const z = p.z - 30;   // sous la palette : elle cache la zone qu'elle recouvre
+  groupePortee.add(surfaces(p.zone, "#16a34a", 0.09, z));
 
   // cercle de portée maximale
   const cercle = [];
   for (let k = 0; k <= 128; k++) {
     const a = (2 * Math.PI * k) / 128;
-    cercle.push([bx + p.portee_max * Math.cos(a), by + p.portee_max * Math.sin(a), z + 1]);
+    cercle.push([p.portee_max * Math.cos(a), p.portee_max * Math.sin(a), z + 1]);
   }
   groupePortee.add(trait(cercle, "#16a34a", 3, true));
   const texte = etiquette("portée max 1,3 m", "#15803d", 80);
-  texte.position.set(bx - p.portee_max * 0.71, by + p.portee_max * 0.71, 40);
+  texte.position.set(-p.portee_max * 0.71, p.portee_max * 0.71, 40);
   groupePortee.add(texte);
 
   // axes du robot (comme sur le pendant) : X rouge, Y vert, 40 cm
   const fleche = (v, couleur, nom) => {
-    const d = new THREE.Vector3(v[0], v[1], 0);
-    groupePortee.add(new THREE.ArrowHelper(d, new THREE.Vector3(bx, by, 5), 400, couleur, 60, 35));
+    groupePortee.add(new THREE.ArrowHelper(new THREE.Vector3(...v, 0), new THREE.Vector3(0, 0, 5), 400, couleur, 60, 35));
     const e = etiquette(nom, couleur, 90);
-    e.position.set(bx + v[0] * 560, by + v[1] * 560, 30);
+    e.position.set(v[0] * 560, v[1] * 560, 30);
     groupePortee.add(e);
   };
-  fleche(p.axe_x, "#dc2626", "X robot");
-  fleche(p.axe_y, "#16a34a", "Y robot");
+  fleche([1, 0], "#dc2626", "X robot");
+  fleche([0, 1], "#16a34a", "Y robot");
 
   // boussole : N et S, au-delà du cercle de portée
   const [nx, ny] = p.nord;
   const r = p.portee_max + 150;
-  groupePortee.add(trait([[bx - nx * r, by - ny * r, z + 1], [bx + nx * r, by + ny * r, z + 1]], "#1f2328", 3, true));
+  groupePortee.add(trait([[-nx * r, -ny * r, z + 1], [nx * r, ny * r, z + 1]], "#1f2328", 3, true));
   const n = etiquette("N", "#1f2328", 160);
-  n.position.set(bx + nx * (r + 60), by + ny * (r + 60), 30);
+  n.position.set(nx * (r + 60), ny * (r + 60), 30);
   const s = etiquette("S", "#6b7280", 120);
-  s.position.set(bx - nx * (r + 60), by - ny * (r + 60), 30);
+  s.position.set(-nx * (r + 60), -ny * (r + 60), 30);
   groupePortee.add(n, s);
 }
 
@@ -382,14 +422,10 @@ async function placer(reglages) {
   if (!app) return;
   if (!robot.visible) { $("montrer-robot").checked = true; await montrerRobot(true); }
   const r = JSON.parse(app.placement(reglages ? JSON.stringify(reglages) : ""));
+  // partie de la palette hors de portée, en rouge, juste au-dessus de la bâche
   vider(groupeZone);
-  const rouge = new THREE.MeshBasicMaterial({ color: "#e11d48", transparent: true, opacity: 0.35, side: THREE.DoubleSide });
-  for (const [x, y, ok] of r.zone) {
-    if (ok) continue;                    // le vert vient de la portée du robot
-    const c = new THREE.Mesh(new THREE.PlaneGeometry(46, 46), rouge);
-    c.position.set(x, y, 1);
-    groupeZone.add(c);
-  }
+  groupeZone.add(surfaces(r.portee.hors_palette, "#e11d48", 0.35, r.portee.z + 1));
+  groupeZone.visible = $("placement").open;
   robot.portee = r.portee;
   dessinerPortee(r.portee);
   montrerPortee();
@@ -400,7 +436,28 @@ async function placer(reglages) {
       `origine = [${c.origine.join(", ")}]\ngrand_cote = [${c.grand_cote.join(", ")}]\npetit_cote = [${c.petit_cote.join(", ")}]`
     : "";
   calculerRobot();
-  vue3d();
+  if ($("placement").open) gizmo.attach(paletteMobile);
+  if (!reglages) vue3d();
+}
+
+// fin d'un déplacement au gizmo : position du coin (0, 0) et rotation -> placement
+function placerDepuisGizmo() {
+  const [lx, ly] = palette;
+  const rotation = THREE.MathUtils.radToDeg(new THREE.Euler().setFromQuaternion(paletteMobile.quaternion).z);
+  const coin = new THREE.Vector3(-lx / 2, -ly / 2, 0).applyQuaternion(paletteMobile.quaternion).add(paletteMobile.position);
+  $("placement-x").value = Math.round(coin.x);
+  $("placement-y").value = Math.round(coin.y);
+  $("placement-rotation").value = Math.round(rotation);
+  placer({ x: Math.round(coin.x), y: Math.round(coin.y), z: Number($("placement-z").value), rotation: Math.round(rotation) });
+}
+
+function modeGizmo(mode) {
+  gizmo.setMode(mode);
+  // tourner : seulement autour de la verticale ; déplacer : seulement à plat
+  gizmo.showX = gizmo.showY = mode === "translate";
+  gizmo.showZ = mode === "rotate";
+  $("gizmo-deplacer").classList.toggle("actif", mode === "translate");
+  $("gizmo-tourner").classList.toggle("actif", mode === "rotate");
 }
 
 // ---------------------------------------------------------------------------
@@ -510,6 +567,7 @@ function calculer() {
     }
     dernierResultat = r;
     palette = r.palette;
+    positionnerPalette();
     dessinerPalette(r.contour);
     dessinerTrame(r, Number($("exageration").value));
     afficherBilan(r);
@@ -566,7 +624,15 @@ async function demarrer() {
   $("placement-annuler").onclick = () => placer(null);
   $("placement").addEventListener("toggle", (e) => {
     groupeZone.visible = e.target.open;
-    if (e.target.open) placer(null);
+    if (e.target.open) { modeGizmo("translate"); placer(null); } else gizmo.detach();
+  });
+  $("gizmo-deplacer").onclick = () => modeGizmo("translate");
+  $("gizmo-tourner").onclick = () => modeGizmo("rotate");
+  // pendant qu'on tire le gizmo, la vue ne tourne pas ; au lâcher, tout est recalculé
+  gizmo.addEventListener("dragging-changed", (e) => {
+    controles.enabled = !e.value;
+    if (e.value) groupeZone.visible = false;
+    else placerDepuisGizmo();
   });
   $("export-dxf").onclick = () => telecharger("dxf");
   $("export-svg").onclick = () => telecharger("svg");
