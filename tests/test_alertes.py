@@ -114,9 +114,29 @@ def test_portee_et_orientation_du_robot():
     assert p["z"] == 8.7                                       # niveau de la palette (simulation)
     # zone atteignable : un anneau autour du robot (repère du robot), sans le pied
     exterieur, *trous = p["zone"][0]
+    assert len(trous) == 1                                    # un anneau : un seul trou
     zone = Polygon(exterieur, trous)
     assert zone.contains(Point(700, 0))
     assert not zone.contains(Point(0, 0))
     assert not zone.contains(Point(1400, 0))
+    # un vrai cercle, décalé du côté où pointe la buse
+    assert 1100 < p["rayon_ext"] < 1300 and 300 <= p["rayon_int"] < 500
+    assert 50 < math.hypot(*p["centre"]) < 250
+    # chaque point de l'anneau est vraiment atteignable (le cercle est prudent)
+    imp = app.reglages_impression()
+    outil = app.CONFIG["outil"]
+    tcp_inv = np.linalg.inv(matrice_pose([v / 1000 for v in outil["tcp"][:3]] + list(outil["tcp"][3:])))
+    R = np.array(app.urscript.buse_dans_base(outil["rotation_z"])).T
+    from trame.robot.cinematique import inverse
+    cx, cy = p["centre"]
+    for k in range(24):
+        a = 2 * math.pi * k / 24
+        for r in (p["rayon_int"] + 5, p["rayon_ext"] - 5):
+            T = np.eye(4)
+            T[:3, :3] = R
+            T[:3, 3] = [(cx + r * math.cos(a)) / 1000, (cy + r * math.sin(a)) / 1000,
+                        (p["z"] + imp["hauteur_buse"]) / 1000]
+            if math.hypot(T[0, 3], T[1, 3]) * 1000 > 205:        # hors du pied du robot
+                assert inverse(T @ tcp_inv), (k, r)
     # la palette de simulation est presque entièrement atteignable
     assert p["atteignable"] >= 90

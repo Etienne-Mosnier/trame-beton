@@ -370,22 +370,22 @@ function surfaces(formes, couleur, opacite, z) {
   return groupe;
 }
 
-// portée du robot, cercle de portée maximale, axes X/Y du robot, boussole (repère du robot)
+// zone d'impression du robot (anneau vert), axes X/Y du robot, boussole (repère du robot)
 function dessinerPortee(p) {
   vider(groupePortee);
   if (!p) return;
   const z = p.z - 30;   // sous la palette : elle cache la zone qu'elle recouvre
   groupePortee.add(surfaces(p.zone, "#16a34a", 0.09, z));
 
-  // cercle de portée maximale
-  const cercle = [];
-  for (let k = 0; k <= 128; k++) {
-    const a = (2 * Math.PI * k) / 128;
-    cercle.push([p.portee_max * Math.cos(a), p.portee_max * Math.sin(a), z + 1]);
-  }
-  groupePortee.add(trait(cercle, "#16a34a", 3, true));
-  const texte = etiquette("portée max 1,3 m", "#15803d", 80);
-  texte.position.set(-p.portee_max * 0.71, p.portee_max * 0.71, 40);
+  // légende de l'anneau : où la buse peut imprimer
+  const m = (v) => (v / 1000).toFixed(2).replace(".", ",");
+  const texte = etiquette(`zone d'impression : ${m(p.rayon_int)} à ${m(p.rayon_ext)} m`, "#15803d", 70);
+  // sur le côté de l'anneau (à 90° de la direction de la palette), pour ne pas la cacher
+  const versPalette = new THREE.Vector2(paletteMobile.position.x, paletteMobile.position.y).normalize();
+  texte.position.set(p.centre[0] + versPalette.y * p.rayon_ext, p.centre[1] - versPalette.x * p.rayon_ext, 40);
+  $("legende-portee").textContent = `Anneau vert : zone où la buse peut imprimer, de ${m(p.rayon_int)} à ` +
+    `${m(p.rayon_ext)} m d'un centre décalé de ${Math.round(Math.hypot(...p.centre) / 10)} cm par rapport au ` +
+    `pied du robot (la buse est déportée sur le côté).`;
   groupePortee.add(texte);
 
   // axes du robot (comme sur le pendant) : X rouge, Y vert, 40 cm
@@ -398,9 +398,9 @@ function dessinerPortee(p) {
   fleche([1, 0], "#dc2626", "X robot");
   fleche([0, 1], "#16a34a", "Y robot");
 
-  // boussole : N et S, au-delà du cercle de portée
+  // boussole : N et S, au-delà de la zone d'impression
   const [nx, ny] = p.nord;
-  const r = p.portee_max + 150;
+  const r = p.rayon_ext + Math.hypot(...p.centre) + 250;
   groupePortee.add(trait([[-nx * r, -ny * r, z + 1], [nx * r, ny * r, z + 1]], "#1f2328", 3, true));
   const n = etiquette("N", "#1f2328", 160);
   n.position.set(nx * (r + 60), ny * (r + 60), 30);
