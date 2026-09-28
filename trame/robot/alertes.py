@@ -41,10 +41,10 @@ def reperes(q):
     return T
 
 
-def tubes(q, tcp):
+def tubes(q, tcp, T=None):
     """Segments (a, b, rayon, nom) du bras et de la buse, dans le repère du robot (m).
     La pointe de la buse n'en fait pas partie : elle touche le cordon par construction."""
-    T = reperes(q)
+    T = T or reperes(q)
     sortie = []
     for nom, i, j, decalage, rayon in TUBES:
         axe = T[i][:3, 2] if i < 6 else np.zeros(3)
@@ -58,22 +58,24 @@ def tubes(q, tcp):
     return sortie
 
 
-def collisions(q, tcp, vers_palette, palette):
+ETAPES = np.linspace(0, 1, 8)[:, None]   # 8 points le long de chaque tube
+
+
+def collisions(q, tcp, vers_palette, palette, T=None):
     """Noms des morceaux du bras qui touchent la palette ou le socle.
     vers_palette : matrice 4×4 du repère robot vers le repère palette (mm)."""
     lx, ly = palette
     touches = set()
-    for a, b, rayon, nom in tubes(q, tcp):
-        for s in np.linspace(0, 1, 8):
-            p = a + (b - a) * s
-            # socle : cylindre vertical autour de l'axe de la base (sauf le bras, attaché à l'épaule)
-            if nom != "bras" and math.hypot(p[0], p[1]) < RAYON_SOCLE + rayon and p[2] < HAUT_SOCLE:
-                touches.add("%s / socle" % nom)
-            # palette : sous la bâche, au-dessus de la palette
-            x, y, z = (vers_palette @ np.append(p * 1000, 1.0))[:3]
-            r = rayon * 1000
-            if -r < x < lx + r and -r < y < ly + r and z - r < MARGE_PALETTE * 1000:
-                touches.add("%s / palette" % nom)
+    for a, b, rayon, nom in tubes(q, tcp, T):
+        p = a + (b - a) * ETAPES                      # 8 points (m), repère du robot
+        # socle : cylindre vertical autour de l'axe de la base (sauf le bras, attaché à l'épaule)
+        if nom != "bras" and np.any((np.hypot(p[:, 0], p[:, 1]) < RAYON_SOCLE + rayon) & (p[:, 2] < HAUT_SOCLE)):
+            touches.add("%s / socle" % nom)
+        # palette : sous la bâche, au-dessus de la palette
+        x, y, z = (vers_palette[:3, :3] @ (p * 1000).T) + vers_palette[:3, 3:4]
+        r = rayon * 1000
+        if np.any((-r < x) & (x < lx + r) & (-r < y) & (y < ly + r) & (z - r < MARGE_PALETTE * 1000)):
+            touches.add("%s / palette" % nom)
     return touches
 
 
@@ -106,10 +108,11 @@ def analyser(angles, hors_portee, points, tcp, vers_palette, palette):
         if abs(math.sin(q[2])) < math.sin(math.radians(SINGULARITE)):
             coude.append(k)
         # épaule : le centre du poignet s'approche de l'axe de la base
-        p05 = (reperes(q)[6] @ np.array([0, 0, -0.11655, 1.0]))[:2]
+        T = reperes(q)
+        p05 = (T[6] @ np.array([0, 0, -0.11655, 1.0]))[:2]
         if math.hypot(*p05) < d4 + MARGE_EPAULE:
             epaule.append(k)
-        for t in collisions(q, tcp, vers_palette, palette):
+        for t in collisions(q, tcp, vers_palette, palette, T):
             touches.setdefault(t, []).append(k)
 
     hors = sorted(hors_portee)
