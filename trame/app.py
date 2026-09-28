@@ -57,15 +57,22 @@ MOTEUR = {
 NOMS_MOTEUR = {"hauteur_bosse": "amp", "longueur_montée": "d", "écart_couloirs": "lane"}
 
 
+def module_motif(motif_id):
+    """Module Python d'un motif : « groupe_1/vagues » -> motifs.groupe_1.vagues.motif."""
+    return importlib.import_module("motifs.%s.motif" % motif_id.replace("/", "."))
+
+
 def liste_motifs():
-    """Motifs trouvés dans motifs/ : nom, réglages et texte d'aide."""
+    """Motifs trouvés dans motifs/ : un dossier par motif, directement (motifs/exemple/) ou
+    dans le dossier d'un groupe (motifs/groupe_1/vagues/). Nom, groupe, réglages et aide."""
     sortie = []
-    for dossier in sorted((RACINE / "motifs").iterdir()):
-        if not (dossier / "motif.py").is_file():
-            continue
-        entree = {"id": dossier.name, "nom": dossier.name, "parametres": {}, "aide": ""}
+    for fichier in sorted((RACINE / "motifs").rglob("motif.py")):
+        dossier = fichier.parent
+        motif_id = dossier.relative_to(RACINE / "motifs").as_posix()
+        groupe = motif_id.split("/")[0] if "/" in motif_id else ""
+        entree = {"id": motif_id, "groupe": groupe, "nom": dossier.name, "parametres": {}, "aide": ""}
         try:
-            motif = importlib.import_module("motifs.%s.motif" % dossier.name)
+            motif = module_motif(motif_id)
             entree["nom"] = motif.NOM
             entree["parametres"] = {k: p.vers_dict() for k, p in motif.PARAMETRES.items()}
         except Exception as e:
@@ -74,8 +81,8 @@ def liste_motifs():
         if aide.is_file():
             entree["aide"] = aide.read_text(encoding="utf-8")
         sortie.append(entree)
-    # l'exemple en dernier : les motifs des groupes d'abord
-    sortie.sort(key=lambda m: (m["id"] == "exemple", m["id"]))
+    # les motifs des groupes d'abord (groupe par groupe), l'exemple en dernier
+    sortie.sort(key=lambda m: (m["groupe"] == "", m["groupe"], m["id"]))
     return json.dumps(sortie)
 
 
@@ -111,7 +118,7 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
         place = lire_contour(contour_texte, contour_nom)
         forme = place["contour"]
 
-        motif = importlib.import_module("motifs.%s.motif" % motif_id)
+        motif = module_motif(motif_id)
         p = valeurs(motif.PARAMETRES, reglages.get("motif"))
         series = motif.series(forme, p)
         moteur = {NOMS_MOTEUR[k]: v for k, v in valeurs(MOTEUR, reglages.get("moteur")).items()}
@@ -350,7 +357,7 @@ def exporter(format_fichier):
         texte = exporter_svg(d["resultat"], d["contour"], d["palette"], d["lane"], d["amp"])
     else:
         return json.dumps({"erreur": "Format inconnu : %s" % format_fichier})
-    return json.dumps({"nom": "trame_%s.%s" % (d["motif"], format_fichier), "texte": texte})
+    return json.dumps({"nom": "trame_%s.%s" % (d["motif"].replace("/", "_"), format_fichier), "texte": texte})
 
 
 def robot():

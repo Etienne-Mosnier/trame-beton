@@ -648,7 +648,13 @@ async function demarrer() {
 
     // motifs
     motifs = JSON.parse(app.liste_motifs());
-    $("choix-motif").innerHTML = motifs.map((m) => `<option value="${m.id}">${m.nom}</option>`).join("");
+    // un groupe d'options par groupe d'étudiants, l'exemple à part
+    const groupes = [...new Set(motifs.map((m) => m.groupe))];
+    $("choix-motif").innerHTML = groupes.map((g) => {
+      const titre = g ? g.replace("groupe_", "Groupe ") : "Modèle";
+      const options = motifs.filter((m) => m.groupe === g).map((m) => `<option value="${m.id}">${m.nom}</option>`);
+      return `<optgroup label="${titre}">${options.join("")}</optgroup>`;
+    }).join("");
     $("choix-motif").onchange = (e) => { choisirMotif(e.target.value); calculer(); };
     choisirMotif(motifs[0].id);
 

@@ -1,8 +1,8 @@
 """Bilan des contrôles d'un motif, en texte, pour les pull requests.
 
 Depuis la racine du dépôt :
-    python -m trame.bilan exemple                  (contour : haricot.dxf)
-    python -m trame.bilan groupe_1 rectangle.svg
+    python -m trame.bilan exemple                          (contour : haricot.dxf)
+    python -m trame.bilan groupe_1/vagues rectangle.svg
 """
 
 import json
