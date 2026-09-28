@@ -72,6 +72,17 @@ Règles :
 - Unités : **millimètres** et **degrés**, partout.
 - Les courbes peuvent dépasser du contour : le moteur les découpe.
 
+## Traiter une issue « Idée de motif »
+
+1. Le groupe est indiqué dans l'issue : modifie **uniquement** `motifs/<groupe>/motif.py` et
+   `motifs/<groupe>/aide.md`.
+2. Pars du motif **actuel** du groupe, pas de l'exemple : garde ce qui marche déjà.
+3. Tout ce que l'étudiant veut pouvoir régler devient un `Parametre` avec une `aide`.
+4. Mets à jour `aide.md` : ce que l'on voit, ce que fait chaque réglage, ce qu'il faut éviter.
+5. Lance `pytest` et `python -m trame.bilan <groupe>` ; colle le bilan dans la pull request.
+6. L'aperçu de la pull request est publié automatiquement : un lien apparaît en commentaire.
+   Rappelle à l'étudiant de l'ouvrir pour juger le résultat.
+
 ## Contraintes du béton (à respecter dans les motifs)
 
 Les valeurs exactes sont dans `config/cellule.toml` et seront ajustées pendant les essais.

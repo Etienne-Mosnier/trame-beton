@@ -1,0 +1,26 @@
+# Aperçu de chaque pull request : publié dans gh-pages/pr-preview/pr-N/, lien posté dans la PR,
+# effacé quand la PR est fermée.
+name: apercu
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: apercu-${{ github.ref }}
+
+jobs:
+  apercu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - if: github.event.action != 'closed'
+        run: python3 web/construire.py --site _site
+      - uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: _site
+          comment: true

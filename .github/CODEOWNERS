@@ -7,3 +7,6 @@
 /motifs/exemple/ @Etienne-Mosnier
 /AGENTS.md       @Etienne-Mosnier
 /pyproject.toml  @Etienne-Mosnier
+
+# Motifs des groupes : ajouter les identifiants GitHub des étudiants quand on les connaît, ex.
+# /motifs/groupe_1/ @etudiant1 @etudiant2 @Etienne-Mosnier

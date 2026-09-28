@@ -1,0 +1,28 @@
+# Publication de l'aperçu sur GitHub Pages (branche gh-pages) à chaque changement de main.
+# Les aperçus des pull requests sont dans pr-preview/ (voir apercu-pr.yml) et sont conservés.
+name: publication
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 web/construire.py --site _site
+      - uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: _site
+          branch: gh-pages
+          clean-exclude: pr-preview
+          force: false

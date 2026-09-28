@@ -6,6 +6,8 @@ sur une bâche posée sur une palette EPAL (1200 × 800 mm).
 - Règles pour les agents et les étudiants : [AGENTS.md](AGENTS.md)
 - Cahier des charges : [CAHIER_DES_CHARGES.md](CAHIER_DES_CHARGES.md)
 - Chaque groupe travaille uniquement dans `motifs/<groupe>/`.
+- **Aperçu en ligne : https://etienne-mosnier.github.io/trame-beton/**
+- Guide pour les étudiants : [docs/ETUDIANTS.md](docs/ETUDIANTS.md)
 
 ## Lancer les tests (enseignant)
 

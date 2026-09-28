@@ -1,0 +1,42 @@
+name: Idée de motif
+description: Décris ce que tu veux changer dans le motif de ton groupe. Copilot s'en charge.
+title: "Groupe ? : "
+labels: ["motif"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Décris ton idée **avec des mots de designer** : ce que tu veux voir sur la palette.
+        Pas besoin de parler de code. Une idée par issue.
+        Après avoir créé l'issue, clique sur **Assignees** (à droite) et choisis **Copilot**.
+  - type: dropdown
+    id: groupe
+    attributes:
+      label: Ton groupe
+      options: [groupe_1, groupe_2, groupe_3, groupe_4]
+    validations:
+      required: true
+  - type: textarea
+    id: idee
+    attributes:
+      label: Ce que tu veux voir
+      description: Décris le résultat visuel. Formes, rythmes, densité, où ça change…
+      placeholder: "Ex. : je veux que les lignes de la série B deviennent des vagues, plus serrées au centre de la forme."
+    validations:
+      required: true
+  - type: textarea
+    id: reglages
+    attributes:
+      label: Ce que tu veux pouvoir régler dans l'aperçu
+      description: Les curseurs dont tu as besoin pour chercher la bonne version.
+      placeholder: "Ex. : la hauteur des vagues, la distance entre deux vagues."
+  - type: textarea
+    id: images
+    attributes:
+      label: Croquis ou images
+      description: Glisse ici une photo de croquis, une capture de Grasshopper ou une référence.
+  - type: textarea
+    id: ingenieurs
+    attributes:
+      label: Remarques des étudiants ingénieurs
+      description: Contraintes béton ou robot dont il faut tenir compte (facultatif).
