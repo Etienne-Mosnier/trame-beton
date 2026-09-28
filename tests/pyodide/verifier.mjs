@@ -41,4 +41,10 @@ for (const format of ["dxf", "svg", "script"]) {
   console.log(`export ${format} : ${Math.round(e.texte.length / 1024)} Ko`);
 }
 
+// mouvement du bras (cinématique inverse le long du chemin)
+const debutRobot = performance.now();
+const bras = JSON.parse(app.robot());
+if (bras.erreur) throw new Error(bras.erreur);
+console.log(`robot : ${bras.angles.length} poses, ${bras.hors_portee.length} hors de portée, ${((performance.now() - debutRobot) / 1000).toFixed(2)} s`);
+
 console.log("OK");

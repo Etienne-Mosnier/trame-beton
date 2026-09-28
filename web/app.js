@@ -7,6 +7,7 @@ import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs";
+import { creerBuse, creerRobot } from "./robot.js";
 
 // une couleur par série, dans l'ordre d'impression
 const COULEURS = ["#6b7280", "#2563eb", "#16a34a", "#9333ea", "#d97706"]; // le rouge est gardé pour les problèmes
@@ -38,7 +39,8 @@ scene.add(soleil);
 const groupePalette = new THREE.Group();
 const groupeTrame = new THREE.Group();
 const groupeAlertes = new THREE.Group(); // endroits à problème, en rouge
-scene.add(groupePalette, groupeTrame, groupeAlertes);
+const groupeCordon = new THREE.Group();  // cordon déposé pendant l'animation du robot
+scene.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon);
 const materiaux = [];
 
 let palette = [1200, 800];
@@ -53,6 +55,16 @@ function vueDessus() {
 
 function vue3d() {
   const [lx, ly] = palette;
+  if (robot.visible && robot.donnees) {
+    // la palette et le robot dans le cadre
+    const [bx, by] = robot.donnees.base.position;
+    const cx = (lx / 2 + bx) / 2, cy = (ly / 2 + by) / 2;
+    controles.target.set(cx, cy, 200);
+    camera.position.set(cx + 1300, cy - 2700, 2000);
+    controles.update();
+    activer("vue-3d");
+    return;
+  }
   controles.target.set(lx / 2, ly / 2, 0);
   camera.position.set(lx / 2 + 250, -ly * 1.25, Math.max(lx, ly) * 1.05);
   controles.update();
@@ -72,7 +84,16 @@ function redimensionner() {
   for (const m of materiaux) m.resolution.set(l, h);
 }
 
+let horloge = performance.now();
 function boucle() {
+  const maintenant = performance.now();
+  if (robot.lecture && robot.donnees) {
+    const fin = robot.donnees.temps.at(-1);
+    robot.t = Math.min(robot.t + ((maintenant - horloge) / 1000) * Number($("vitesse-lecture").value), fin);
+    poserRobot(robot.t);
+    if (robot.t >= fin) arreterLecture();
+  }
+  horloge = maintenant;
   controles.update();
   rendu.render(scene, camera);
   requestAnimationFrame(boucle);
@@ -109,7 +130,7 @@ function dessinerPalette(contour) {
     new THREE.BoxGeometry(lx, ly, 22),
     new THREE.MeshStandardMaterial({ color: "#c8a878", roughness: 0.9 }),
   );
-  plateau.position.set(lx / 2, ly / 2, -11.5);
+  plateau.position.set(lx / 2, ly / 2, -13);     // dessus à -2 mm, sous la bâche
   const bache = new THREE.Mesh(
     new THREE.PlaneGeometry(lx, ly),
     new THREE.MeshStandardMaterial({ color: "#e9edf0", roughness: 1 }),
@@ -155,6 +176,101 @@ function dessinerAlertes(resultat, exageration) {
       groupeAlertes.add(anneau);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Robot : bras UR10e animé le long du chemin
+// ---------------------------------------------------------------------------
+
+const robot = { modele: null, racine: null, donnees: null, visible: false, lecture: false, t: 0, lignes: [] };
+
+async function montrerRobot(visible) {
+  robot.visible = visible;
+  $("commandes-robot").hidden = !visible;
+  groupeTrame.visible = !visible;
+  groupeCordon.visible = visible;
+  if (robot.racine) robot.racine.visible = visible;
+  if (!visible) { arreterLecture(); return; }
+  if (!robot.modele) {
+    etat.textContent = "Chargement du robot…";
+    robot.modele = await creerRobot("robot/ur10e");
+    robot.racine = new THREE.Group();
+    robot.racine.matrixAutoUpdate = false;
+    robot.racine.add(robot.modele.groupe);
+    scene.add(robot.racine);
+    etat.textContent = "";
+  }
+  calculerRobot();
+  vue3d();
+}
+
+// angles du bras le long du chemin (calcul Python) et cordon à déposer
+function calculerRobot() {
+  if (!robot.visible || !app || !dernierResultat) return;
+  const d = JSON.parse(app.robot());
+  if (d.erreur) { $("message-robot").textContent = d.erreur; return; }
+  robot.donnees = d;
+  // position du robot vue depuis la palette (mètres -> mm)
+  const R = d.base.rotation, p = d.base.position;
+  robot.racine.matrix.set(
+    R[0][0] * 1000, R[0][1] * 1000, R[0][2] * 1000, p[0],
+    R[1][0] * 1000, R[1][1] * 1000, R[1][2] * 1000, p[1],
+    R[2][0] * 1000, R[2][1] * 1000, R[2][2] * 1000, p[2],
+    0, 0, 0, 1);
+  robot.racine.matrixWorldNeedsUpdate = true;
+  robot.modele.tool0.clear();
+  robot.modele.tool0.add(creerBuse(d.tcp));
+
+  // cordon : une ligne par série, sur la plage de points de cette série (sans approche/dégagement)
+  vider(groupeCordon);
+  robot.lignes = [];
+  const exageration = Number($("exageration").value);
+  let debut = 1, serie = d.series[1];
+  for (let k = 2; k <= d.points.length - 1; k++) {
+    if (k === d.points.length - 1 || d.series[k] !== serie) {
+      const points = d.points.slice(debut, k).map((q) => [q[0], q[1], q[2] * exageration + LARGEUR_CORDON / 4]);
+      if (points.length > 1) {
+        const ligne = trait(points, COULEURS[serie % COULEURS.length], LARGEUR_CORDON);
+        groupeCordon.add(ligne);
+        robot.lignes.push({ ligne, debut, fin: k - 1 });
+      }
+      debut = k - 1;       // la série suivante repart du dernier point
+      serie = d.series[k];
+    }
+  }
+  const fin = d.temps.at(-1);
+  $("temps").max = fin;
+  $("temps").step = fin / 1000;
+  const hors = d.hors_portee.length;
+  $("message-robot").textContent =
+    `Impression de ${Math.round(fin / 60)} min.` +
+    (hors ? ` ⚠ ${hors} point(s) hors de portée du robot.` : "") +
+    (d.simulation ? " Robot placé selon la calibration de simulation." : "");
+  robot.t = Math.min(robot.t, fin);
+  poserRobot(robot.t);
+}
+
+// place le bras au temps t (s) et montre le cordon déjà déposé
+function poserRobot(t) {
+  const d = robot.donnees;
+  if (!d) return;
+  const temps = d.temps;
+  let bas = 0, haut = temps.length - 1;
+  while (haut - bas > 1) { const m = (bas + haut) >> 1; if (temps[m] <= t) bas = m; else haut = m; }
+  const u = temps[haut] > temps[bas] ? Math.min(Math.max((t - temps[bas]) / (temps[haut] - temps[bas]), 0), 1) : 0;
+  const q0 = d.angles[bas], q1 = d.angles[haut];
+  robot.modele.articulations.forEach((a, i) => (a.rotation.z = q0[i] + (q1[i] - q0[i]) * u));
+  for (const { ligne, debut, fin } of robot.lignes) {
+    ligne.geometry.instanceCount = Math.max(0, Math.min(bas, fin) - debut);
+  }
+  $("temps").value = t;
+  const s = Math.round(t);
+  $("valeur-temps").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function arreterLecture() {
+  robot.lecture = false;
+  $("lecture").textContent = "▶ Lecture";
 }
 
 // ---------------------------------------------------------------------------
@@ -268,6 +384,7 @@ function calculer() {
     dessinerTrame(r, Number($("exageration").value));
     afficherBilan(r);
     if (!dejaCadre) { vue3d(); dejaCadre = true; }
+    calculerRobot();
     etat.textContent = "";
     console.log(`calcul : ${((performance.now() - debut) / 1000).toFixed(2)} s`);
   }, 20);
@@ -302,6 +419,15 @@ async function demarrer() {
   boucle();
   $("vue-dessus").onclick = vueDessus;
   $("vue-3d").onclick = vue3d;
+  $("montrer-robot").addEventListener("change", (e) => montrerRobot(e.target.checked));
+  $("lecture").onclick = () => {
+    if (!robot.donnees) return;
+    if (robot.lecture) { arreterLecture(); return; }
+    if (robot.t >= robot.donnees.temps.at(-1)) robot.t = 0;
+    robot.lecture = true;
+    $("lecture").textContent = "⏸ Pause";
+  };
+  $("temps").addEventListener("input", (e) => { arreterLecture(); robot.t = Number(e.target.value); poserRobot(robot.t); });
   $("export-dxf").onclick = () => telecharger("dxf");
   $("export-svg").onclick = () => telecharger("svg");
   $("export-script").onclick = () => telecharger("script");
@@ -311,6 +437,7 @@ async function demarrer() {
   $("exageration").addEventListener("input", (e) => {
     $("valeur-exageration").textContent = "× " + e.target.value;
     if (dernierResultat) dessinerTrame(dernierResultat, Number(e.target.value));
+    if (robot.visible) calculerRobot();
   });
 
   try {

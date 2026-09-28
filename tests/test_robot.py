@@ -64,10 +64,18 @@ def test_pose_ur_comme_pose_trans():
 
 
 def test_buse_verticale_vers_le_bas():
+    repere = repere_palette(*SIMU)
     for angle in (0, 37, 90, 180):
-        colonnes = matrice(urscript.orientation_buse(angle))
+        colonnes = matrice(urscript.orientation_buse(angle, repere))
         assert colonnes[2] == pytest.approx([0, 0, -1], abs=1e-9)    # axe z de la buse vers le bas
-    assert urscript.orientation_buse(0) == pytest.approx([math.pi, 0, 0])
+
+
+def test_buse_orientee_comme_le_ghx():
+    # rotation_z = 0 : axe x de la buse le long de +X du robot, comme dans betonrobot.script
+    repere = repere_palette(*SIMU)
+    x_palette = matrice(urscript.orientation_buse(0, repere))[0]
+    assert vers_robot(repere, x_palette) == pytest.approx(
+        [SIMU[0][i] + [1, 0, 0][i] for i in range(3)], abs=1e-9)
 
 
 def test_points_prepares():

@@ -65,12 +65,23 @@ def rayons_arrondi(points, rayon):
     return rayons
 
 
-def orientation_buse(rotation_z):
-    """Vecteur rotation de la buse verticale, pointe en bas, tournée de rotation_z degrés."""
+def buse_dans_base(rotation_z):
+    """Colonnes de la matrice d'orientation de la buse dans le repère du robot : verticale,
+    pointe en bas, tournée de rotation_z degrés autour de la verticale (0 = comme le .ghx)."""
     t = math.radians(rotation_z)
     c, s = math.cos(t), math.sin(t)
-    # Rz(t) · Rx(180°) : colonnes de la matrice
-    return vecteur_rotation([[c, s, 0.0], [s, -c, 0.0], [0.0, 0.0, -1.0]])
+    # Rz(t) · Rx(180°)
+    return [[c, s, 0.0], [s, -c, 0.0], [0.0, 0.0, -1.0]]
+
+
+def orientation_buse(rotation_z, repere):
+    """Vecteur rotation de la buse exprimé dans le repère de la palette (pour pose_trans) :
+    la même orientation par rapport au robot, où que soit la palette."""
+    colonnes = buse_dans_base(rotation_z)
+    axes = [repere["x"], repere["y"], repere["z"]]
+    # chaque colonne exprimée dans le repère palette : produit scalaire avec les axes de la palette
+    dans_palette = [[sum(axe[i] * col[i] for i in range(3)) for axe in axes] for col in colonnes]
+    return vecteur_rotation(dans_palette)
 
 
 def fonctions_extrusion(extrusion):
@@ -123,7 +134,7 @@ def generer(path, repere, reglages, entete=(), simulation=False):
     if len(points) < 2:
         raise ValueError("Le chemin est vide : rien à imprimer.")
     rayons = rayons_arrondi(points, imp["rayon_raccord"])
-    rx, ry, rz = orientation_buse(outil.get("rotation_z", 0.0))
+    rx, ry, rz = orientation_buse(outil.get("rotation_z", 0.0), repere)
     tcp = [v / 1000 for v in outil["tcp"][:3]] + list(outil["tcp"][3:])
     cog = [v / 1000 for v in outil["centre_gravite"]]
     a = imp["acceleration"] / 1000

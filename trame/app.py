@@ -10,6 +10,7 @@ Toutes les fonctions renvoient un texte JSON. En cas d'erreur, calculer() renvoi
 
 import importlib
 import json
+import math
 import pathlib
 import sys
 import tomllib
@@ -19,8 +20,10 @@ from trame.contour import charger_contour
 from trame.controles import controler, quantites
 from trame.export.dxf import exporter_dxf
 from trame.export.svg import exporter_svg
-from trame.robot import urscript
-from trame.robot.calibration import repere_palette
+import numpy as np
+
+from trame.robot import cinematique, urscript
+from trame.robot.calibration import repere_palette, vers_robot
 from trame.moteur.chemin import calculer_chemin
 from trame.parametres import Parametre, valeurs
 
@@ -162,13 +165,20 @@ def calibration():
     return repere_palette(c["origine"], c["grand_cote"], c["petit_cote"]), simulation
 
 
+def reglages_impression():
+    """Réglages d'impression, avec la hauteur de buse provisoire si elle n'est pas fixée."""
+    imp = dict(CONFIG["impression"])
+    if not imp["hauteur_buse"]:
+        imp["hauteur_buse"] = BETON["hauteur_couche"]
+    return imp
+
+
 def programme_robot(d):
     """Texte URScript du dernier calcul."""
     repere, simulation = calibration()
-    imp = dict(CONFIG["impression"])
+    imp = reglages_impression()
     entete = ["Motif : %s, contour : %s" % (d["motif"], d["nom_contour"])]
-    if not imp["hauteur_buse"]:
-        imp["hauteur_buse"] = BETON["hauteur_couche"]
+    if not CONFIG["impression"]["hauteur_buse"]:
         entete.append("PROVISOIRE : hauteur de la buse = hauteur de couche (%g mm)" % imp["hauteur_buse"])
     for nom in PROVISOIRES:
         entete.append("PROVISOIRE : %s = %g mm" % (nom, BETON[nom]))
@@ -202,6 +212,66 @@ def exporter(format_fichier):
     else:
         return json.dumps({"erreur": "Format inconnu : %s" % format_fichier})
     return json.dumps({"nom": "trame_%s.%s" % (d["motif"], format_fichier), "texte": texte})
+
+
+def robot():
+    """Mouvement du bras pour le dernier calcul : angles des articulations à chaque point du
+    programme (approche et dégagement compris), temps, et position du robot vue de la palette."""
+    if not _dernier:
+        return json.dumps({"erreur": "Lance d'abord un calcul."})
+    d = _dernier
+    repere, simulation = calibration()
+    imp = reglages_impression()
+    outil = CONFIG["outil"]
+    hb, h = imp["hauteur_buse"], imp["hauteur_approche"]
+    points = urscript.preparer_points(d["resultat"]["path"] or [], hb, imp["longueur_max_segment"])
+    if len(points) < 2:
+        return json.dumps({"erreur": "Rien à imprimer."})
+    premier, dernier = points[0], points[-1]
+    tous = [(premier[0], premier[1], premier[2] + h)] + points + [(dernier[0], dernier[1], dernier[2] + h)]
+
+    # pose de la bride pour chaque point : buse verticale, dans le repère du robot (m)
+    R = np.array(urscript.buse_dans_base(outil.get("rotation_z", 0.0))).T
+    tcp = cinematique.matrice_pose([v / 1000 for v in outil["tcp"][:3]] + list(outil["tcp"][3:]))
+    tcp_inverse = np.linalg.inv(tcp)
+    poses = []
+    for p in tous:
+        T = np.eye(4)
+        T[:3, :3] = R
+        T[:3, 3] = [v / 1000 for v in vers_robot(repere, p)]
+        poses.append(T @ tcp_inverse)
+    angles, hors_portee = cinematique.trajectoire(poses)
+
+    # temps de passage (s) : approche et dégagement à la vitesse d'approche
+    temps = [0.0]
+    for k in range(1, len(tous)):
+        v = imp["vitesse_approche"] if k in (1, len(tous) - 1) else imp["vitesse"]
+        temps.append(temps[-1] + math.dist(tous[k - 1], tous[k]) / v)
+
+    # série de chaque point (pour déposer le cordon avec la bonne couleur)
+    serie_de = {}
+    for i, serie in enumerate(d["resultat"]["waves"]):
+        for poly in serie:
+            for p in poly:
+                serie_de.setdefault((round(p[0], 2), round(p[1], 2)), i)
+    series, courant = [], 0
+    for p in tous:
+        courant = serie_de.get((round(p[0], 2), round(p[1], 2)), courant)
+        series.append(courant)
+
+    # position du robot vue depuis la palette (inverse du repère de la palette)
+    Rp = np.array([repere["x"], repere["y"], repere["z"]])      # lignes = axes de la palette
+    base = -Rp @ np.array(repere["origine"])
+    return json.dumps({
+        "base": {"position": [round(v, 2) for v in base], "rotation": np.round(Rp, 6).tolist()},
+        "tcp": outil["tcp"],
+        "points": [[round(p[0], 2), round(p[1], 2), round(p[2] - hb, 2)] for p in tous],
+        "series": series,
+        "angles": [[round(v, 5) for v in q] for q in angles],
+        "temps": [round(t, 3) for t in temps],
+        "hors_portee": hors_portee,
+        "simulation": simulation,
+    })
 
 
 def verifier():

@@ -53,6 +53,27 @@
     </section>
 
     <section>
+      <h2>Robot</h2>
+      <label class="case"><input id="montrer-robot" type="checkbox"> Montrer le robot qui imprime</label>
+      <div id="commandes-robot" hidden>
+        <div class="boutons">
+          <button id="lecture" type="button">▶ Lecture</button>
+          <select id="vitesse-lecture">
+            <option value="1">× 1</option>
+            <option value="10">× 10</option>
+            <option value="30" selected>× 30</option>
+            <option value="100">× 100</option>
+          </select>
+        </div>
+        <div class="reglage">
+          <div class="ligne"><span>Temps</span><output id="valeur-temps">0:00</output></div>
+          <input id="temps" type="range" min="0" max="1" step="0.1" value="0">
+        </div>
+        <p id="message-robot" class="petit"></p>
+      </div>
+    </section>
+
+    <section>
       <h2>Exports</h2>
       <div class="boutons">
         <button id="export-dxf" type="button">DXF (3D)</button>

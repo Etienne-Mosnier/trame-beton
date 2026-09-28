@@ -11,7 +11,8 @@ polyscope = "5"                       # numéro exact à préciser
 tcp = [174.4, 0.0, 28.86, 1.2092, 1.2092, 1.2092]
 masse_kg = 0.1                        # À MESURER : valeur provisoire du .script
 centre_gravite = [174.4, 0.0, 28.86]  # mm
-rotation_z = 0.0                      # degrés, orientation de la buse autour de la verticale
+rotation_z = 0.0                      # degrés, orientation de la buse autour de la verticale,
+                                      # dans le repère du robot (0 = comme le .ghx)
 
 [impression]
 vitesse = 72.0                        # mm/s (valeur du .ghx)
