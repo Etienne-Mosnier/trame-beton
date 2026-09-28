@@ -297,6 +297,7 @@ def placement(reglages_json):
     c = _placement or CONFIG["calibration_simulation"]
     return json.dumps({
         "portee": p,
+        "repere": {k: [round(float(v), 6) for v in repere[k]] for k in ("origine", "x", "y", "z")},
         "atteignable": p["atteignable"],
         "calibration": {k: [round(v, 1) for v in c[k]] for k in ("origine", "grand_cote", "petit_cote")},
         "simulation": simulation,

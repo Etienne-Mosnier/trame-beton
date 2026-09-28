@@ -54,49 +54,25 @@
 
     <section>
       <h2>Robot</h2>
-      <label class="case"><input id="montrer-robot" type="checkbox"> Montrer le robot qui imprime</label>
-      <div id="commandes-robot" hidden>
-        <label class="case"><input id="montrer-portee" type="checkbox" checked> Montrer la portée et l'orientation du robot</label>
-        <p id="legende-portee" class="petit"></p>
-        <div class="boutons">
-          <button id="lecture" type="button">▶ Lecture</button>
-          <select id="vitesse-lecture">
-            <option value="1">× 1</option>
-            <option value="10">× 10</option>
-            <option value="30" selected>× 30</option>
-            <option value="100">× 100</option>
-          </select>
-        </div>
-        <div class="reglage">
-          <div class="ligne"><span>Temps</span><output id="valeur-temps">0:00</output></div>
-          <input id="temps" type="range" min="0" max="1" step="0.1" value="0">
-        </div>
-        <p id="message-robot" class="petit"></p>
-        <div id="alertes-robot"></div>
+      <p class="petit">Clique sur la palette pour la déplacer (flèches) ou la tourner (anneau).</p>
+      <p id="legende-portee" class="petit"></p>
+      <div class="boutons">
+        <button id="lecture" type="button">▶ Lecture</button>
+        <select id="vitesse-lecture">
+          <option value="1">× 1</option>
+          <option value="10">× 10</option>
+          <option value="30" selected>× 30</option>
+          <option value="100">× 100</option>
+        </select>
       </div>
-      <details id="placement">
-        <summary>Placer la palette (enseignant)</summary>
-        <p class="petit">Tire les flèches du gizmo pour déplacer la palette, ou son anneau pour
-          la tourner. Au lâcher, tout est recalculé. Vert : zone atteignable avec la buse
-          verticale ; rouge : partie de la palette hors de portée.</p>
-        <div class="boutons">
-          <button id="gizmo-deplacer" type="button">Déplacer</button>
-          <button id="gizmo-tourner" type="button">Tourner</button>
-        </div>
-        <p class="petit">Ou saisis la position du coin (0, 0) dans le repère du robot :</p>
-        <div class="grille">
-          <label>X (mm) <input id="placement-x" type="number" step="10" value="-197"></label>
-          <label>Y (mm) <input id="placement-y" type="number" step="10" value="-437"></label>
-          <label>Hauteur (mm) <input id="placement-z" type="number" step="1" value="8.7"></label>
-          <label>Rotation (°) <input id="placement-rotation" type="number" step="5" value="90"></label>
-        </div>
-        <div class="boutons">
-          <button id="placement-appliquer" type="button">Appliquer</button>
-          <button id="placement-annuler" type="button">Simulation</button>
-        </div>
-        <p id="resultat-placement" class="petit"></p>
-        <pre id="calibration-placement" class="petit"></pre>
-      </details>
+      <div class="reglage">
+        <div class="ligne"><span>Temps</span><output id="valeur-temps">0:00</output></div>
+        <input id="temps" type="range" min="0" max="1" step="0.1" value="0">
+      </div>
+      <p id="message-robot" class="petit"></p>
+      <div id="alertes-robot"></div>
+      <p id="resultat-placement" class="petit"></p>
+      <pre id="calibration-placement" class="petit"></pre>
     </section>
 
     <section>

@@ -7,7 +7,7 @@ motif, et tu juges le résultat dans l'**aperçu**.
 
 Ouvre **https://etienne-mosnier.github.io/trame-beton/** (le premier chargement prend
 quelques secondes). Choisis le motif de ton groupe, bouge les curseurs, tourne la vue 3D,
-coche « Montrer le robot qui imprime » pour voir la machine au travail.
+clique sur « Lecture » pour voir le robot imprimer.
 
 ## 2. Décrire une idée
 
