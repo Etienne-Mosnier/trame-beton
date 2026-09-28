@@ -45,6 +45,8 @@ for (const format of ["dxf", "svg", "script"]) {
 const debutRobot = performance.now();
 const bras = JSON.parse(app.robot());
 if (bras.erreur) throw new Error(bras.erreur);
+const zone = JSON.parse(app.placement(""));
+console.log(`placement : ${zone.atteignable} % de la palette atteignable`);
 console.log(`robot : ${bras.angles.length} poses, ${bras.hors_portee.length} hors de portée, ${((performance.now() - debutRobot) / 1000).toFixed(2)} s`);
 
 console.log("OK");

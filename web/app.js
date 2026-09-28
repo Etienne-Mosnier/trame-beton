@@ -40,7 +40,9 @@ const groupePalette = new THREE.Group();
 const groupeTrame = new THREE.Group();
 const groupeAlertes = new THREE.Group(); // endroits à problème, en rouge
 const groupeCordon = new THREE.Group();  // cordon déposé pendant l'animation du robot
-scene.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon);
+const groupeAlertesRobot = new THREE.Group(); // alertes robot, en rouge
+const groupeZone = new THREE.Group();    // zone atteignable (mode placement)
+scene.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon, groupeAlertesRobot, groupeZone);
 const materiaux = [];
 
 let palette = [1200, 800];
@@ -159,13 +161,17 @@ function dessinerTrame(resultat, exageration) {
 
 // les endroits signalés par les contrôles : anneaux et traits rouges, un peu au-dessus
 function dessinerAlertes(resultat, exageration) {
-  vider(groupeAlertes);
+  marquer(groupeAlertes, resultat.controles, exageration);
+}
+
+function marquer(groupe, liste, exageration) {
+  vider(groupe);
   if (!$("montrer-alertes").checked) return;
   const rouge = "#e11d48";
-  for (const c of resultat.controles) {
+  for (const c of liste) {
     if (c.statut === "ok") continue;
-    for (const s of c.segments) {
-      groupeAlertes.add(trait(s.map((p) => [p[0], p[1], (p[2] ?? 0) * exageration + 3]), rouge, 6));
+    for (const s of c.segments || []) {
+      groupe.add(trait(s.map((p) => [p[0], p[1], (p[2] ?? 0) * exageration + 3]), rouge, 6));
     }
     for (const p of c.points) {
       const anneau = new THREE.Mesh(
@@ -173,7 +179,7 @@ function dessinerAlertes(resultat, exageration) {
         new THREE.MeshBasicMaterial({ color: rouge, side: THREE.DoubleSide }),
       );
       anneau.position.set(p[0], p[1], 4);
-      groupeAlertes.add(anneau);
+      groupe.add(anneau);
     }
   }
 }
@@ -189,11 +195,16 @@ async function montrerRobot(visible) {
   $("commandes-robot").hidden = !visible;
   groupeTrame.visible = !visible;
   groupeCordon.visible = visible;
+  groupeAlertesRobot.visible = visible;
+  groupeAlertes.visible = !visible;
   if (robot.racine) robot.racine.visible = visible;
   if (!visible) { arreterLecture(); return; }
   if (!robot.modele) {
     etat.textContent = "Chargement du robot…";
     robot.modele = await creerRobot("robot/ur10e");
+    // matériaux du bras (pour le teinter en rouge pendant une alerte)
+    robot.materiaux = new Set();
+    robot.modele.groupe.traverse((o) => o.material && robot.materiaux.add(o.material));
     robot.racine = new THREE.Group();
     robot.racine.matrixAutoUpdate = false;
     robot.racine.add(robot.modele.groupe);
@@ -238,6 +249,16 @@ function calculerRobot() {
       serie = d.series[k];
     }
   }
+  // alertes robot : liste, marques rouges, points à signaler pendant l'animation
+  const symbole = { ok: "✓", alerte: "⚠", erreur: "✕" };
+  $("alertes-robot").innerHTML = d.alertes.map((a) => `
+    <div class="controle ${a.statut}">
+      <p><span class="symbole">${symbole[a.statut]}</span> ${a.titre}</p>
+      ${a.statut === "ok" ? "" : `<p class="petit">${a.message}</p>`}
+    </div>`).join("");
+  marquer(groupeAlertesRobot, d.alertes, exageration);
+  robot.enAlerte = new Set(d.alertes.filter((a) => a.statut !== "ok").flatMap((a) => a.indices));
+
   const fin = d.temps.at(-1);
   $("temps").max = fin;
   $("temps").step = fin / 1000;
@@ -260,6 +281,9 @@ function poserRobot(t) {
   const u = temps[haut] > temps[bas] ? Math.min(Math.max((t - temps[bas]) / (temps[haut] - temps[bas]), 0), 1) : 0;
   const q0 = d.angles[bas], q1 = d.angles[haut];
   robot.modele.articulations.forEach((a, i) => (a.rotation.z = q0[i] + (q1[i] - q0[i]) * u));
+  // bras teinté en rouge quand la pose actuelle déclenche une alerte
+  const rouge = robot.enAlerte?.has(bas) && $("montrer-alertes").checked;
+  for (const m of robot.materiaux) m.emissive.set(rouge ? "#b00020" : "#000000");
   for (const { ligne, debut, fin } of robot.lignes) {
     ligne.geometry.instanceCount = Math.max(0, Math.min(bas, fin) - debut);
   }
@@ -271,6 +295,29 @@ function poserRobot(t) {
 function arreterLecture() {
   robot.lecture = false;
   $("lecture").textContent = "▶ Lecture";
+}
+
+// Mode enseignant : placer la palette et voir la zone atteignable
+async function placer(reglages) {
+  if (!app) return;
+  if (!robot.visible) { $("montrer-robot").checked = true; await montrerRobot(true); }
+  const r = JSON.parse(app.placement(reglages ? JSON.stringify(reglages) : ""));
+  vider(groupeZone);
+  const vert = new THREE.MeshBasicMaterial({ color: "#16a34a", transparent: true, opacity: 0.25, side: THREE.DoubleSide });
+  const rouge = new THREE.MeshBasicMaterial({ color: "#e11d48", transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+  for (const [x, y, ok] of r.zone) {
+    const c = new THREE.Mesh(new THREE.PlaneGeometry(46, 46), ok ? vert : rouge);
+    c.position.set(x, y, 1);
+    groupeZone.add(c);
+  }
+  $("resultat-placement").textContent = `${r.atteignable} % de la palette est atteignable.`;
+  const c = r.calibration;
+  $("calibration-placement").textContent = reglages
+    ? `À recopier dans config/cellule.toml, [calibration_simulation] :\n` +
+      `origine = [${c.origine.join(", ")}]\ngrand_cote = [${c.grand_cote.join(", ")}]\npetit_cote = [${c.petit_cote.join(", ")}]`
+    : "";
+  calculerRobot();
+  vue3d();
 }
 
 // ---------------------------------------------------------------------------
@@ -428,11 +475,21 @@ async function demarrer() {
     $("lecture").textContent = "⏸ Pause";
   };
   $("temps").addEventListener("input", (e) => { arreterLecture(); robot.t = Number(e.target.value); poserRobot(robot.t); });
+  $("placement-appliquer").onclick = () => placer({
+    x: Number($("placement-x").value), y: Number($("placement-y").value),
+    z: Number($("placement-z").value), rotation: Number($("placement-rotation").value),
+  });
+  $("placement-annuler").onclick = () => placer(null);
+  $("placement").addEventListener("toggle", (e) => {
+    groupeZone.visible = e.target.open;
+    if (e.target.open) placer(null);
+  });
   $("export-dxf").onclick = () => telecharger("dxf");
   $("export-svg").onclick = () => telecharger("svg");
   $("export-script").onclick = () => telecharger("script");
   $("montrer-alertes").addEventListener("change", () => {
     if (dernierResultat) dessinerAlertes(dernierResultat, Number($("exageration").value));
+    if (robot.donnees) marquer(groupeAlertesRobot, robot.donnees.alertes, Number($("exageration").value));
   });
   $("exageration").addEventListener("input", (e) => {
     $("valeur-exageration").textContent = "× " + e.target.value;

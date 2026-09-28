@@ -22,7 +22,7 @@ from trame.export.dxf import exporter_dxf
 from trame.export.svg import exporter_svg
 import numpy as np
 
-from trame.robot import cinematique, urscript
+from trame.robot import alertes, cinematique, urscript
 from trame.robot.calibration import repere_palette, vers_robot
 from trame.moteur.chemin import calculer_chemin
 from trame.parametres import Parametre, valeurs
@@ -155,14 +155,53 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
                            "details": traceback.format_exc()})
 
 
+_placement = {}   # placement de la palette choisi dans le mode enseignant (remplace la simulation)
+
+
+def points_placement(x, y, z, rotation):
+    """Les 3 points de calibration d'une palette posée à plat : coin (x, y, z) dans le repère du
+    robot (mm), grand côté tourné de 'rotation' degrés par rapport à l'axe X du robot."""
+    lx, ly = CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]
+    c, s = math.cos(math.radians(rotation)), math.sin(math.radians(rotation))
+    return {"origine": [x, y, z], "grand_cote": [x + lx * c, y + lx * s, z],
+            "petit_cote": [x - ly * s, y + ly * c, z]}
+
+
 def calibration():
-    """Repère de la palette : la calibration relevée si elle est complète, sinon celle de
-    simulation. Renvoie (repere, simulation)."""
+    """Repère de la palette : la calibration relevée si elle est complète, sinon le placement
+    du mode enseignant, sinon la calibration de simulation. Renvoie (repere, simulation)."""
     c = CONFIG["calibration"]
     simulation = not (c["origine"] and c["grand_cote"] and c["petit_cote"])
     if simulation:
-        c = CONFIG["calibration_simulation"]
+        c = _placement or CONFIG["calibration_simulation"]
     return repere_palette(c["origine"], c["grand_cote"], c["petit_cote"]), simulation
+
+
+def placement(reglages_json):
+    """Mode enseignant : place la palette (x, y, z en mm, rotation en degrés, repère du robot),
+    ou revient à la calibration de simulation si reglages_json est vide.
+    Renvoie la zone atteignable et les 3 points à recopier dans config/cellule.toml."""
+    reglages = json.loads(reglages_json or "{}")
+    _placement.clear()
+    if reglages:
+        _placement.update(points_placement(reglages["x"], reglages["y"], reglages["z"], reglages["rotation"]))
+    repere, simulation = calibration()
+    imp = reglages_impression()
+    outil = CONFIG["outil"]
+    tcp = cinematique.matrice_pose([v / 1000 for v in outil["tcp"][:3]] + list(outil["tcp"][3:]))
+    zone = alertes.zone_atteignable(
+        lambda p: vers_robot(repere, p),
+        (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]),
+        [imp["hauteur_buse"], imp["hauteur_buse"] + imp["hauteur_approche"]],
+        np.array(urscript.buse_dans_base(outil.get("rotation_z", 0.0))).T,
+        np.linalg.inv(tcp))
+    c = _placement or CONFIG["calibration_simulation"]
+    return json.dumps({
+        "zone": zone,
+        "atteignable": round(100 * sum(1 for z in zone if z[2]) / len(zone)),
+        "calibration": {k: [round(v, 1) for v in c[k]] for k in ("origine", "grand_cote", "petit_cote")},
+        "simulation": simulation,
+    })
 
 
 def reglages_impression():
@@ -242,6 +281,14 @@ def robot():
         poses.append(T @ tcp_inverse)
     angles, hors_portee = cinematique.trajectoire(poses)
 
+    # alertes : repère du robot (mm) -> repère palette
+    Rp = np.array([repere["x"], repere["y"], repere["z"]])      # lignes = axes de la palette
+    vers_palette = np.eye(4)
+    vers_palette[:3, :3] = Rp
+    vers_palette[:3, 3] = -Rp @ np.array(repere["origine"])
+    liste_alertes = alertes.analyser(angles, hors_portee, tous, tcp, vers_palette,
+                                     (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]))
+
     # temps de passage (s) : approche et dégagement à la vitesse d'approche
     temps = [0.0]
     for k in range(1, len(tous)):
@@ -260,8 +307,7 @@ def robot():
         series.append(courant)
 
     # position du robot vue depuis la palette (inverse du repère de la palette)
-    Rp = np.array([repere["x"], repere["y"], repere["z"]])      # lignes = axes de la palette
-    base = -Rp @ np.array(repere["origine"])
+    base = vers_palette[:3, 3]
     return json.dumps({
         "base": {"position": [round(v, 2) for v in base], "rotation": np.round(Rp, 6).tolist()},
         "tcp": outil["tcp"],
@@ -270,6 +316,7 @@ def robot():
         "angles": [[round(v, 5) for v in q] for q in angles],
         "temps": [round(t, 3) for t in temps],
         "hors_portee": hors_portee,
+        "alertes": [dict(a, points=[[round(v, 1) for v in p] for p in a["points"]]) for a in liste_alertes],
         "simulation": simulation,
     })
 

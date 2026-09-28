@@ -77,6 +77,7 @@ pre#info {
 
 #bilan p { margin: 4px 0; }
 .controle { margin: 6px 0; }
+.controle p { margin: 4px 0; }
 .controle .symbole { display: inline-block; width: 1.2em; font-weight: bold; }
 .controle.ok .symbole { color: var(--ok); }
 .controle.alerte .symbole, .controle.alerte > p:first-child { color: var(--alerte); }
@@ -110,3 +111,9 @@ pre#info {
   #panneau { width: 100%; height: auto; max-height: 50%; border-right: none; border-bottom: 1px solid var(--bord); }
   #scene { height: 50%; }
 }
+
+.grille { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+.grille label { font-size: 12px; color: var(--discret); }
+.grille input { width: 100%; font: inherit; padding: 4px 6px; border: 1px solid var(--bord); border-radius: 6px; }
+#calibration-placement { white-space: pre-wrap; background: var(--fond); padding: 6px; border-radius: 6px; }
+#calibration-placement:empty { display: none; }
