@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500mm" height="1000mm" viewBox="0 0 1500 1000">
+  <ellipse cx="750" cy="500" rx="700" ry="450" fill="none" stroke="black"/>
+  <path d="M 600 400 L 900 400 L 900 600 L 600 600 Z" fill="none" stroke="black"/>
+  <path d="M 100 950 L 1400 950" stroke="black"/>
+</svg>
