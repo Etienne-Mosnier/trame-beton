@@ -11,7 +11,7 @@ import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs";
 // une couleur par série, dans l'ordre d'impression
 const COULEURS = ["#6b7280", "#2563eb", "#dc2626", "#16a34a", "#d97706"];
 const NOMS_SERIES = ["A", "B", "C", "D", "E"];
-const LARGEUR_CORDON = 8; // mm, pour le dessin seulement
+const LARGEUR_CORDON = 4; // mm, pour le dessin seulement
 
 const $ = (id) => document.getElementById(id);
 const etat = $("etat");
