@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trame-beton"
+version = "0.1.0"
+description = "Création de trames imprimées en béton par un bras UR10e"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["shapely>=2"]
+
+[project.optional-dependencies]
+# import des contours (étape 3)
+import = ["ezdxf", "svgelements"]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+include = ["trame*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

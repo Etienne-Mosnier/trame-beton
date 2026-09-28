@@ -1,0 +1,38 @@
+# Réglages physiques de la cellule robot.
+# Fichier de l'enseignant : ne jamais le modifier dans une issue d'étudiant.
+# Unités : millimètres, degrés, secondes, sauf mention contraire.
+
+[robot]
+modele = "UR10e"
+polyscope = "5"                       # numéro exact à préciser
+
+[outil]
+# TCP de la buse, repris de betonrobot.script (x, y, z en mm ; rx, ry, rz en radians)
+tcp = [174.4, 0.0, 28.86, 1.2092, 1.2092, 1.2092]
+masse_kg = 0.1                        # À MESURER : valeur provisoire du .script
+centre_gravite = [174.4, 0.0, 28.86]  # mm
+
+[impression]
+vitesse = 72.0                        # mm/s (valeur du .ghx)
+rayon_raccord = 1.5                   # mm, rayon r de movep/movel (1 à 2 mm)
+largeur_cordon = 0.0                  # mm, À FIXER pendant les essais
+hauteur_couche = 0.0                  # mm, À FIXER pendant les essais (amp du .ghx : 5)
+
+[extrusion]
+active = false                        # désactivée tant que la sortie n'est pas connue
+type = ""                             # "digitale" ou "analogique", à préciser
+sortie = -1                           # numéro de sortie, à préciser
+delai_depart = 0.0                    # s
+delai_arret = 0.0                     # s
+
+[palette]
+longueur = 1200.0                     # EPAL
+largeur = 800.0
+marge = 20.0                          # mm, marge de sécurité au bord
+
+[calibration]
+# Trois points relevés sur le pendant (repère base robot, mm), voir CDC §7.
+# Vides tant que la palette n'est pas installée.
+origine = []
+grand_cote = []
+petit_cote = []
