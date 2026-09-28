@@ -209,6 +209,16 @@ def formes(geometrie):
             for p in polygones if not p.is_empty and p.area > 0]
 
 
+def cercle_ajuste(points):
+    """Cercle (cx, cy, rayon) le plus proche d'une suite de points (moindres carrés)."""
+    P = np.array([p[:2] for p in points], dtype=float)
+    A = np.column_stack([P[:, 0], P[:, 1], np.ones(len(P))])
+    b = -(P[:, 0] ** 2 + P[:, 1] ** 2)
+    D, E, F = np.linalg.lstsq(A, b, rcond=None)[0]
+    cx, cy = -D / 2, -E / 2
+    return cx, cy, math.sqrt(cx * cx + cy * cy - F)
+
+
 def portee(repere):
     """Limites et orientation du robot, dans le repère du ROBOT (mm), au niveau de la palette :
     zone où il amène la buse verticale (hauteurs d'impression et d'approche), partie de la
@@ -231,8 +241,23 @@ def portee(repere):
     # cases atteignables réunies en une forme, bords en escalier lissés, pied du robot retiré
     zone = unary_union([box(x - pas / 2, y - pas / 2, x + pas / 2, y + pas / 2)
                         for x, y, ok in cases if ok])
-    zone = zone.buffer(pas).buffer(-2 * pas).buffer(pas).simplify(12)
-    zone = lisser(zone).difference(Point(0, 0).buffer(PIED)).simplify(1)
+    zone = zone.buffer(pas).buffer(-2 * pas).buffer(pas)
+    # La buse est décalée de la bride et garde la même orientation : la zone est un vrai cercle,
+    # dont le centre est décalé par rapport à l'axe du robot. On ajuste ce cercle sur le bord
+    # extérieur, un autre sur le bord intérieur, et on garde un anneau prudent (un peu plus petit).
+    principale = max(getattr(zone, "geoms", [zone]), key=lambda g: g.area)
+    cx, cy, rayon_ext = cercle_ajuste(principale.exterior.coords)
+    rayon_ext -= pas / 2
+    trous = [c for t in principale.interiors for c in t.coords]
+    rayon_int = PIED
+    if trous:
+        ix, iy, ri = cercle_ajuste(trous)
+        # le trou intérieur, ramené au même centre, sans le rogner
+        rayon_int = max(PIED, max(math.dist((cx, cy), c) for c in trous) + pas / 2)
+    # un seul cercle intérieur, de même centre, qui englobe aussi le pied du robot
+    rayon_int = max(rayon_int, math.hypot(cx, cy) + PIED)
+    centre = Point(cx, cy)
+    zone = centre.buffer(rayon_ext, quad_segs=64).difference(centre.buffer(rayon_int, quad_segs=64))
 
     # la palette dans le repère du robot, et sa partie hors de portée
     lx, ly = CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]
@@ -243,6 +268,9 @@ def portee(repere):
     nord = math.radians(CONFIG["robot"].get("nord", 90.0))
     return {
         "zone": formes(zone),
+        "centre": [round(cx, 1), round(cy, 1)],
+        "rayon_ext": round(rayon_ext),
+        "rayon_int": round(rayon_int),
         "hors_palette": formes(hors),
         "atteignable": round(100 * (1 - hors.area / palette.area)),
         "z": round(z_plan, 1),
