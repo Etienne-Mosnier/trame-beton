@@ -1,19 +1,38 @@
-"""Paramètres réglables des motifs.
+"""Paramètres réglables des motifs : chacun devient un réglage dans l'aperçu.
 
 Dans un motif :
     PARAMETRES = {
         "espacement": Parametre(50, mini=20, maxi=150, unite="mm", aide="Écart entre deux lignes"),
-        "attraction": Point(400, 300, aide="Point vers lequel les lignes sont attirées"),
+        "forme": Choix("vagues", ["vagues", "zigzag", "arcs"], aide="Forme des lignes de B"),
+        "inverser": Case(False, aide="Inverser le sens des vagues"),
+        "centre": Point(600, 400, aide="Centre des cercles"),
+        "attractions": Points([(400, 400), (800, 400)], mini=0, maxi=8, aide="Points qui attirent"),
     }
-- Parametre : un curseur dans l'aperçu.
-- Point : une poignée sur la palette, que l'on déplace à la souris (x, y en mm, repère palette).
-La fonction series(contour, p) reçoit p, un dictionnaire nom -> valeur :
-p["espacement"] vaut 50, p["attraction"] vaut (400, 300).
+
+| Type      | Dans l'aperçu                                   | Valeur reçue dans p[...]         |
+|-----------|-------------------------------------------------|----------------------------------|
+| Parametre | un curseur                                      | un nombre                        |
+| Choix     | une liste déroulante                            | le texte choisi                  |
+| Case      | une case oui / non                              | True ou False                    |
+| Point     | une poignée orange sur la palette, à déplacer   | (x, y) en mm                     |
+| Points    | des poignées que l'on ajoute (double-clic sur   | liste de (x, y) en mm            |
+|           | la palette), déplace et supprime (double-clic   | (éventuellement vide si mini=0)  |
+|           | sur le point)                                   |                                  |
+
+Les points sont dans le repère de la palette : origine au coin, x le long du grand côté.
 """
+
+LONGUEUR_PALETTE = 1200.0
+LARGEUR_PALETTE = 800.0
+
+
+def sur_la_palette(xy):
+    """Ramène un point (x, y) sur la palette."""
+    return (min(max(float(xy[0]), 0.0), LONGUEUR_PALETTE), min(max(float(xy[1]), 0.0), LARGEUR_PALETTE))
 
 
 class Parametre:
-    """Un réglage : valeur par défaut, bornes du curseur, unité et phrase d'aide."""
+    """Un curseur : valeur par défaut, bornes, unité et phrase d'aide."""
 
     def __init__(self, valeur, mini, maxi, unite="", aide="", pas=None):
         self.valeur = valeur
@@ -26,13 +45,42 @@ class Parametre:
         self.pas = pas if pas is not None else (1 if entiers else (maxi - mini) / 100)
 
     def borner(self, v):
-        """Ramène v entre mini et maxi."""
-        return min(max(v, self.mini), self.maxi)
+        """Ramène v entre mini et maxi, avec le même type que la valeur par défaut."""
+        return min(max(type(self.valeur)(v), self.mini), self.maxi)
 
     def vers_dict(self):
         """Description envoyée à la page web pour construire le curseur."""
         return {"type": "curseur", "valeur": self.valeur, "mini": self.mini, "maxi": self.maxi,
                 "pas": self.pas, "unite": self.unite, "aide": self.aide}
+
+
+class Choix:
+    """Une liste déroulante : une valeur parmi 'options' (des textes)."""
+
+    def __init__(self, valeur, options, aide=""):
+        self.valeur = valeur
+        self.options = list(options)
+        self.aide = aide
+
+    def borner(self, v):
+        return v if v in self.options else self.valeur
+
+    def vers_dict(self):
+        return {"type": "choix", "valeur": self.valeur, "options": self.options, "aide": self.aide}
+
+
+class Case:
+    """Un réglage oui / non."""
+
+    def __init__(self, valeur, aide=""):
+        self.valeur = bool(valeur)
+        self.aide = aide
+
+    def borner(self, v):
+        return bool(v)
+
+    def vers_dict(self):
+        return {"type": "case", "valeur": self.valeur, "aide": self.aide}
 
 
 class Point:
@@ -43,23 +91,42 @@ class Point:
         self.aide = aide
 
     def borner(self, v):
-        """Ramène le point sur la palette (1200 × 800 mm)."""
-        return (min(max(float(v[0]), 0.0), 1200.0), min(max(float(v[1]), 0.0), 800.0))
+        return sur_la_palette(v)
 
     def vers_dict(self):
-        """Description envoyée à la page web pour créer la poignée."""
         return {"type": "point", "valeur": list(self.valeur), "aide": self.aide}
+
+
+class Points:
+    """Des points de la palette que l'on ajoute, supprime et déplace à la souris.
+    Entre 'mini' et 'maxi' points ; la valeur par défaut est la liste de départ."""
+
+    def __init__(self, valeur, mini=0, maxi=10, aide=""):
+        self.valeur = [(float(x), float(y)) for x, y in valeur]
+        self.mini = mini
+        self.maxi = maxi
+        self.aide = aide
+
+    def borner(self, v):
+        points = [sur_la_palette(p) for p in v][:self.maxi]
+        # s'il en manque, on complète avec ceux de départ
+        for p in self.valeur:
+            if len(points) >= self.mini:
+                break
+            points.append(p)
+        return points
+
+    def vers_dict(self):
+        return {"type": "points", "valeur": [list(p) for p in self.valeur],
+                "mini": self.mini, "maxi": self.maxi, "aide": self.aide}
+
+
+TYPES = (Parametre, Choix, Case, Point, Points)
 
 
 def valeurs(parametres, reglages=None):
     """Dictionnaire nom -> valeur : valeurs par défaut, remplacées par 'reglages' s'il y en a.
-    Les valeurs hors bornes sont ramenées entre mini et maxi ; les noms inconnus sont ignorés."""
+    Les valeurs impossibles sont ramenées dans les bornes ; les noms inconnus sont ignorés."""
     reglages = reglages or {}
-    sortie = {}
-    for nom, parametre in parametres.items():
-        v = reglages.get(nom, parametre.valeur)
-        if isinstance(parametre, Point):
-            sortie[nom] = parametre.borner(v)
-        else:
-            sortie[nom] = parametre.borner(type(parametre.valeur)(v))
-    return sortie
+    return {nom: parametre.borner(reglages.get(nom, parametre.valeur))
+            for nom, parametre in parametres.items()}

@@ -448,44 +448,125 @@ function selectionner(e) {
                                    -((e.clientY - cadre.top) / cadre.height) * 2 + 1);
   rayon.setFromCamera(souris, camera);
   // une poignée de point : seulement les flèches (un point ne se tourne pas)
-  const surPoint = rayon.intersectObjects(groupePoints.children, true)[0];
-  if (surPoint) {
-    let poignee = surPoint.object;
-    while (!poignee.userData.nomParametre) poignee = poignee.parent;
+  const poignee = poigneeSous(e);
+  if (poignee) {
     gizmoTourner.detach();
     gizmoDeplacer.attach(poignee);
+    pointSelectionne = { nom: poignee.userData.nomParametre, index: poignee.userData.index };
     return;
   }
+  pointSelectionne = null;
   const surPalette = rayon.intersectObjects(groupePalette.children, true).length > 0;
   for (const g of gizmos) {
     if (surPalette) g.attach(paletteMobile); else g.detach();
   }
 }
 
-// poignée d'un paramètre « Point » : une boule orange et son nom, posées sur la palette
-function creerPoignee(nom, [x, y]) {
+// Points des motifs (paramètres « Point » et « Points ») : des poignées orange sur la palette.
+// Clic : déplacer (flèches) ; double-clic sur la palette : ajouter ; double-clic sur un point
+// ou touche Suppr : supprimer.
+let pointSelectionne = null;   // { nom, index } de la poignée sélectionnée
+
+// rayon souris -> scène, pour un événement de la souris
+function viser(e) {
+  const cadre = rendu.domElement.getBoundingClientRect();
+  rayon.setFromCamera(new THREE.Vector2(((e.clientX - cadre.left) / cadre.width) * 2 - 1,
+                                        -((e.clientY - cadre.top) / cadre.height) * 2 + 1), camera);
+}
+
+// la poignée sous la souris, s'il y en a une
+function poigneeSous(e) {
+  viser(e);
+  const touche = rayon.intersectObjects(groupePoints.children, true)[0];
+  if (!touche) return null;
+  let poignee = touche.object;
+  while (!poignee.userData.nomParametre) poignee = poignee.parent;
+  return poignee;
+}
+
+function creerPoignee(nom, index, [x, y]) {
   const poignee = new THREE.Group();
   poignee.position.set(x, y, 0);
-  poignee.userData.nomParametre = nom;
+  poignee.userData = { nomParametre: nom, index };
   const boule = new THREE.Mesh(new THREE.SphereGeometry(18, 24, 16),
                                new THREE.MeshStandardMaterial({ color: "#f97316", roughness: 0.4 }));
   boule.position.z = 18;
-  const nomAffiche = etiquette(nom.replaceAll("_", " "), "#c2410c", 40);
+  const texte = nom.replaceAll("_", " ") + (index === null ? "" : " " + (index + 1));
+  const nomAffiche = etiquette(texte, "#c2410c", 40);
   nomAffiche.position.z = 70;
   poignee.add(boule, nomAffiche);
   return poignee;
 }
 
-// fin du déplacement d'une poignée : nouvelle valeur du point, sur la palette, puis recalcul
+// (re)dessine toutes les poignées à partir des réglages ; garde la sélection
+function dessinerPoints() {
+  vider(groupePoints);
+  if (gizmoDeplacer.object?.userData.nomParametre) gizmoDeplacer.detach();
+  for (const [nom, p] of Object.entries(motifCourant?.parametres || {})) {
+    if (p.type === "point") groupePoints.add(creerPoignee(nom, null, reglages.motif[nom]));
+    if (p.type === "points") reglages.motif[nom].forEach((xy, i) => groupePoints.add(creerPoignee(nom, i, xy)));
+    majTextePoints(nom);
+  }
+  const choisie = pointSelectionne && groupePoints.children.find((g) =>
+    g.userData.nomParametre === pointSelectionne.nom && g.userData.index === pointSelectionne.index);
+  if (choisie) { gizmoTourner.detach(); gizmoDeplacer.attach(choisie); }
+}
+
+function majTextePoints(nom) {
+  const sortie = document.querySelector(`[data-point="${nom}"] output`);
+  const v = reglages.motif[nom];
+  if (!sortie) return;
+  sortie.textContent = motifCourant.parametres[nom].type === "point"
+    ? `${Math.round(v[0])}, ${Math.round(v[1])} mm` : `${v.length} point${v.length > 1 ? "s" : ""}`;
+}
+
+// fin du déplacement d'une poignée : nouvelle position (sur la palette), puis recalcul
 function deplacerPoint(poignee) {
   const [lx, ly] = palette;
   const x = Math.round(Math.min(Math.max(poignee.position.x, 0), lx));
   const y = Math.round(Math.min(Math.max(poignee.position.y, 0), ly));
   poignee.position.set(x, y, 0);
-  const nom = poignee.userData.nomParametre;
-  reglages.motif[nom] = [x, y];
-  const texte = document.querySelector(`[data-point="${nom}"] output`);
-  if (texte) texte.textContent = `${x}, ${y} mm`;
+  const { nomParametre: nom, index } = poignee.userData;
+  if (index === null) reglages.motif[nom] = [x, y];
+  else reglages.motif[nom][index] = [x, y];
+  majTextePoints(nom);
+  calculer();
+}
+
+// double-clic : sur un point de liste -> le supprimer ; sur la palette -> ajouter un point
+function doubleClic(e) {
+  const poignee = poigneeSous(e);
+  if (poignee) { supprimerPoint(poignee); return; }
+  const nom = Object.keys(motifCourant?.parametres || {}).find((n) => motifCourant.parametres[n].type === "points");
+  if (!nom) return;
+  viser(e);
+  const touche = rayon.intersectObjects(groupePalette.children, true)[0];
+  if (!touche) return;
+  const p = motifCourant.parametres[nom];
+  if (reglages.motif[nom].length >= p.maxi) {
+    etat.textContent = `Pas plus de ${p.maxi} points pour ce motif.`;
+    setTimeout(() => (etat.textContent = ""), 2500);
+    return;
+  }
+  const local = contenuPalette.worldToLocal(touche.point.clone());
+  reglages.motif[nom].push([Math.round(local.x), Math.round(local.y)]);
+  pointSelectionne = { nom, index: reglages.motif[nom].length - 1 };
+  dessinerPoints();
+  calculer();
+}
+
+function supprimerPoint(poignee) {
+  const { nomParametre: nom, index } = poignee.userData;
+  const p = motifCourant.parametres[nom];
+  if (index === null) return;                          // un « Point » seul ne se supprime pas
+  if (reglages.motif[nom].length <= p.mini) {
+    etat.textContent = `Il faut garder au moins ${p.mini} point${p.mini > 1 ? "s" : ""}.`;
+    setTimeout(() => (etat.textContent = ""), 2500);
+    return;
+  }
+  reglages.motif[nom].splice(index, 1);
+  pointSelectionne = null;
+  dessinerPoints();
   calculer();
 }
 
@@ -522,18 +603,45 @@ function curseur(conteneur, nom, p, cible) {
   conteneur.appendChild(bloc);
 }
 
-// paramètre « Point » : une ligne dans le panneau, une poignée sur la palette
+// paramètres « Point » et « Points » : une ligne dans le panneau, des poignées sur la palette
 function point(conteneur, nom, p) {
-  reglages.motif[nom] = [...p.valeur];
+  reglages.motif[nom] = p.type === "point" ? [...p.valeur] : p.valeur.map((xy) => [...xy]);
   const bloc = document.createElement("div");
   bloc.className = "reglage";
   bloc.dataset.point = nom;
+  const geste = p.type === "point"
+    ? "Clique sur la boule orange pour la déplacer."
+    : `Double-clic sur la palette : ajouter un point (${p.maxi} au plus). Clic sur un point : le déplacer. ` +
+      `Double-clic sur un point : le supprimer.`;
   bloc.innerHTML = `
-    <div class="ligne"><span><span class="pastille-point"></span>${nom.replaceAll("_", " ")}</span>
-      <output>${p.valeur[0]}, ${p.valeur[1]} mm</output></div>
-    <p class="aide">${p.aide} Clique sur la boule orange pour la déplacer.</p>`;
+    <div class="ligne"><span><span class="pastille-point"></span>${nom.replaceAll("_", " ")}</span><output></output></div>
+    <p class="aide">${p.aide} ${geste}</p>`;
   conteneur.appendChild(bloc);
-  groupePoints.add(creerPoignee(nom, p.valeur));
+}
+
+// paramètre « Choix » : une liste déroulante
+function choix(conteneur, nom, p) {
+  reglages.motif[nom] = p.valeur;
+  const bloc = document.createElement("div");
+  bloc.className = "reglage";
+  bloc.innerHTML = `
+    <div class="ligne"><span>${nom.replaceAll("_", " ")}</span></div>
+    <select>${p.options.map((o) => `<option${o === p.valeur ? " selected" : ""}>${o}</option>`).join("")}</select>
+    <p class="aide">${p.aide}</p>`;
+  bloc.querySelector("select").addEventListener("change", (e) => { reglages.motif[nom] = e.target.value; calculer(); });
+  conteneur.appendChild(bloc);
+}
+
+// paramètre « Case » : oui / non
+function caseACocher(conteneur, nom, p) {
+  reglages.motif[nom] = p.valeur;
+  const bloc = document.createElement("div");
+  bloc.className = "reglage";
+  bloc.innerHTML = `
+    <label class="case"><input type="checkbox"${p.valeur ? " checked" : ""}> ${nom.replaceAll("_", " ")}</label>
+    <p class="aide">${p.aide}</p>`;
+  bloc.querySelector("input").addEventListener("change", (e) => { reglages.motif[nom] = e.target.checked; calculer(); });
+  conteneur.appendChild(bloc);
 }
 
 // petit convertisseur Markdown -> HTML (titres, listes, gras, code)
@@ -559,18 +667,23 @@ function markdown(texte) {
   return html;
 }
 
+let motifCourant = null;
+
 function choisirMotif(id) {
   const motif = motifs.find((m) => m.id === id);
+  motifCourant = motif;
+  pointSelectionne = null;
   const conteneur = $("reglages-motif");
   conteneur.innerHTML = "";
   reglages.motif = {};
   if (motif.erreur) conteneur.innerHTML = `<p class="erreur">${motif.erreur}</p>`;
-  vider(groupePoints);
-  for (const g of gizmos) if (g.object?.userData.nomParametre) g.detach();
   for (const [nom, p] of Object.entries(motif.parametres)) {
-    if (p.type === "point") point(conteneur, nom, p);
+    if (p.type === "point" || p.type === "points") point(conteneur, nom, p);
+    else if (p.type === "choix") choix(conteneur, nom, p);
+    else if (p.type === "case") caseACocher(conteneur, nom, p);
     else curseur(conteneur, nom, p, reglages.motif);
   }
+  dessinerPoints();
   $("aide-motif").hidden = !motif.aide;
   $("aide-motif").querySelector("div").innerHTML = markdown(motif.aide);
 }
@@ -688,6 +801,13 @@ async function demarrer() {
   window.addEventListener("pointerup", () => setTimeout(() => { for (const g of gizmos) g.enabled = true; }, 0));
   rendu.domElement.addEventListener("pointerdown", (e) => (appui = [e.clientX, e.clientY]));
   rendu.domElement.addEventListener("pointerup", selectionner);
+  rendu.domElement.addEventListener("dblclick", doubleClic);
+  window.addEventListener("keydown", (e) => {
+    if ((e.key === "Delete" || e.key === "Backspace") && !e.target.closest?.("input, select, textarea")) {
+      const poignee = gizmoDeplacer.object;
+      if (poignee?.userData.nomParametre) supprimerPoint(poignee);
+    }
+  });
   $("export-dxf").onclick = () => telecharger("dxf");
   $("export-svg").onclick = () => telecharger("svg");
   $("export-script").onclick = () => telecharger("script");
