@@ -25,7 +25,11 @@
 
 **Réglages de la définition :**
 - **Séries** : 3 séries de lignes parallèles (Contour sur une surface plane), espacées de 50 mm,
-  avec des directions à 45°, 119° et 250°, dans l'ordre A, B, C via Entwine.
+  avec des directions à 45°, 119° et 250°, via Entwine.
+  Vérifié sur `chemin_script_xyz.csv` : ces angles sont les **normales** des lignes (lignes à
+  135°, 29° et 160°), les lignes passent à 50 mm × k de l'origine du repère robot, et l'ordre
+  d'impression réel est **A = 250°, B = 119°, C = 45°** (A à plat, 127 bosses sur B,
+  175 sur C dont 47 doubles).
 - **Script** :
   - `weights = 1,1,2,3`, `active = 1,2,3` (B et C ondulent, A reste à plat) ;
   - `mode` = défaut `"own"`, qui équivaut à l'empilement en mode série ;
