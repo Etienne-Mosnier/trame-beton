@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trame béton</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <aside id="panneau">
+    <h1>Trame béton</h1>
+
+    <section>
+      <h2>Motif</h2>
+      <select id="choix-motif"></select>
+      <div id="reglages-motif"></div>
+      <details id="aide-motif"><summary>Aide du motif</summary><div></div></details>
+    </section>
+
+    <section>
+      <h2>Contour</h2>
+      <select id="choix-contour"></select>
+      <label class="bouton-fichier">Importer un SVG ou un DXF…
+        <input id="fichier-contour" type="file" accept=".svg,.dxf">
+      </label>
+      <p id="message-contour" class="petit"></p>
+    </section>
+
+    <section>
+      <h2>Béton</h2>
+      <div id="reglages-moteur"></div>
+    </section>
+
+    <section>
+      <h2>Vue</h2>
+      <div class="boutons">
+        <button id="vue-dessus" type="button">Dessus</button>
+        <button id="vue-3d" type="button">3D</button>
+      </div>
+      <div class="reglage">
+        <div class="ligne"><span>Bosses exagérées</span><output id="valeur-exageration">× 1</output></div>
+        <input id="exageration" type="range" min="1" max="10" step="1" value="1">
+      </div>
+    </section>
+
+    <section>
+      <h2>Robot</h2>
+      <label class="case"><input id="montrer-robot" type="checkbox"> Montrer le robot qui imprime</label>
+      <div id="commandes-robot" hidden>
+        <div class="boutons">
+          <button id="lecture" type="button">▶ Lecture</button>
+          <select id="vitesse-lecture">
+            <option value="1">× 1</option>
+            <option value="10">× 10</option>
+            <option value="30" selected>× 30</option>
+            <option value="100">× 100</option>
+          </select>
+        </div>
+        <div class="reglage">
+          <div class="ligne"><span>Temps</span><output id="valeur-temps">0:00</output></div>
+          <input id="temps" type="range" min="0" max="1" step="0.1" value="0">
+        </div>
+        <p id="message-robot" class="petit"></p>
+        <div id="alertes-robot"></div>
+      </div>
+      <details id="placement">
+        <summary>Placer la palette (enseignant)</summary>
+        <p class="petit">Position du coin (0, 0) de la palette dans le repère du robot, et
+          direction du grand côté. La zone verte est atteignable avec la buse verticale.</p>
+        <div class="grille">
+          <label>X (mm) <input id="placement-x" type="number" step="10" value="-197"></label>
+          <label>Y (mm) <input id="placement-y" type="number" step="10" value="-437"></label>
+          <label>Hauteur (mm) <input id="placement-z" type="number" step="1" value="8.7"></label>
+          <label>Rotation (°) <input id="placement-rotation" type="number" step="5" value="90"></label>
+        </div>
+        <div class="boutons">
+          <button id="placement-appliquer" type="button">Appliquer</button>
+          <button id="placement-annuler" type="button">Simulation</button>
+        </div>
+        <p id="resultat-placement" class="petit"></p>
+        <pre id="calibration-placement" class="petit"></pre>
+      </details>
+    </section>
+
+    <section>
+      <h2>Exports</h2>
+      <div class="boutons">
+        <button id="export-dxf" type="button">DXF (3D)</button>
+        <button id="export-svg" type="button">SVG (dessus)</button>
+      </div>
+      <div class="boutons">
+        <button id="export-script" type="button">Programme du robot (URScript)</button>
+      </div>
+      <p class="petit">DXF et SVG pour les ingénieurs : une série par calque, les liaisons, le
+        chemin complet et les repères de la palette. Hauteurs réelles, en mm.<br>
+        Programme du robot : à valider dans URSim avant tout passage sur le robot.</p>
+    </section>
+
+    <section>
+      <h2>Bilan</h2>
+      <label class="case"><input id="montrer-alertes" type="checkbox" checked> Montrer les problèmes en rouge</label>
+      <div id="bilan"></div>
+      <details><summary>Détail du calcul</summary><pre id="info"></pre></details>
+    </section>
+  </aside>
+
+  <main id="scene">
+    <div id="legende"></div>
+    <div id="etat">Démarrage de Python dans le navigateur…</div>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
