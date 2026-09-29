@@ -82,6 +82,34 @@ def lignes_trop_proches(series, ecart_min):
                     segments=segments)
 
 
+def lignes_qui_se_recoupent(series, forme=None):
+    """Une courbe d'une série qui se croise elle-même (dans la forme) : le cordon repasse au
+    même endroit. À appliquer aux courbes entières, avant découpage."""
+    from collections import Counter
+
+    from shapely.ops import unary_union
+
+    titre = "Aucune ligne ne se recoupe"
+    points = []
+    for serie in series:
+        for courbe in serie:
+            if courbe.is_simple:
+                continue
+            # les nœuds où plus de deux morceaux se rejoignent sont les croisements
+            decoupe = unary_union(courbe)
+            bouts = Counter()
+            for g in getattr(decoupe, "geoms", [decoupe]):
+                bouts[g.coords[0]] += 1
+                bouts[g.coords[-1]] += 1
+            points += [p for p, n in bouts.items()
+                       if n > 2 and (forme is None or forme.contains(Point(p)))]
+    if not points:
+        return controle(titre, "ok", "Aucune ligne ne se croise elle-même.")
+    return controle(titre, "alerte",
+                    "%d endroit(s) où une ligne se replie et se croise elle-même : le cordon passerait "
+                    "deux fois au même endroit, à plat." % len(points), points=points)
+
+
 def croisements_rasants(series, angle_min=ANGLE_MIN):
     """Croisements entre deux séries avec un angle plus petit que angle_min."""
     titre = "Croisements assez ouverts"
@@ -142,6 +170,18 @@ def virages_serres(courbes, rayon_min, nom, anneau=False):
 
 
 # --- contrôles sur le chemin --------------------------------------------------------
+
+
+def une_seule_ligne(resultat):
+    """Toutes les courbes sont reliées en zigzag (le long du bord) ou en spirale."""
+    titre = "Une seule ligne : zigzag ou spirale"
+    n = resultat.get("raccords_droits", 0)
+    if not n:
+        return controle(titre, "ok", "Les courbes s'enchaînent en zigzag le long du bord ou en spirale.")
+    return controle(titre, "alerte",
+                    "%d courbe(s) ne touchent pas le bord et ne forment pas une spirale : elles sont "
+                    "raccordées en ligne droite à travers la forme. Fais traverser les courbes ouvertes "
+                    "d'un bord à l'autre, ou emboîte les courbes fermées les unes dans les autres." % n)
 
 
 def sauts(resultat):
@@ -219,9 +259,11 @@ def controler(resultat, contour, series, reglages):
     rayon_min = reglages["rayon_courbure_min"]
     return [
         sauts(resultat),
+        une_seule_ligne(resultat),
         hors_forme(resultat),
         sur_la_palette(resultat, reglages["palette"], reglages["marge"]),
         lignes_trop_proches(lignes, 2 * reglages["largeur_cordon"]),
+        lignes_qui_se_recoupent(series, contour),
         croisements_rasants(lignes),
         virages_serres(toutes, rayon_min, "motif"),
         virages_serres([contour.exterior], rayon_min, "contour", anneau=True),
