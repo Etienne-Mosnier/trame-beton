@@ -15,8 +15,8 @@ def test_liste_motifs():
     assert exemple["parametres"]["espacement"]["valeur"] == 50
     assert "série" in exemple["aide"]
     assert motifs[-1]["id"] == "exemple"       # les motifs des groupes d'abord
-    depart = next(m for m in motifs if m["id"] == "groupe_1/depart")
-    assert depart["groupe"] == "groupe_1" and depart["nom"].startswith("Départ")
+    groupe = next(m for m in motifs if m["id"] == "groupe_1/point_d_attraction")
+    assert groupe["groupe"] == "groupe_1"
 
 
 def test_reglages_moteur_en_francais():

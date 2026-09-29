@@ -839,7 +839,7 @@ async function demarrer() {
     // un groupe d'options par groupe d'étudiants, l'exemple à part
     const groupes = [...new Set(motifs.map((m) => m.groupe))];
     $("choix-motif").innerHTML = groupes.map((g) => {
-      const titre = g ? g.replace("groupe_", "Groupe ") : "Modèle";
+      const titre = g ? g.replace("groupe_", "Groupe ") : "Exemple (référence)";
       const options = motifs.filter((m) => m.groupe === g).map((m) => `<option value="${m.id}">${m.nom}</option>`);
       return `<optgroup label="${titre}">${options.join("")}</optgroup>`;
     }).join("");

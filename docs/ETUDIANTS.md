@@ -9,19 +9,23 @@ Ouvre **https://etienne-mosnier.github.io/trame-beton/** (le premier chargement 
 quelques secondes). Dans la liste des motifs, ceux de ton groupe sont rangés ensemble.
 Bouge les curseurs, tourne la vue 3D, clique sur « Lecture » pour voir le robot imprimer.
 
-Chaque groupe peut avoir **plusieurs motifs** (plusieurs pistes à comparer). Au départ, il y en
-a un seul, « Départ », copie de l'exemple.
+Chaque groupe peut avoir **plusieurs motifs** (plusieurs pistes à comparer). Le motif
+« Exemple » (lignes droites qui se croisent) montre juste ce qu'est un motif : **ton générateur
+peut être complètement différent** (spirale, cellules, courbes attirées par des points…).
 
 ## 2. Décrire une idée
 
 1. Sur la page GitHub du projet, onglet **Issues** → **New issue** → **Idée de motif**.
-2. Choisis ton groupe, puis :
-   - **modifier un motif existant** : donne son nom (ex. `depart`) ;
-   - **créer un nouveau motif** : donne-lui un nom court en minuscules, sans accents
-     (ex. `vagues`), et dis de quel motif partir (ex. « vagues, à partir de depart »).
-3. Décris ce que tu veux **voir**, avec tes mots
-   (ex. « les lignes de B deviennent des vagues, plus serrées au centre »).
-   Ajoute un croquis si tu peux. **Une idée par issue.**
+2. Choisis ton groupe, puis ce que tu veux faire :
+   - **créer un nouveau générateur** (page blanche) : donne-lui un nom court, en minuscules,
+     sans accents (ex. `spirale`) ;
+   - **créer une variante** d'un de tes motifs : nom + « à partir de … »
+     (ex. « spirale_dense, à partir de spirale ») ;
+   - **modifier un motif existant** : son nom (ex. `point_d_attraction`).
+3. Décris ce que tu veux **voir**, avec tes mots, et comment les couches se superposent
+   (ex. « une spirale depuis le centre de la forme, croisée par des rayons qui partent du
+   même centre »). Chaque **série** est imprimée l'une après l'autre (2 à 5) et passe
+   par-dessus les précédentes. Ajoute un croquis si tu peux. **Une idée par issue.**
 4. Crée l'issue, puis à droite : **Assignees** → **Copilot**.
 
 ## 3. Attendre la pull request

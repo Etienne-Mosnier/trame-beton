@@ -35,7 +35,7 @@ contour (SVG/DXF, mis à l'échelle de la palette)
 | Dossier | Qui | Règle |
 |---|---|---|
 | `motifs/<groupe>/<motif>/` | étudiants + agent | **seule zone de travail des étudiants** |
-| `motifs/exemple/` | enseignant | modèle à copier, ne pas modifier |
+| `motifs/exemple/` | enseignant | exemple de référence (la forme d'un motif, pas une base), ne pas modifier |
 | `trame/moteur/`, `trame/robot/`, `trame/contour.py`, `trame/export/` | enseignant | **ne jamais modifier** dans une issue d'étudiant |
 | `web/` | enseignant | ne pas modifier, sauf demande explicite de l'enseignant |
 | `config/cellule.toml` | enseignant | **ne jamais modifier** (réglages physiques du robot) |
@@ -47,10 +47,13 @@ simple, et mentionne l'enseignant.
 
 ## Écrire un motif
 
-Un motif = un dossier. Chaque groupe peut en avoir plusieurs : `motifs/groupe_1/depart/`,
+Un motif = un dossier. Chaque groupe peut en avoir plusieurs : `motifs/groupe_1/spirale/`,
 `motifs/groupe_1/vagues/`… Nom de dossier court, en minuscules, sans accents ni espaces
-(lettres, chiffres, `_`). Pour un nouveau motif, copie le dossier de départ indiqué dans l'issue
-(sinon `motifs/<groupe>/depart/`, sinon `motifs/exemple/`) et garde exactement la même forme :
+(lettres, chiffres, `_`).
+
+`motifs/exemple/` (trois séries de lignes droites qui se croisent) montre **la forme** d'un fichier
+de motif. **Ce n'est pas une base** : un nouveau générateur ne reprend pas ses lignes droites,
+il construit la géométrie que l'étudiant décrit. Seule la forme du fichier est imposée :
 
 ```python
 NOM = "Nom lisible du motif"
@@ -99,8 +102,14 @@ Règles :
 1. Le groupe et le motif sont indiqués dans l'issue : modifie **uniquement** le dossier
    `motifs/<groupe>/<motif>/` (le créer si c'est un nouveau motif). Ne touche jamais aux autres
    motifs, même du même groupe.
-2. Motif existant : pars de sa version **actuelle** et garde ce qui marche déjà. Nouveau motif :
-   copie le motif de départ indiqué dans l'issue.
+2. Selon « Que veux-tu faire ? » :
+   - **Nouveau générateur (page blanche)** : écris `motif.py` à partir de zéro, avec la forme
+     ci-dessus. Invente la géométrie décrite (spirale, cellules, rayons, courbes attirées,
+     tracés récursifs…) avec `math`, `shapely`, `trame/outils.py` ou tes propres fonctions.
+     Ne copie pas les lignes de l'exemple. Décide avec l'étudiant ce que sont les séries
+     (l'ordre d'impression, 2 à 5) : c'est ce qui crée les croisements et les bosses.
+   - **Variante** : copie le motif indiqué comme départ, puis modifie la copie.
+   - **Modifier** : pars de la version **actuelle** du motif et garde ce qui marche déjà.
 3. Tout ce que l'étudiant veut pouvoir régler devient un `Parametre` avec une `aide`.
 4. Mets à jour `aide.md` : ce que l'on voit, ce que fait chaque réglage, ce qu'il faut éviter.
 5. Lance `pytest` et `python -m trame.bilan <groupe>/<motif>` ; colle le bilan dans la pull request.

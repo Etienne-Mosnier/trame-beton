@@ -17,12 +17,13 @@ body:
     validations:
       required: true
   - type: dropdown
-    id: nouveau
+    id: action
     attributes:
-      label: Nouveau motif ou motif existant ?
+      label: Que veux-tu faire ?
       options:
-        - Je modifie un motif existant de mon groupe
-        - Je crée un nouveau motif
+        - Créer un nouveau générateur de motif (page blanche)
+        - Créer une variante d'un motif existant de mon groupe
+        - Modifier un motif existant de mon groupe
     validations:
       required: true
   - type: input
@@ -30,18 +31,21 @@ body:
     attributes:
       label: Nom du motif
       description: |
-        Motif existant : son nom de dossier (ex. depart). Nouveau motif : un nom court,
-        en minuscules, sans accents ni espaces (ex. vagues, spirale_dense), et dis de quel
-        motif partir (ex. « vagues, à partir de depart »).
-      placeholder: "vagues, à partir de depart"
+        Un nom court, en minuscules, sans accents ni espaces (ex. spirale, reseau_cellules).
+        Pour une variante, ajoute de quel motif partir (ex. « spirale_dense, à partir de spirale »).
+        Pour modifier, le nom du motif tel qu'il est (ex. point_d_attraction).
+      placeholder: "spirale"
     validations:
       required: true
   - type: textarea
     id: idee
     attributes:
       label: Ce que tu veux voir
-      description: Décris le résultat visuel. Formes, rythmes, densité, où ça change…
-      placeholder: "Ex. : je veux que les lignes de la série B deviennent des vagues, plus serrées au centre de la forme."
+      description: |
+        Décris le résultat visuel : formes, rythmes, densité, où ça change…
+        Pour un nouveau générateur, dis aussi comment les couches se superposent :
+        chaque « série » est imprimée l'une après l'autre (2 à 5), la suivante passe par-dessus.
+      placeholder: "Ex. : une spirale qui part du centre de la forme (série A), croisée par des rayons qui partent du même centre (série B)."
     validations:
       required: true
   - type: textarea
