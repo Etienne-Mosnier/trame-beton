@@ -32,7 +32,8 @@ import math
 import random
 
 from shapely.geometry import LineString, Point, Polygon
-from shapely.ops import split
+import shapely
+from shapely.ops import substring
 
 from trame.moteur import croisements
 from trame.moteur.croisements import en3d, supprimer_courts
@@ -139,10 +140,24 @@ def decouper(ctx, points):
     """Garde seulement les morceaux de la courbe à l'intérieur du contour (clip)."""
     if ctx["bord"] is None:
         return [points]
-    ligne = LineString([p[:2] for p in points])
+    coords = [p[:2] for p in points]
+    ligne = LineString(coords)
     tol = ctx["reg"]["tol"]
     sortie = []
-    for morceau in split(ligne, ctx["bord"]).geoms:
+    # longueurs où la courbe croise le bord (comme Curve.Split de Rhino : on ne coupe
+    # qu'au bord, jamais là où la courbe se recoupe elle-même)
+    coupes = [0.0, ligne.length]
+    segments = shapely.linestrings([[a, b] for a, b in zip(coords, coords[1:])])
+    cumul = 0.0
+    for seg, x in zip(segments, shapely.intersection(segments, ctx["bord"])):
+        if not x.is_empty:
+            for g in getattr(x, "geoms", [x]):
+                for c in g.coords:          # un point, ou les bouts d'un bout de segment sur le bord
+                    coupes.append(cumul + seg.project(Point(c)))
+        cumul += seg.length
+    coupes = sorted(set(coupes))
+    morceaux = [substring(ligne, d0, d1) for d0, d1 in zip(coupes, coupes[1:]) if d1 - d0 > tol]
+    for morceau in morceaux:
         if morceau.length <= tol:
             continue
         milieu = morceau.interpolate(0.5, normalized=True)
@@ -200,6 +215,78 @@ def prolonger_jusqu_au_couloir(ctx, points, dist):
         if LineString([p[:2] for p in morceau]).distance(milieu) < 10 * tol:
             return [morceau]
     return [points]
+
+
+# --- spiralisation (ajout, absent du script d'origine) ------------------------------
+#
+# Des courbes FERMÉES emboîtées (cercles concentriques, contours décalés) ne se relient pas en
+# zigzag : on en fait une seule spirale, qui passe progressivement d'un tour au suivant.
+# Les courbes ouvertes, elles, restent reliées en zigzag le long du bord (chrono_chain).
+
+
+def est_anneau(points, tol):
+    return len(points) > 3 and math.dist(points[0], points[-1]) < max(tol, 0.1)
+
+
+def reechantillonner(anneau, centre, n):
+    """Anneau -> n points régulièrement espacés, dans le sens trigonométrique, en partant du
+    point où la demi-droite partant du centre vers +x coupe l'anneau."""
+    forme = Polygon([p[:2] for p in anneau])
+    if not forme.exterior.is_ccw:
+        forme = Polygon(list(forme.exterior.coords)[::-1])
+    bord = forme.exterior
+    rayon = LineString([centre, (centre[0] + 1e6, centre[1])])
+    coupe = bord.intersection(rayon)
+    points = [coupe] if coupe.geom_type == "Point" else list(getattr(coupe, "geoms", []))
+    depart = bord.project(min(points, key=lambda q: q.distance(Point(centre)))) if points else 0.0
+    L = bord.length
+    sortie = []
+    for k in range(n):
+        q = bord.interpolate((depart + L * k / n) % L)
+        sortie.append((q.x, q.y, 0.0))
+    return sortie
+
+
+def spiraliser(courbes, tol, pas=2.0):
+    """Remplace les courbes fermées emboîtées d'une série par une seule spirale ouverte,
+    de l'intérieur vers l'extérieur. Si elles ne sont pas emboîtées (ou si la spirale se
+    recouperait), les courbes sont laissées telles quelles."""
+    anneaux = [c for c in courbes if est_anneau(c, tol)]
+    ouvertes = [c for c in courbes if not est_anneau(c, tol)]
+    if len(anneaux) < 2:
+        return courbes
+    formes = [Polygon([p[:2] for p in a]) for a in anneaux]
+    ordre = sorted(range(len(anneaux)), key=lambda k: formes[k].area)
+    # emboîtés : chaque anneau contient le précédent
+    for a, b in zip(ordre, ordre[1:]):
+        if not formes[b].buffer(tol).contains(formes[a]):
+            return courbes
+    c = formes[ordre[0]].centroid
+    centre = (c.x, c.y)
+    n = max(64, math.ceil(max(f.exterior.length for f in formes) / pas))
+    tours = [reechantillonner(anneaux[k], centre, n) for k in ordre]
+    spirale = []
+    for A, B in zip(tours, tours[1:]):
+        # un tour : on glisse de l'anneau A vers l'anneau B
+        for j in range(n):
+            u = j / n
+            spirale.append(tuple(A[j][m] + (B[j][m] - A[j][m]) * u for m in range(3)))
+    spirale.extend(tours[-1])        # dernier tour, laissé ouvert (sinon il toucherait l'arrivée)
+    if not LineString([p[:2] for p in spirale]).is_simple:
+        return courbes
+    SPIRALES.append((spirale[0][:2], spirale[-1][:2]))
+    return ouvertes + [spirale]
+
+
+# bouts des spirales construites : une spirale ne touche pas le bord, ce n'est pas un défaut
+SPIRALES = []
+
+
+def est_spirale(points):
+    """La courbe est une spirale construite ici (bouts à 3 mm près : le moteur la prolonge un peu)."""
+    a, b = points[0][:2], points[-1][:2]
+    return any((math.dist(a, d) < 3 and math.dist(b, f) < 3) or (math.dist(a, f) < 3 and math.dist(b, d) < 3)
+               for d, f in SPIRALES)
 
 
 # --- liaisons -----------------------------------------------------------------------
@@ -771,6 +858,7 @@ def enchainer_chrono(ctx, polys, paths):
         accrocher(ctx, paths, p, float("inf"))
     if inner:
         log.append("chrono : %d courbe(s) interieure(s) ajoutee(s) a la fin" % len(inner))
+        ctx["interieures"] = ctx.get("interieures", 0) + sum(1 for p in inner if not est_spirale(p))
     return paths
 
 
@@ -887,8 +975,10 @@ def calculer_chemin(series, contour=None, **reglages):
     else:
         bnd_msg = "boundary : non branche"
 
-    # séries découpées par le contour
+    # séries découpées par le contour ; courbes fermées emboîtées -> une spirale
+    SPIRALES.clear()
     S = [[p for c in serie for p in decouper(ctx, [en3d(q) for q in c])] for serie in series]
+    S = [spiraliser(serie, tol) for serie in S]
 
     log.extend(["amp = %s, d = %s, tol = %s, fuse = %s, mode = %s"
                 % (amp, reg["d"], tol, reg["fuse"], reg["mode"]),
@@ -1023,5 +1113,7 @@ def calculer_chemin(series, contour=None, **reglages):
         "hors_forme": bad_out,
         "controle": {"superpositions": n_over, "sur_le_bord": n_over_b,
                      "hors_forme": n_out, "sauts": len(jumps)},
+        # courbes ni en zigzag (bouts sur le bord) ni en spirale : raccordées en ligne droite
+        "raccords_droits": ctx.get("interieures", 0),
         "info": "\n".join(log),
     }

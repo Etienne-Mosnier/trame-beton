@@ -112,3 +112,34 @@ def test_zigzag_false_pas_de_chemin():
     r = calculer_chemin([lignes(RECT, 0, 40)], RECT, zigzag=False)
     assert r["path"] is None
     assert len(r["waves"][0]) == 5
+
+
+def test_cercles_emboites_en_une_spirale():
+    from trame import outils
+    forme = box(0, 0, 800, 800)
+    cercles = [list(outils.cercle((400, 400), r).coords) for r in range(50, 400, 50)]
+    r = calculer_chemin([cercles, lignes(forme, 0, 80)], forme, active=[1])
+    spirale = r["waves"][0][0]
+    assert LineString([p[:2] for p in spirale]).is_simple          # une spirale qui ne se recoupe pas
+    assert r["raccords_droits"] == 0 and r["controle"]["sauts"] == 0
+    # le rayon grandit régulièrement du centre vers l'extérieur
+    rayons = [math.dist(p[:2], (400, 400)) for p in spirale]
+    assert rayons[0] == pytest.approx(50, abs=1) and rayons[-1] == pytest.approx(350, abs=1)
+
+
+def test_contours_decales_en_spirale():
+    from trame import outils
+    forme = charger_contour((DOSSIER / "haricot.dxf").read_text(), "haricot.dxf")["contour"]
+    niveaux = [list(c.coords) for c in outils.contours_decales(forme, 40)]
+    assert len(niveaux) > 5
+    r = calculer_chemin([niveaux, lignes(forme, 30, 60)], forme, active=[1])
+    assert len(r["waves"][0]) == 1 and r["raccords_droits"] == 0
+
+
+def test_cercles_non_emboites_signales():
+    # deux cercles côte à côte : pas de spirale, raccord droit signalé
+    S = [[[(x + 60 * math.cos(a / 20), 400 + 60 * math.sin(a / 20)) for a in range(0, 126)] + [(x + 60, 400)]
+          for x in (250, 550)], lignes(RECT_GRAND := box(0, 0, 800, 800), 0, 100)]
+    r = calculer_chemin(S, RECT_GRAND, active=[1])
+    assert r["raccords_droits"] >= 1
+    assert r["controle"]["sauts"] == 0

@@ -116,6 +116,21 @@ Règles :
 6. L'aperçu de la pull request est publié automatiquement : un lien apparaît en commentaire.
    Rappelle à l'étudiant de l'ouvrir pour juger le résultat.
 
+## Une seule ligne continue (règle du projet)
+
+Quoi qu'il arrive, la buse imprime **une seule polyligne continue**. Le moteur enchaîne les
+courbes de chaque série selon leur nature :
+- **courbes ouvertes qui traversent la forme** (lignes, vagues, rayons…) : reliées en
+  **zigzag**, une fois d'un côté, une fois de l'autre, le long du bord ;
+- **courbes fermées emboîtées** (cercles concentriques, `outils.contours_decales`…) : fondues
+  en **une spirale**, du centre vers l'extérieur.
+
+Donc, dans une série : fais traverser les courbes ouvertes d'un bord à l'autre (elles peuvent
+dépasser, le moteur les coupe), ou emboîte les courbes fermées les unes dans les autres. Une
+courbe ouverte qui s'arrête au milieu de la forme, ou des courbes fermées côte à côte, sont
+raccordées en ligne droite : le contrôle « Une seule ligne : zigzag ou spirale » le signale.
+Le test de chaque motif exige un chemin sans aucun saut.
+
 ## Contraintes du béton (à respecter dans les motifs)
 
 Les valeurs exactes sont dans `config/cellule.toml` et seront ajustées pendant les essais.

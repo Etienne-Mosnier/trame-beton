@@ -98,6 +98,26 @@ def cercles_concentriques(contour, espacement, autour=None):
     return [cercle(c, espacement * k) for k in range(1, math.ceil(R / espacement) + 1)]
 
 
+def contours_decales(contour, espacement, marge=None):
+    """Contours emboîtés qui suivent la forme, vers l'intérieur, tous les 'espacement' mm
+    (comme des courbes de niveau). Le moteur les imprime en une seule spirale.
+
+    marge : distance du premier contour au bord (par défaut : espacement / 2)
+    """
+    marge = espacement / 2 if marge is None else marge
+    courbes = []
+    d = marge
+    while True:
+        forme = contour.buffer(-d, quad_segs=16)
+        if forme.is_empty or forme.area < espacement * espacement:
+            break
+        # une forme étroite peut se couper en morceaux : on garde le plus grand
+        forme = max(getattr(forme, "geoms", [forme]), key=lambda f: f.area)
+        courbes.append(LineString(forme.exterior.coords))
+        d += espacement
+    return courbes
+
+
 def lignes_rayonnantes(contour, nombre, autour=None, angle_depart=0):
     """'nombre' lignes droites qui partent d'un même point, comme les rayons d'une roue.
 

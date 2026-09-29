@@ -85,3 +85,18 @@ def test_quantites():
     r = {"path": [(0, 0, 0), (1000, 0, 0)]}
     q = controles.quantites(r, largeur_cordon=10, hauteur_couche=5, vitesse=50)
     assert q == {"longueur": 1000, "duree": 20, "volume": 0.1}
+
+
+def test_ligne_qui_se_recoupe():
+    boucle = LineString([(0, 0), (100, 0), (50, 50), (50, -50)])      # croise son premier segment
+    c = controles.lignes_qui_se_recoupent([[boucle]])
+    assert c["statut"] == "alerte" and c["points"] == [[50, 0]]
+    assert controles.lignes_qui_se_recoupent([[ligne(0, 0, 100, 0)]])["statut"] == "ok"
+
+
+def test_decoupe_ne_coupe_qu_au_bord():
+    # une ligne qui se recoupe à l'intérieur de la forme reste en un seul morceau
+    from trame.moteur.chemin import calculer_chemin
+    boucle = [(-50, 150), (250, 150), (200, 250), (150, 100), (450, 100)]
+    r = calculer_chemin([[boucle], [[(200, -50), (200, 350)]]], FORME, lane=0)
+    assert r["raccords_droits"] == 0 and r["controle"]["sauts"] == 0

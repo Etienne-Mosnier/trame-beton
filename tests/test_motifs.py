@@ -106,3 +106,5 @@ def test_calcul_complet(nom):
     r = calculer_chemin([[list(c.coords) for c in serie] for serie in S], forme)
     assert r["path"] is not None
     assert r["controle"]["hors_forme"] == 0
+    # règle du projet : toujours UNE seule ligne continue, sans saut
+    assert r["controle"]["sauts"] == 0, "le chemin doit être une seule ligne continue"
