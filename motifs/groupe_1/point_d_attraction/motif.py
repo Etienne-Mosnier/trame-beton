@@ -5,7 +5,7 @@ import math
 from shapely.geometry import LineString
 
 from trame.outils import centre, lignes_paralleles, rayon
-from trame.parametres import Parametre
+from trame.parametres import Parametre, Points
 
 
 NOM = "Point d'attraction"
@@ -13,25 +13,13 @@ NOM = "Point d'attraction"
 PARAMETRES = {
     "espacement": Parametre(80, mini=40, maxi=150, unite="mm",
                             aide="Distance minimale entre deux lignes d'une même série"),
-    "nombre_points": Parametre(2, mini=1, maxi=3, unite="",
-                               aide="Nombre de points d'attraction visibles"),
     "force": Parametre(35, mini=0, maxi=80, unite="mm",
                        aide="Force avec laquelle les lignes sont attirées"),
     "rayon_attraction": Parametre(180, mini=80, maxi=400, unite="mm",
                                   aide="Distance d'influence autour de chaque point"),
-    "x1": Parametre(400, mini=0, maxi=1200, unite="mm", aide="Position horizontale du point 1"),
-    "y1": Parametre(400, mini=0, maxi=800, unite="mm", aide="Position verticale du point 1"),
-    "x2": Parametre(800, mini=0, maxi=1200, unite="mm", aide="Position horizontale du point 2"),
-    "y2": Parametre(400, mini=0, maxi=800, unite="mm", aide="Position verticale du point 2"),
-    "x3": Parametre(600, mini=0, maxi=1200, unite="mm", aide="Position horizontale du point 3"),
-    "y3": Parametre(600, mini=0, maxi=800, unite="mm", aide="Position verticale du point 3"),
+    "attractions": Points([(400, 400), (800, 400)], mini=0, maxi=8,
+                          aide="Points qui attirent les lignes."),
 }
-
-
-def _points_attraction(p):
-    """Renvoie seulement les points demandés dans l'aperçu."""
-    points = [(p["x1"], p["y1"]), (p["x2"], p["y2"]), (p["x3"], p["y3"])]
-    return points[:p["nombre_points"]]
 
 
 def _attirer(point, attractions, force, influence):
@@ -68,7 +56,7 @@ def _deformer(courbes, attractions, force, influence):
 
 def series(contour, p):
     """Trois séries de lignes dont la trajectoire se courbe vers les points."""
-    attractions = _points_attraction(p)
+    attractions = p["attractions"]      # liste de (x, y), éventuellement vide
     lignes = [
         lignes_paralleles(contour, angle, p["espacement"])
         for angle in (160, 29, 135)
