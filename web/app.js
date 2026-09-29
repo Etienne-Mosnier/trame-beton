@@ -488,9 +488,16 @@ function creerPoignee(nom, index, [x, y]) {
   const poignee = new THREE.Group();
   poignee.position.set(x, y, 0);
   poignee.userData = { nomParametre: nom, index };
-  const boule = new THREE.Mesh(new THREE.SphereGeometry(18, 24, 16),
-                               new THREE.MeshStandardMaterial({ color: "#f97316", roughness: 0.4 }));
-  boule.position.z = 18;
+  // toujours au premier plan : visible même sous le bras du robot
+  const boule = new THREE.Mesh(new THREE.SphereGeometry(26, 24, 16),
+                               new THREE.MeshBasicMaterial({ color: "#f97316", depthTest: false }));
+  boule.position.z = 26;
+  boule.renderOrder = 10;
+  const cerne = new THREE.Mesh(new THREE.RingGeometry(26, 32, 32),
+                               new THREE.MeshBasicMaterial({ color: "#ffffff", depthTest: false }));
+  cerne.position.z = 26;
+  cerne.renderOrder = 9;
+  poignee.add(cerne);
   const texte = nom.replaceAll("_", " ") + (index === null ? "" : " " + (index + 1));
   const nomAffiche = etiquette(texte, "#c2410c", 40);
   nomAffiche.position.z = 70;
