@@ -21,7 +21,7 @@ peut être complètement différent** (spirale, cellules, courbes attirées par 
      sans accents (ex. `spirale`) ;
    - **créer une variante** d'un de tes motifs : nom + « à partir de … »
      (ex. « spirale_dense, à partir de spirale ») ;
-   - **modifier un motif existant** : son nom (ex. `point_d_attraction`).
+   - **modifier un motif existant** : son nom (ex. `spirale`).
 3. Décris ce que tu veux **voir**, avec tes mots, et comment les couches se superposent
    (ex. « une spirale depuis le centre de la forme, croisée par des rayons qui partent du
    même centre »). Chaque **série** est imprimée l'une après l'autre (2 à 5) et passe

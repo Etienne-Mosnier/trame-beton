@@ -18,8 +18,7 @@ def test_liste_motifs():
     assert set(exemple["parametres"]["series"]["champs"]) == {"angle", "espacement"}
     assert "série" in exemple["aide"]
     assert motifs[-1]["id"] == "exemple"       # les motifs des groupes d'abord
-    groupe = next(m for m in motifs if m["id"] == "groupe_1/point_d_attraction")
-    assert groupe["groupe"] == "groupe_1"
+    assert exemple["groupe"] == ""                  # l'exemple n'appartient à aucun groupe
 
 
 def test_reglages_moteur_en_francais():
