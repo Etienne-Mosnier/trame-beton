@@ -143,3 +143,66 @@ def test_cercles_non_emboites_signales():
     r = calculer_chemin(S, RECT_GRAND, active=[1])
     assert r["raccords_droits"] >= 1
     assert r["controle"]["sauts"] == 0
+
+
+# --- couches ------------------------------------------------------------------------
+
+
+def croix(nb_couches):
+    """Série A horizontale, série B verticale, un seul croisement au centre du rectangle."""
+    return calculer_chemin([[[(-10, 100), (310, 100)]], [[(150, -10), (150, 210)]]], RECT,
+                           active=[1], lane=0, couches=nb_couches)
+
+
+def hauteur_en(poly, x, y):
+    """Hauteur de la buse au point de la polyligne le plus proche de (x, y), interpolée."""
+    meilleur = None
+    for p, q in zip(poly, poly[1:]):
+        seg = LineString([p[:2], q[:2]])
+        d = seg.distance(Point(x, y))
+        if meilleur is None or d < meilleur[0]:
+            t = seg.project(Point(x, y)) / seg.length if seg.length > 0 else 0
+            meilleur = (d, p[2] + (q[2] - p[2]) * t)
+    return meilleur[1]
+
+
+def test_une_couche_inchangee():
+    r = croix(1)
+    assert len(r["waves"][0]) == 1 and max(p[2] for p in r["path"]) == pytest.approx(5)
+
+
+def test_deux_couches_empilees():
+    r = croix(2)
+    a1, a2 = r["waves"][0]
+    b1, b2 = r["waves"][1]
+    # loin du croisement : chaque couche 5 mm au-dessus de la même série
+    assert hauteur_en(a2, 30, 100) == pytest.approx(5)
+    assert hauteur_en(b2, 150, 50) == pytest.approx(5)
+    # au croisement : A1 0, B1 5, A2 posée sur B1 -> 10, B2 posée sur A2 -> 15
+    assert hauteur_en(a2, 150, 100) == pytest.approx(10)
+    assert hauteur_en(b2, 150, 100) == pytest.approx(15)
+    assert max(p[2] for p in r["path"]) == pytest.approx(15)
+    assert r["controle"]["sauts"] == 0 and r["controle"]["hors_forme"] == 0
+
+
+def test_montees_en_pente_douce():
+    # la montée de A2 vers le croisement garde la pente des bosses : 5 mm sur 10 mm
+    r = croix(2)
+    a2 = r["waves"][0][1]
+    assert hauteur_en(a2, 145, 100) == pytest.approx(7.5, abs=0.6)   # sommet plat de 2 mm
+
+
+def test_cinq_couches_au_plus():
+    r = calculer_chemin([[[(-10, 100), (310, 100)]], [[(150, -10), (150, 210)]]], RECT,
+                        active=[1], lane=0, couches=9)
+    assert len(r["waves"][0]) == 5
+    assert max(p[2] for p in r["path"]) == pytest.approx(5 * 2 * 5 - 5)     # 9 cordons sous B5
+
+
+def test_couches_une_seule_ligne():
+    r = calculer_chemin([lignes(RECT, 0, 40), lignes(RECT, 90, 40)], RECT, active=[1], lane=5, couches=3)
+    assert r["controle"]["sauts"] == 0 and r["controle"]["hors_forme"] == 0
+    assert len(r["waves"][0]) == 3
+    # la trame est bien réimprimée : environ 3 fois la longueur
+    un = calculer_chemin([lignes(RECT, 0, 40), lignes(RECT, 90, 40)], RECT, active=[1], lane=5)
+    assert len(r["path"]) > 2 * len(un["path"])

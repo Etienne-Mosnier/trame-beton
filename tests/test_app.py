@@ -21,7 +21,7 @@ def test_liste_motifs():
 
 def test_reglages_moteur_en_francais():
     reglages = json.loads(app.reglages_moteur())
-    assert set(reglages) == {"hauteur_bosse", "longueur_montée", "écart_couloirs"}
+    assert set(reglages) == {"hauteur_bosse", "longueur_montée", "écart_couloirs", "couches"}
     assert all(r["aide"] for r in reglages.values())
 
 

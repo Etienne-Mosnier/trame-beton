@@ -53,8 +53,11 @@ MOTEUR = {
                    aide="Longueur de la montée de chaque côté d'un croisement"),
     "écart_couloirs": Parametre(5.0, mini=0.0, maxi=20.0, unite="mm", pas=0.5,
                       aide="Écart entre les liaisons de deux séries le long du bord"),
+    "couches": Parametre(1, mini=1, maxi=5, unite="",
+                         aide="Nombre de couches : toute la trame est réimprimée par-dessus elle-même"),
 }
-NOMS_MOTEUR = {"hauteur_bosse": "amp", "longueur_montée": "d", "écart_couloirs": "lane"}
+NOMS_MOTEUR = {"hauteur_bosse": "amp", "longueur_montée": "d", "écart_couloirs": "lane",
+               "couches": "couches"}
 
 
 def module_motif(motif_id):
