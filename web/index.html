@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap">
-  <link rel="stylesheet" href="style.css?v=82a2a4abfe52">
+  <link rel="stylesheet" href="style.css?v=0f19bfc349a3">
   <script type="importmap">
     {
       "imports": {
@@ -26,14 +26,7 @@
     </div>
 
     <section>
-      <h2>Motif</h2>
-      <select id="choix-motif"></select>
-      <div id="reglages-motif"></div>
-      <details id="aide-motif"><summary>Aide du motif</summary><div></div></details>
-    </section>
-
-    <section>
-      <h2>Contour</h2>
+      <h2>Tracé de base</h2>
       <select id="choix-contour"></select>
       <label class="bouton-fichier">Importer un SVG ou un DXF…
         <input id="fichier-contour" type="file" accept=".svg,.dxf">
@@ -45,6 +38,13 @@
           Impossible de dépasser.</p>
       </div>
       <p id="message-contour" class="petit"></p>
+    </section>
+
+    <section>
+      <h2>Motif</h2>
+      <select id="choix-motif"></select>
+      <div id="reglages-motif"></div>
+      <details id="aide-motif"><summary>Aide du motif</summary><div></div></details>
     </section>
 
     <section>
@@ -126,6 +126,6 @@
     <div id="etat">Démarrage de Python dans le navigateur…</div>
   </main>
 
-  <script type="module" src="app.js?v=82a2a4abfe52"></script>
+  <script type="module" src="app.js?v=0f19bfc349a3"></script>
 </body>
 </html>

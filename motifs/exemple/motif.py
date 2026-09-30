@@ -1,29 +1,23 @@
-"""Motif exemple : trois séries de lignes droites qui se croisent en losanges.
+"""Motif exemple : des séries de lignes droites qui se croisent en losanges.
 
-C'est le motif de la définition Grasshopper d'origine (betonrobot.ghx).
-Copie ce fichier dans le dossier de ton groupe pour commencer ton propre motif.
+C'est le motif de la définition Grasshopper d'origine (betonrobot.ghx), avec des séries que l'on
+ajoute ou retire dans l'aperçu (de 2 à 5). Il montre la forme d'un fichier de motif.
 """
 
 from trame.outils import lignes_paralleles
-from trame.parametres import Parametre
+from trame.parametres import Liste, Parametre
 
-NOM = "Exemple : trois séries de lignes"
+NOM = "Exemple : séries de lignes"
 
 PARAMETRES = {
     "espacement": Parametre(50, mini=20, maxi=150, unite="mm",
                             aide="Écart entre deux lignes d'une même série"),
-    "angle_a": Parametre(160, mini=0, maxi=180, unite="°",
-                         aide="Direction des lignes de la série A (imprimée en premier, à plat)"),
-    "angle_b": Parametre(29, mini=0, maxi=180, unite="°",
-                         aide="Direction des lignes de la série B (passe par-dessus A)"),
-    "angle_c": Parametre(135, mini=0, maxi=180, unite="°",
-                         aide="Direction des lignes de la série C (passe par-dessus A et B)"),
+    "directions": Liste([160, 29, 135], mini=2, maxi=5, bornes=(0, 180), unite="°", element="Série",
+                        aide="Direction des lignes de chaque série, dans l'ordre d'impression : "
+                             "chaque série passe par-dessus les précédentes"),
 }
 
 
 def series(contour, p):
-    """Trois séries de lignes parallèles, dans l'ordre d'impression A, B, C."""
-    serie_a = lignes_paralleles(contour, p["angle_a"], p["espacement"])
-    serie_b = lignes_paralleles(contour, p["angle_b"], p["espacement"])
-    serie_c = lignes_paralleles(contour, p["angle_c"], p["espacement"])
-    return [serie_a, serie_b, serie_c]
+    """Une série de lignes parallèles par direction, dans l'ordre d'impression A, B, C…"""
+    return [lignes_paralleles(contour, angle, p["espacement"]) for angle in p["directions"]]

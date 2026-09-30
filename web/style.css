@@ -206,3 +206,10 @@ p.erreur, span.erreur { color: var(--erreur); white-space: pre-wrap; }
 @media (max-width: 760px) {
   #panneau { top: auto; bottom: 8px; left: 8px; width: calc(100vw - 16px); height: 50vh; }
 }
+
+/* réglage « Liste » : un curseur par élément */
+.liste .element { margin: 8px 0 0 10px; padding-left: 10px; border-left: 2px solid var(--orange-pale); }
+.liste .element .ligne { font-weight: 500; align-items: center; }
+.liste .element .ligne output { margin-left: auto; }
+.liste .retirer { width: 20px; height: 20px; padding: 0; line-height: 1; border-radius: 50%; font-size: 13px; flex: none; }
+.liste .ajouter { margin-top: 10px; border-style: dashed; }

@@ -7,6 +7,8 @@ Dans un motif :
         "inverser": Case(False, aide="Inverser le sens des vagues"),
         "centre": Point(600, 400, aide="Centre des cercles"),
         "attractions": Points([(400, 400), (800, 400)], mini=0, maxi=8, aide="Points qui attirent"),
+        "angles": Liste([160, 29, 135], mini=2, maxi=5, bornes=(0, 180), unite="°",
+                        element="Série", aide="Direction des lignes de chaque série"),
     }
 
 | Type      | Dans l'aperçu                                   | Valeur reçue dans p[...]         |
@@ -18,6 +20,8 @@ Dans un motif :
 | Points    | des poignées que l'on ajoute (double-clic sur   | liste de (x, y) en mm            |
 |           | la palette), déplace et supprime (double-clic   | (éventuellement vide si mini=0)  |
 |           | sur le point)                                   |                                  |
+| Liste     | un curseur par élément, « + Ajouter » et « × »  | liste de nombres                 |
+|           | pour en retirer (ex. une direction par série)   |                                  |
 
 Les points sont dans le repère de la palette : origine au coin, x le long du grand côté.
 """
@@ -121,7 +125,38 @@ class Points:
                 "mini": self.mini, "maxi": self.maxi, "aide": self.aide}
 
 
-TYPES = (Parametre, Choix, Case, Point, Points)
+class Liste:
+    """Une liste de nombres de longueur variable (entre 'mini' et 'maxi' éléments) : un curseur
+    par élément, que l'on ajoute ou retire dans l'aperçu. Ex. une direction par série.
+    element : nom affiché de chaque élément (« Série » -> Série A, Série B… ; sinon numérotés)."""
+
+    def __init__(self, valeur, mini, maxi, bornes, unite="", aide="", element="", pas=None):
+        self.valeur = list(valeur)
+        self.mini = mini
+        self.maxi = maxi
+        self.bornes = bornes
+        self.unite = unite
+        self.aide = aide
+        self.element = element
+        entiers = all(isinstance(v, int) for v in (*self.valeur, *bornes))
+        self.pas = pas if pas is not None else (1 if entiers else (bornes[1] - bornes[0]) / 100)
+
+    def borner(self, v):
+        bas, haut = self.bornes
+        nombres = [min(max(type(self.valeur[0])(x), bas), haut) for x in v][:self.maxi]
+        for x in self.valeur:                 # s'il en manque, on complète avec ceux de départ
+            if len(nombres) >= self.mini:
+                break
+            nombres.append(x)
+        return nombres
+
+    def vers_dict(self):
+        return {"type": "liste", "valeur": self.valeur, "mini": self.mini, "maxi": self.maxi,
+                "bornes": list(self.bornes), "pas": self.pas, "unite": self.unite,
+                "aide": self.aide, "element": self.element}
+
+
+TYPES = (Parametre, Choix, Case, Point, Points, Liste)
 
 
 def valeurs(parametres, reglages=None):
