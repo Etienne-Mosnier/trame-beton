@@ -19,13 +19,14 @@ import traceback
 from trame.contour import charger_contour
 from trame.controles import controler, quantites
 from trame.export.dxf import exporter_dxf
+from trame.export import gcode
 from trame.export.svg import exporter_svg
 import numpy as np
 
 from trame.robot import alertes, cinematique, urscript
 from trame.robot.calibration import repere_palette, vers_robot
 from trame.moteur.chemin import calculer_chemin
-from trame.parametres import Parametre, valeurs
+from trame.parametres import Parametre, Point, Points, valeurs
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 
@@ -104,22 +105,40 @@ def reglages_moteur():
 _contours = {}
 _dernier = {}   # dernier calcul, pour les exports
 
+# Les machines : le plateau sur lequel on imprime, et l'export qui va avec.
+MACHINES = {
+    "ur10e": {"nom": "Bras UR10e, palette %g × %g mm" % (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]),
+              "plateau": (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]),
+              "marge": CONFIG["palette"]["marge"], "vitesse": CONFIG["impression"]["vitesse"],
+              "export": "script"},
+    "cartesienne": {"nom": "Cartésienne, plateau %g × %g mm" % (CONFIG["cartesienne"]["longueur"],
+                                                                CONFIG["cartesienne"]["largeur"]),
+                    "plateau": (CONFIG["cartesienne"]["longueur"], CONFIG["cartesienne"]["largeur"]),
+                    "marge": CONFIG["cartesienne"]["marge"], "vitesse": CONFIG["cartesienne"]["vitesse"],
+                    "export": "gcode"},
+}
 
-def lire_contour(texte, nom, marge=None):
-    """Contour placé sur la palette avec la marge donnée ; gardé en mémoire."""
+
+def liste_machines():
+    return json.dumps({k: {"nom": m["nom"], "export": m["export"]} for k, m in MACHINES.items()})
+
+
+def lire_contour(texte, nom, marge=None, plateau=None):
+    """Contour placé sur le plateau (la palette par défaut) avec la marge donnée ; gardé en mémoire."""
     palette = CONFIG["palette"]
     marge = palette["marge"] if marge is None else marge
-    cle = (nom, len(texte), hash(texte), round(marge, 2))
+    plateau = plateau or (palette["longueur"], palette["largeur"])
+    cle = (nom, len(texte), hash(texte), round(marge, 2), tuple(plateau))
     if cle not in _contours:
-        _contours[cle] = charger_contour(texte, nom, marge=marge,
-                                         palette=(palette["longueur"], palette["largeur"]))
+        _contours[cle] = charger_contour(texte, nom, marge=marge, palette=plateau)
     return _contours[cle]
 
 
-def marge_couloirs(largeur, nb_series):
-    """Marge autour de la forme pour que les couloirs des liaisons restent sur la palette :
-    marge de la palette + demi-cordon + un couloir (une largeur de cordon) par série après A."""
-    return CONFIG["palette"]["marge"] + largeur / 2 + largeur * max(nb_series - 1, 0)
+def marge_couloirs(largeur, nb_series, marge_plateau=None):
+    """Marge autour de la forme pour que les couloirs des liaisons restent sur le plateau :
+    marge du plateau + demi-cordon + un couloir (une largeur de cordon) par série après A."""
+    marge_plateau = CONFIG["palette"]["marge"] if marge_plateau is None else marge_plateau
+    return marge_plateau + largeur / 2 + largeur * max(nb_series - 1, 0)
 
 
 def arrondir(points, chiffres=2):
@@ -133,42 +152,57 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
     """
     try:
         reglages = json.loads(reglages_json or "{}")
+        nom_machine = reglages.get("machine") if reglages.get("machine") in MACHINES else "ur10e"
+        machine = MACHINES[nom_machine]
+        plateau = machine["plateau"]
         beton = valeurs(MOTEUR, reglages.get("moteur"))
         moteur = reglages_du_moteur(beton)
         motif = module_motif(motif_id)
         p = valeurs(motif.PARAMETRES, reglages.get("motif"))
+        # les points du motif restent sur le plateau de la machine choisie
+        dans = lambda xy: (min(max(xy[0], 0.0), plateau[0]), min(max(xy[1], 0.0), plateau[1]))
+        points_motif = {}
+        for nom, parametre in motif.PARAMETRES.items():
+            if isinstance(parametre, Point):
+                p[nom] = dans(p[nom])
+                points_motif[nom] = list(p[nom])
+            elif isinstance(parametre, Points):
+                p[nom] = [dans(xy) for xy in p[nom]]
+                points_motif[nom] = [list(xy) for xy in p[nom]]
 
         # placement de la forme : on laisse la place des couloirs (qui dépend du nombre de
         # séries, connu seulement après un premier calcul du motif)
         largeur = beton["largeur_cordon"]
-        marge = marge_couloirs(largeur, 3)
-        place = lire_contour(contour_texte, contour_nom, marge)
+        marge = marge_couloirs(largeur, 3, machine["marge"])
+        place = lire_contour(contour_texte, contour_nom, marge, plateau)
         series = motif.series(place["contour"], p)
         if len(series) != 3:
-            marge = marge_couloirs(largeur, len(series))
-            place = lire_contour(contour_texte, contour_nom, marge)
+            marge = marge_couloirs(largeur, len(series), machine["marge"])
+            place = lire_contour(contour_texte, contour_nom, marge, plateau)
             series = motif.series(place["contour"], p)
         forme = place["contour"]
 
         r = calculer_chemin([[list(c.coords) for c in serie] for serie in series], forme, **moteur)
 
-        palette = CONFIG["palette"]
         controles = controler(r, forme, series, {
             "largeur_cordon": beton["largeur_cordon"],
             "rayon_courbure_min": BETON["rayon_courbure_min"],
             "lane": moteur["lane"],
-            "palette": (palette["longueur"], palette["largeur"]),
+            "palette": plateau,
             "marge": 0.0,     # le contour est déjà placé avec sa marge ; ici : rester sur la palette
         })
-        q = quantites(r, beton["largeur_cordon"], moteur["amp"], CONFIG["impression"]["vitesse"])
+        q = quantites(r, beton["largeur_cordon"], moteur["amp"], machine["vitesse"])
         path = r["path"] or []
         _dernier.update(resultat=r, contour=forme, motif=motif_id, nom_contour=contour_nom,
                         lane=moteur["lane"], largeur=beton["largeur_cordon"],
-                        amp=moteur["amp"], palette=(palette["longueur"], palette["largeur"]))
+                        amp=moteur["amp"], palette=plateau, machine=nom_machine)
         return json.dumps({
-            "palette": [CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]],
+            "machine": nom_machine,
+            "points_motif": points_motif,
+            "palette": list(plateau),
             "contour": arrondir(forme.exterior.coords),
-            "message_contour": place["message"],
+            "message_contour": place["message"] if nom_machine == "ur10e"
+                               else place["message"].replace("la palette", "le plateau"),
             "waves": [[arrondir(v) for v in serie] for serie in r["waves"]],
             "path": arrondir(path),
             "jumps": [arrondir(j) for j in r["jumps"]],
@@ -370,12 +404,23 @@ def programme_robot(d):
 
 
 def exporter(format_fichier):
-    """Fichier du dernier calcul : DXF, SVG ou programme du robot (script).
+    """Fichier du dernier calcul : DXF, SVG, programme du robot (script) ou G-code.
     Renvoie {"nom": ..., "texte": ...} ou {"erreur": ...}."""
     if not _dernier:
         return json.dumps({"erreur": "Rien à exporter : lance d'abord un calcul."})
     d = _dernier
-    if format_fichier == "script":
+    if format_fichier in ("script", "gcode") and MACHINES[d["machine"]]["export"] != format_fichier:
+        return json.dumps({"erreur": "Cet export ne correspond pas à la machine choisie."})
+    if format_fichier == "gcode":
+        entete = ["Motif : %s, contour : %s" % (d["motif"], d["nom_contour"])]
+        for nom in PROVISOIRES:
+            entete.append("PROVISOIRE : %s" % nom)
+        entete.append("A CALIBRER : diametre_filament / multiplicateur_extrusion (config/cellule.toml)")
+        try:
+            texte = gcode.generer(d["resultat"]["path"] or [], CONFIG["cartesienne"], d["largeur"], d["amp"], entete)
+        except ValueError as e:
+            return json.dumps({"erreur": str(e)})
+    elif format_fichier == "script":
         try:
             texte = programme_robot(d)
         except ValueError as e:

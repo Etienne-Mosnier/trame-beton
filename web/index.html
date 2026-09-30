@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Trame béton</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=69c414e7f4fa">
+  <link rel="stylesheet" href="style.css?v=7e1f6f62c517">
   <script type="importmap">
     {
       "imports": {
@@ -18,6 +18,11 @@
 <body>
   <aside id="panneau">
     <h1>Trame béton</h1>
+
+    <section>
+      <h2>Machine</h2>
+      <select id="choix-machine"></select>
+    </section>
 
     <section>
       <h2>Motif</h2>
@@ -52,7 +57,7 @@
       </div>
     </section>
 
-    <section>
+    <section id="section-robot">
       <h2>Robot</h2>
       <p class="petit">Clique sur la palette pour la déplacer (flèches) ou la tourner (anneau).</p>
       <p id="legende-portee" class="petit"></p>
@@ -83,10 +88,13 @@
       </div>
       <div class="boutons">
         <button id="export-script" type="button">Programme du robot (URScript)</button>
+        <button id="export-gcode" type="button" hidden>G-code (Klipper)</button>
       </div>
       <p class="petit">DXF et SVG pour les ingénieurs : une série par calque, les liaisons, le
-        chemin complet et les repères de la palette. Hauteurs réelles, en mm.<br>
-        Programme du robot : à valider dans URSim avant tout passage sur le robot.</p>
+        chemin complet et les repères du plateau. Hauteurs réelles, en mm.<br>
+        <span id="note-script">Programme du robot : à valider dans URSim avant tout passage sur le robot.</span>
+        <span id="note-gcode" hidden>G-code : à essayer d'abord à vide et à vitesse réduite ; débit de
+        l'axe E à calibrer (config/cellule.toml).</span></p>
     </section>
 
     <section>
@@ -102,6 +110,6 @@
     <div id="etat">Démarrage de Python dans le navigateur…</div>
   </main>
 
-  <script type="module" src="app.js?v=69c414e7f4fa"></script>
+  <script type="module" src="app.js?v=7e1f6f62c517"></script>
 </body>
 </html>

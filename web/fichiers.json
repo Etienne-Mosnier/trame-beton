@@ -16,6 +16,7 @@
  "trame/export/__init__.py",
  "trame/export/commun.py",
  "trame/export/dxf.py",
+ "trame/export/gcode.py",
  "trame/export/svg.py",
  "trame/moteur/__init__.py",
  "trame/moteur/chemin.py",
