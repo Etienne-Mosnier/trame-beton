@@ -105,14 +105,21 @@ _contours = {}
 _dernier = {}   # dernier calcul, pour les exports
 
 
-def lire_contour(texte, nom):
-    """Contour placé sur la palette ; gardé en mémoire pour ne pas relire le fichier."""
-    cle = (nom, len(texte), hash(texte))
+def lire_contour(texte, nom, marge=None):
+    """Contour placé sur la palette avec la marge donnée ; gardé en mémoire."""
+    palette = CONFIG["palette"]
+    marge = palette["marge"] if marge is None else marge
+    cle = (nom, len(texte), hash(texte), round(marge, 2))
     if cle not in _contours:
-        palette = CONFIG["palette"]
-        _contours[cle] = charger_contour(texte, nom, marge=palette["marge"],
+        _contours[cle] = charger_contour(texte, nom, marge=marge,
                                          palette=(palette["longueur"], palette["largeur"]))
     return _contours[cle]
+
+
+def marge_couloirs(largeur, nb_series):
+    """Marge autour de la forme pour que les couloirs des liaisons restent sur la palette :
+    marge de la palette + demi-cordon + un couloir (une largeur de cordon) par série après A."""
+    return CONFIG["palette"]["marge"] + largeur / 2 + largeur * max(nb_series - 1, 0)
 
 
 def arrondir(points, chiffres=2):
@@ -126,14 +133,22 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
     """
     try:
         reglages = json.loads(reglages_json or "{}")
-        place = lire_contour(contour_texte, contour_nom)
-        forme = place["contour"]
-
-        motif = module_motif(motif_id)
-        p = valeurs(motif.PARAMETRES, reglages.get("motif"))
-        series = motif.series(forme, p)
         beton = valeurs(MOTEUR, reglages.get("moteur"))
         moteur = reglages_du_moteur(beton)
+        motif = module_motif(motif_id)
+        p = valeurs(motif.PARAMETRES, reglages.get("motif"))
+
+        # placement de la forme : on laisse la place des couloirs (qui dépend du nombre de
+        # séries, connu seulement après un premier calcul du motif)
+        largeur = beton["largeur_cordon"]
+        marge = marge_couloirs(largeur, 3)
+        place = lire_contour(contour_texte, contour_nom, marge)
+        series = motif.series(place["contour"], p)
+        if len(series) != 3:
+            marge = marge_couloirs(largeur, len(series))
+            place = lire_contour(contour_texte, contour_nom, marge)
+            series = motif.series(place["contour"], p)
+        forme = place["contour"]
 
         r = calculer_chemin([[list(c.coords) for c in serie] for serie in series], forme, **moteur)
 
