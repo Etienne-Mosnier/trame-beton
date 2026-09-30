@@ -11,11 +11,13 @@ Les directions forment des losanges. Si deux directions sont presque pareilles
 
 ## Réglages
 
-- **espacement** : écart entre deux lignes d'une même série. Plus petit = trame plus serrée.
+Chaque série a deux réglages, sur la même ligne :
+- **angle** : direction de ses lignes, en degrés (0° = le long du grand côté de la palette,
+  90° = le long du petit côté) ;
+- **espacement** : écart entre deux de ses lignes. Plus petit = trame plus serrée.
   En dessous de 2 fois la largeur du cordon, les lignes se touchent.
-- **directions** : une direction par série, en degrés (0° = le long du grand côté de la palette,
-  90° = le long du petit côté). **+ Ajouter une série** en ajoute une (5 au plus),
-  **×** en retire une (2 au moins).
+
+**+ Ajouter une série** en ajoute une (5 au plus), **×** en retire une (2 au moins).
 
 ## Pour faire ton propre motif
 
