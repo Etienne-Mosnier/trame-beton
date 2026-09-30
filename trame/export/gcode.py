@@ -4,9 +4,9 @@ La machine cartésienne sert de MAQUETTE : la trame conçue en vraie grandeur (p
 final) est imprimée réduite dans le rapport  cordon d'essai / cordon final, en X, Y ET Z
 (bosses, couches et proportions du cordon comprises). La maquette est centrée sur le plateau.
 
-Origine au coin avant gauche, Z = 0 au plateau. Extrusion céramique : piston + tube PTFE Ø 10 mm
-+ tête malaxeuse. Axe E en mode relatif (M83), en millimètres de matière dans le tube : pour chaque
-segment, E = longueur × largeur × hauteur du cordon d'essai / section du tube.
+Origine au coin avant gauche, Z = 0 au plateau. Extrusion céramique : piston (axe E de Klipper)
++ tube PTFE + tête malaxeuse synchronisée. Axe E en mode relatif (M83), dans l'unité de Klipper
+(mm d'un filament de filament_diameter) : E = longueur × largeur × hauteur / section du filament.
 Réglage de Klipper : docs/MAQUETTE.md. Valeurs de la machine : config/cellule.toml, [cartesienne].
 À ESSAYER D'ABORD À VIDE (sans béton) ET À VITESSE RÉDUITE.
 """
@@ -84,13 +84,14 @@ def generer(path, machine, largeur, hauteur, largeur_essai, palette, entete=()):
                % (vitesse, machine["debit_volumique_max"], largeur_m * hauteur_m, machine["vitesse_max"]),
                "; %d points, %.1f m de cordon, environ %d min"
                % (len(points), longueur / 1000, round(longueur / vitesse / 60)),
-               "; E = %.4f mm de matiere dans le tube (diametre %g mm) par mm de cordon"
+               "; E = %.4f mm (filament_diameter %g mm de printer.cfg) par mm de cordon"
                % (e_par_mm, machine["diametre_filament"]),
                "; Klipper [extruder] : max_extrude_cross_section doit valoir au moins %.1f (mm2)"
                % (largeur_m * hauteur_m * machine["multiplicateur_extrusion"] * 1.1),
                "G21 ; millimetres",
                "G90 ; positions absolues",
                "M83 ; extrusion relative",
+               "SYNC_EXTRUDER_MOTION EXTRUDER=malaxeur MOTION_QUEUE=extruder ; malaxeur synchronise sur le piston",
                "G28 ; prise d'origine",
                "G0 Z%.2f F%d" % (points[0][2] + h, f_dep),
                "G0 X%.2f Y%.2f F%d ; au-dessus du depart" % (points[0][0], points[0][1], f_dep),
