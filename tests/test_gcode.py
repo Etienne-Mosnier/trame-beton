@@ -76,3 +76,17 @@ def test_maquette_trop_grande():
     assert "ne tient pas" in json.loads(app.exporter("gcode", json.dumps({"largeur_essai": 19})))["erreur"]
     with pytest.raises(ValueError):
         gcode.echelle(20, 0)
+
+
+def test_vitesse_automatique_selon_le_debit():
+    # comme Orca : vitesse = débit / section, plafonnée à vitesse_max
+    m = dict(MACHINE, debit_volumique_max=100.0, vitesse_max=60.0)
+    assert gcode.vitesse_impression(m, 5, 2) == pytest.approx(10)       # 100 / 10 mm²
+    assert gcode.vitesse_impression(m, 1, 1) == pytest.approx(60)       # plafond
+    calculer(largeur=20, hauteur=5)
+    g = json.loads(app.exporter("gcode", json.dumps({"largeur_essai": 5})))
+    attendu = gcode.vitesse_impression(MACHINE, 5, 1.25)
+    assert "G1 F%d" % (attendu * 60) in g["texte"]
+    assert json.loads(app.maquette(5))["vitesse"] == pytest.approx(attendu, abs=0.1)
+    # un cordon d'essai plus fin s'imprime plus vite (tant qu'on reste sous le plafond)
+    assert json.loads(app.maquette(4))["vitesse"] >= json.loads(app.maquette(5))["vitesse"]

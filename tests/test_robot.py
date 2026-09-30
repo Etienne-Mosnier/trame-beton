@@ -134,3 +134,16 @@ def test_export_depuis_l_apercu():
     assert "SIMULATION" in r["texte"] and "popup(" in r["texte"]
     assert "PROVISOIRE : hauteur de la buse" in r["texte"]
     assert "Extrusion desactivee" in r["texte"]
+
+
+def test_vitesse_du_robot_reglable():
+    texte = (CONTOURS / "rectangle.svg").read_text()
+    lent = json.loads(app.calculer("exemple", json.dumps({"vitesse": 36}), texte, "rectangle.svg"))
+    assert lent["vitesse"] == 36
+    script = json.loads(app.exporter("script"))["texte"]
+    assert "  V = 0.0360  # vitesse d'impression (m/s)" in script.splitlines()
+    rapide = json.loads(app.calculer("exemple", json.dumps({"vitesse": 72}), texte, "rectangle.svg"))
+    assert lent["duree"] == pytest.approx(2 * rapide["duree"], abs=1)
+    # l'animation du robot suit la vitesse choisie
+    temps = json.loads(app.robot())["temps"]
+    assert temps[-2] - temps[1] == pytest.approx(rapide["longueur"] / 72, rel=0.05)

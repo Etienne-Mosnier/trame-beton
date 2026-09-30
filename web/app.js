@@ -439,7 +439,9 @@ function majMaquette() {
   const m = JSON.parse(app.maquette(Number($("largeur-essai").value)));
   $("info-maquette").textContent = m.erreur ? m.erreur
     : `Échelle 1:${String(m.rapport).replace(".", ",")} : trame de ${m.taille[0]} × ${m.taille[1]} mm, ` +
-      `couche de ${String(m.hauteur_couche).replace(".", ",")} mm.` +
+      `couche de ${String(m.hauteur_couche).replace(".", ",")} mm. Vitesse automatique ` +
+      `${String(m.vitesse).replace(".", ",")} mm/s (d'après le débit de l'extrudeur), ` +
+      `environ ${Math.max(1, Math.round(m.duree / 60))} min.` +
       (m.tient ? "" : " ⚠ Trop grand pour le plateau de 700 × 700 : prends un cordon d'essai plus fin.");
   $("export-gcode").disabled = !!m.erreur || !m.tient;
 }
@@ -762,6 +764,7 @@ function calculer() {
     dessinerTrame(r, Number($("exageration").value));
     afficherBilan(r);
     majMaquette();
+    if (!$("vitesse-robot").value) $("vitesse-robot").value = r.vitesse;
     if (!dejaCadre) { if (avecRobot()) placer(null); vue3d(); dejaCadre = true; }
     // la nouvelle trame tout de suite ; le robot (plus long) juste après
     groupeTrame.visible = true;
@@ -845,6 +848,11 @@ async function demarrer() {
   $("export-script").onclick = () => telecharger("script");
   $("export-gcode").onclick = () => telecharger("gcode");
   $("largeur-essai").addEventListener("input", majMaquette);
+  // vitesse du robot : recalcul (durée, animation, programme) quand on valide le champ
+  $("vitesse-robot").addEventListener("change", (e) => {
+    const v = Number(e.target.value);
+    if (v > 0) { reglages.vitesse = v; calculer(); }
+  });
   $("montrer-alertes").addEventListener("change", () => {
     if (dernierResultat) dessinerAlertes(dernierResultat, Number($("exageration").value));
     if (robot.donnees) marquer(groupeAlertesRobot, robot.donnees.alertes, Number($("exageration").value));
