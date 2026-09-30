@@ -9,8 +9,8 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=ef14df1c930e";
-import { creerBuse, creerRobot } from "./robot.js?v=ef14df1c930e";
+import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=d75181303827";
+import { creerBuse, creerRobot } from "./robot.js?v=d75181303827";
 
 // une couleur par série, dans l'ordre d'impression
 // noir, orange, orange brûlé, orange clair, gris : le rouge est gardé pour les problèmes
@@ -683,7 +683,8 @@ function liste(conteneur, nom, p) {
 
   const dessiner = () => {
     const v = reglages.motif[nom];
-    bloc.innerHTML = `<div class="ligne"><span>${nom.replaceAll("_", " ")}</span><output>${v.length}</output></div>
+    const titre = p.element ? p.element + "s" : nom.replaceAll("_", " ");   // « Série » -> « Séries »
+    bloc.innerHTML = `<div class="ligne"><span>${titre}</span><output>${v.length}</output></div>
       <p class="aide">${p.aide}</p>`;
     v.forEach((x, i) => {
       const titre = p.element ? `${p.element} ${LETTRES[i] ?? i + 1}` : `${i + 1}`;
