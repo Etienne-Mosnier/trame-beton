@@ -16,7 +16,7 @@ import sys
 import tomllib
 import traceback
 
-from trame.contour import charger_contour
+from trame.contour import lire_forme, placer
 from trame.controles import controler, quantites
 from trame.export.dxf import exporter_dxf
 from trame.export import gcode
@@ -105,15 +105,17 @@ def reglages_moteur():
 _contours = {}
 _dernier = {}   # dernier calcul, pour les exports
 
-def lire_contour(texte, nom, marge=None, plateau=None):
-    """Contour placé sur le plateau (la palette par défaut) avec la marge donnée ; gardé en mémoire."""
+def lire_contour(texte, nom, marge=None, plateau=None, taille=None):
+    """Contour placé sur le plateau (la palette par défaut) avec la marge donnée.
+    taille : part de la plus grande taille possible (None = taille réelle si elle tient).
+    Le fichier n'est lu qu'une fois (gardé en mémoire)."""
     palette = CONFIG["palette"]
     marge = palette["marge"] if marge is None else marge
     plateau = plateau or (palette["longueur"], palette["largeur"])
-    cle = (nom, len(texte), hash(texte), round(marge, 2), tuple(plateau))
+    cle = (nom, len(texte), hash(texte))
     if cle not in _contours:
-        _contours[cle] = charger_contour(texte, nom, marge=marge, palette=plateau)
-    return _contours[cle]
+        _contours[cle] = lire_forme(texte, nom)
+    return placer(_contours[cle], marge, plateau, taille=taille)
 
 
 def marge_couloirs(largeur, nb_series, marge_plateau=None):
@@ -156,11 +158,12 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
         # séries, connu seulement après un premier calcul du motif)
         largeur = beton["largeur_cordon"]
         marge = marge_couloirs(largeur, 3)
-        place = lire_contour(contour_texte, contour_nom, marge, plateau)
+        taille = reglages.get("taille")        # curseur Taille (part du maximum), ou None
+        place = lire_contour(contour_texte, contour_nom, marge, plateau, taille)
         series = motif.series(place["contour"], p)
         if len(series) != 3:
             marge = marge_couloirs(largeur, len(series))
-            place = lire_contour(contour_texte, contour_nom, marge, plateau)
+            place = lire_contour(contour_texte, contour_nom, marge, plateau, taille)
             series = motif.series(place["contour"], p)
         forme = place["contour"]
 
@@ -184,6 +187,8 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
             "palette": list(plateau),
             "contour": arrondir(forme.exterior.coords),
             "message_contour": place["message"],
+            "taille": round(place["taille"], 3),
+            "dimensions": place["dimensions"],
             "waves": [[arrondir(v) for v in serie] for serie in r["waves"]],
             "path": arrondir(path),
             "jumps": [arrondir(j) for j in r["jumps"]],

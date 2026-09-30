@@ -9,8 +9,8 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=8398e49a246f";
-import { creerBuse, creerRobot } from "./robot.js?v=8398e49a246f";
+import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=7e8384d5272e";
+import { creerBuse, creerRobot } from "./robot.js?v=7e8384d5272e";
 
 // une couleur par série, dans l'ordre d'impression
 const COULEURS = ["#6b7280", "#2563eb", "#16a34a", "#9333ea", "#d97706"]; // le rouge est gardé pour les problèmes
@@ -764,6 +764,9 @@ function calculer() {
     dessinerTrame(r, Number($("exageration").value));
     afficherBilan(r);
     majMaquette();
+    // curseur Taille : la part du maximum réellement utilisée, et la taille en mm
+    $("taille").value = Math.round(r.taille * 100);
+    $("valeur-taille").textContent = `${Math.round(r.taille * 100)} % : ${r.dimensions[0]} × ${r.dimensions[1]} mm`;
     if (!$("vitesse-robot").value) $("vitesse-robot").value = r.vitesse;
     if (!dejaCadre) { if (avecRobot()) placer(null); vue3d(); dejaCadre = true; }
     // la nouvelle trame tout de suite ; le robot (plus long) juste après
@@ -848,6 +851,8 @@ async function demarrer() {
   $("export-script").onclick = () => telecharger("script");
   $("export-gcode").onclick = () => telecharger("gcode");
   $("largeur-essai").addEventListener("input", majMaquette);
+  $("taille").addEventListener("input", (e) => ($("valeur-taille").textContent = e.target.value + " %"));
+  $("taille").addEventListener("change", (e) => { reglages.taille = Number(e.target.value) / 100; calculer(); });
   // vitesse du robot : recalcul (durée, animation, programme) quand on valide le champ
   $("vitesse-robot").addEventListener("change", (e) => {
     const v = Number(e.target.value);
@@ -897,6 +902,7 @@ async function demarrer() {
     $("choix-contour").value = parDefaut;
     const choisirExemple = async (chemin) => {
       contour = { nom: chemin.split("/").pop(), texte: await lireTexte(chemin) };
+      delete reglages.taille;      // nouvelle forme : sa taille réelle si elle tient
       calculer();
     };
     $("choix-contour").onchange = (e) => {
@@ -906,6 +912,7 @@ async function demarrer() {
       const fichier = e.target.files[0];
       if (!fichier) return;
       contour = { nom: fichier.name, texte: await fichier.text() };
+      delete reglages.taille;
       $("choix-contour").querySelector('option[value="importe"]')?.remove();
       const option = new Option("importé : " + fichier.name, "importe", true, true);
       $("choix-contour").add(option);

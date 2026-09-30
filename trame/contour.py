@@ -117,13 +117,19 @@ def plus_grand_contour(courbes):
 # --- placement sur la palette -------------------------------------------------------
 
 
-def placer(contour, marge=20.0, palette=(1200.0, 800.0), remplir=False):
+def placer(contour, marge=20.0, palette=(1200.0, 800.0), remplir=False, taille=None):
     """Pose le contour au centre de la palette, en gardant 'marge' mm sur les bords.
 
+    Sans 'taille' :
     1. S'il tient à sa taille réelle, il est gardé tel quel.
     2. Sinon, s'il tient une fois tourné de 90°, il est tourné.
     3. Sinon, il est réduit, dans le sens où il reste le plus grand.
     remplir = True : la forme est agrandie ou réduite pour occuper toute la palette.
+
+    taille (de 0 à 1) : part de la plus grande taille qui tient sur la palette (1 = le maximum).
+    La forme ne dépasse donc jamais. Elle est tournée de 90° seulement si c'est nécessaire.
+
+    Renvoie aussi « taille » : la part du maximum effectivement utilisée (pour le curseur).
     """
     utile_x = palette[0] - 2 * marge
     utile_y = palette[1] - 2 * marge
@@ -135,7 +141,11 @@ def placer(contour, marge=20.0, palette=(1200.0, 800.0), remplir=False):
     echelle_tourne = min(utile_x / hauteur, utile_y / largeur)
     tient = 1 - 1e-9  # évite qu'un arrondi fasse refuser une forme qui tient pile
 
-    if not remplir and echelle_droit >= tient:
+    echelle_max = max(echelle_droit, echelle_tourne)
+    if taille is not None:
+        echelle = min(max(float(taille), 0.05), 1.0) * echelle_max
+        rotation = 0 if echelle <= echelle_droit / tient else 90
+    elif not remplir and echelle_droit >= tient:
         rotation, echelle = 0, 1.0
     elif not remplir and echelle_tourne >= tient:
         rotation, echelle = 90, 1.0
@@ -151,19 +161,24 @@ def placer(contour, marge=20.0, palette=(1200.0, 800.0), remplir=False):
     forme = affinity.translate(forme, palette[0] / 2 - (xmin + xmax) / 2,
                                palette[1] / 2 - (ymin + ymax) / 2)
 
+    xmin, ymin, xmax, ymax = forme.bounds
     return {
         "contour": forme,
         "rotation": rotation,
         "echelle": echelle,
-        "message": decrire(rotation, echelle, largeur, hauteur),
+        "taille": echelle / echelle_max,
+        "dimensions": (round(xmax - xmin), round(ymax - ymin)),
+        "message": decrire(rotation, echelle, largeur, hauteur, choisie=taille is not None),
     }
 
 
-def decrire(rotation, echelle, largeur, hauteur):
+def decrire(rotation, echelle, largeur, hauteur, choisie=False):
     """Phrase qui explique à l'étudiant ce qui est arrivé à sa forme."""
     taille = "Forme de %d × %d mm" % (round(largeur), round(hauteur))
     if rotation:
         taille += ", tournée de 90°"
+    if choisie:
+        return taille + ", mise à %d %% de sa taille réelle (taille choisie)." % round(echelle * 100)
     if abs(echelle - 1) < 1e-9:
         return taille + ", gardée à sa taille réelle."
     if echelle < 1:
@@ -174,8 +189,8 @@ def decrire(rotation, echelle, largeur, hauteur):
 # --- tout en un ---------------------------------------------------------------------
 
 
-def charger_contour(texte, nom_fichier, marge=20.0, palette=(1200.0, 800.0), remplir=False):
-    """Lit un fichier SVG ou DXF, garde le plus grand contour fermé et le pose sur la palette."""
+def lire_forme(texte, nom_fichier):
+    """Lit un fichier SVG ou DXF et renvoie son plus grand contour fermé (sans le placer)."""
     extension = nom_fichier.lower().rsplit(".", 1)[-1]
     if extension == "svg":
         courbes = lire_svg(texte)
@@ -184,5 +199,9 @@ def charger_contour(texte, nom_fichier, marge=20.0, palette=(1200.0, 800.0), rem
     else:
         raise ValueError("Format non reconnu : « %s ». Utilise un fichier .svg ou .dxf."
                          % nom_fichier)
-    contour = plus_grand_contour(courbes)
-    return placer(contour, marge, palette, remplir)
+    return plus_grand_contour(courbes)
+
+
+def charger_contour(texte, nom_fichier, marge=20.0, palette=(1200.0, 800.0), remplir=False, taille=None):
+    """Lit un fichier SVG ou DXF, garde le plus grand contour fermé et le pose sur la palette."""
+    return placer(lire_forme(texte, nom_fichier), marge, palette, remplir, taille)
