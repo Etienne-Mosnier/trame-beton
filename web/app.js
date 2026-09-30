@@ -841,10 +841,13 @@ async function demarrer() {
     // motifs
     motifs = JSON.parse(app.liste_motifs());
     // un groupe d'options par groupe d'étudiants, l'exemple à part
-    const groupes = [...new Set(motifs.map((m) => m.groupe))];
+    // les 4 groupes toujours présents, même sans motif ; l'exemple à la fin
+    const GROUPES = ["groupe_1", "groupe_2", "groupe_3", "groupe_4"];
+    const groupes = [...new Set([...GROUPES, ...motifs.map((m) => m.groupe).filter((g) => g), ""])];
     $("choix-motif").innerHTML = groupes.map((g) => {
       const titre = g ? g.replace("groupe_", "Groupe ") : "Exemple (référence)";
-      const options = motifs.filter((m) => m.groupe === g).map((m) => `<option value="${m.id}">${m.nom}</option>`);
+      let options = motifs.filter((m) => m.groupe === g).map((m) => `<option value="${m.id}">${m.nom}</option>`);
+      if (!options.length) options = ["<option disabled>aucun motif pour l'instant (à créer par une issue)</option>"];
       return `<optgroup label="${titre}">${options.join("")}</optgroup>`;
     }).join("");
     $("choix-motif").onchange = (e) => { choisirMotif(e.target.value); calculer(); };
