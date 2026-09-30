@@ -44,20 +44,28 @@ BETON = {nom: CONFIG["impression"][nom] or defaut for nom, defaut in PROVISOIRE.
 PROVISOIRES = [nom for nom in PROVISOIRE if not CONFIG["impression"][nom]]
 HAUTEUR_COUCHE = BETON["hauteur_couche"]
 
-# Réglages du moteur proposés dans l'aperçu (les autres gardent les valeurs du .ghx).
-# Les noms affichés sont en français ; NOMS_MOTEUR donne le nom du réglage dans le moteur.
+# Réglages du béton proposés dans l'aperçu. Les réglages du moteur en sont déduits
+# (voir reglages_du_moteur) : il n'y a que le cordon à décider.
 MOTEUR = {
-    "hauteur_bosse": Parametre(HAUTEUR_COUCHE, mini=1.0, maxi=20.0, unite="mm", pas=0.5,
-                     aide="Hauteur d'une bosse : une couche de cordon"),
-    "longueur_montée": Parametre(10.0, mini=2.0, maxi=40.0, unite="mm", pas=0.5,
-                   aide="Longueur de la montée de chaque côté d'un croisement"),
-    "écart_couloirs": Parametre(5.0, mini=0.0, maxi=20.0, unite="mm", pas=0.5,
-                      aide="Écart entre les liaisons de deux séries le long du bord"),
+    "largeur_cordon": Parametre(BETON["largeur_cordon"], mini=4.0, maxi=40.0, unite="mm", pas=0.5,
+                                aide="Largeur du cordon, mesurée pendant les essais. Les montées aux croisements et "
+                                     "l'écart entre les liaisons le long du bord en découlent."),
+    "hauteur_couche": Parametre(HAUTEUR_COUCHE, mini=1.0, maxi=20.0, unite="mm", pas=0.5,
+                                aide="Épaisseur d'une couche, mesurée pendant les essais : c'est la hauteur d'une bosse."),
     "couches": Parametre(1, mini=1, maxi=5, unite="",
                          aide="Nombre de couches : toute la trame est réimprimée par-dessus elle-même"),
 }
-NOMS_MOTEUR = {"hauteur_bosse": "amp", "longueur_montée": "d", "écart_couloirs": "lane",
-               "couches": "couches"}
+
+
+def reglages_du_moteur(beton):
+    """Réglages du moteur déduits du cordon :
+    - hauteur d'une bosse (amp) = hauteur de couche : on monte d'un cordon par cordon croisé ;
+    - longueur de la montée (d) = largeur du cordon : la montée commence une largeur de cordon
+      avant le croisement, pour franchir le cordon du dessous ;
+    - écart des couloirs (lane) = largeur du cordon : les liaisons de deux séries côte à côte,
+      sans se chevaucher."""
+    largeur, hauteur = beton["largeur_cordon"], beton["hauteur_couche"]
+    return {"amp": hauteur, "d": largeur, "lane": largeur, "couches": beton["couches"]}
 
 
 def module_motif(motif_id):
@@ -124,22 +132,23 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
         motif = module_motif(motif_id)
         p = valeurs(motif.PARAMETRES, reglages.get("motif"))
         series = motif.series(forme, p)
-        moteur = {NOMS_MOTEUR[k]: v for k, v in valeurs(MOTEUR, reglages.get("moteur")).items()}
+        beton = valeurs(MOTEUR, reglages.get("moteur"))
+        moteur = reglages_du_moteur(beton)
 
         r = calculer_chemin([[list(c.coords) for c in serie] for serie in series], forme, **moteur)
 
         palette = CONFIG["palette"]
         controles = controler(r, forme, series, {
-            "largeur_cordon": BETON["largeur_cordon"],
+            "largeur_cordon": beton["largeur_cordon"],
             "rayon_courbure_min": BETON["rayon_courbure_min"],
             "lane": moteur["lane"],
             "palette": (palette["longueur"], palette["largeur"]),
             "marge": 0.0,     # le contour est déjà placé avec sa marge ; ici : rester sur la palette
         })
-        q = quantites(r, BETON["largeur_cordon"], moteur["amp"], CONFIG["impression"]["vitesse"])
+        q = quantites(r, beton["largeur_cordon"], moteur["amp"], CONFIG["impression"]["vitesse"])
         path = r["path"] or []
         _dernier.update(resultat=r, contour=forme, motif=motif_id, nom_contour=contour_nom,
-                        lane=moteur["lane"],
+                        lane=moteur["lane"], largeur=beton["largeur_cordon"],
                         amp=moteur["amp"], palette=(palette["longueur"], palette["largeur"]))
         return json.dumps({
             "palette": [CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]],
@@ -153,7 +162,7 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
                           for c in controles],
             "info": r["info"],
             **q,
-            "beton": BETON,
+            "beton": dict(BETON, largeur_cordon=beton["largeur_cordon"], hauteur_couche=beton["hauteur_couche"]),
             "provisoires": PROVISOIRES,
             "amp": moteur["amp"],
         })
@@ -318,7 +327,8 @@ def reglages_impression():
     """Réglages d'impression, avec la hauteur de buse provisoire si elle n'est pas fixée."""
     imp = dict(CONFIG["impression"])
     if not imp["hauteur_buse"]:
-        imp["hauteur_buse"] = BETON["hauteur_couche"]
+        # la hauteur de couche choisie dans l'aperçu (dernier calcul), sinon celle de la config
+        imp["hauteur_buse"] = _dernier.get("amp", BETON["hauteur_couche"])
     return imp
 
 
@@ -329,8 +339,9 @@ def programme_robot(d):
     entete = ["Motif : %s, contour : %s" % (d["motif"], d["nom_contour"])]
     if not CONFIG["impression"]["hauteur_buse"]:
         entete.append("PROVISOIRE : hauteur de la buse = hauteur de couche (%g mm)" % imp["hauteur_buse"])
+    choisis = {"largeur_cordon": d.get("largeur", BETON["largeur_cordon"]), "hauteur_couche": d["amp"]}
     for nom in PROVISOIRES:
-        entete.append("PROVISOIRE : %s = %g mm" % (nom, BETON[nom]))
+        entete.append("PROVISOIRE : %s = %g mm" % (nom, choisis.get(nom, BETON[nom])))
     entete.append("A MESURER : masse de la buse (%g kg declares)" % CONFIG["outil"]["masse_kg"])
     if simulation:
         entete.append("SIMULATION : calibration de simulation (config/cellule.toml, calibration vide)")
