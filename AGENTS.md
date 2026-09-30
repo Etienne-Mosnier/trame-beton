@@ -95,9 +95,8 @@ Règles :
   d'attraction, centres, départs… utilise `Point` ou `Points`, jamais deux curseurs x et y.
   Avec `Points` et `mini=0`, le motif doit marcher aussi sans aucun point.
 - Unités : **millimètres** et **degrés**, partout.
-- Deux machines : bras UR10e (palette 1200 × 800 mm) ou cartésienne (plateau 700 × 700 mm).
-  Ne suppose jamais la taille du plateau : place la géométrie **par rapport au contour**
-  (`outils.centre(contour)`, `contour.bounds`…), pas avec des coordonnées fixes.
+- Place la géométrie **par rapport au contour** (`outils.centre(contour)`, `contour.bounds`…),
+  pas avec des coordonnées fixes : la forme peut être réduite ou tournée pour tenir sur la palette.
 - Les courbes peuvent dépasser du contour : le moteur les découpe.
 
 ## Traiter une issue « Idée de motif »

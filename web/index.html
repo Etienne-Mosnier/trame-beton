@@ -20,11 +20,6 @@
     <h1>Trame béton</h1>
 
     <section>
-      <h2>Machine</h2>
-      <select id="choix-machine"></select>
-    </section>
-
-    <section>
       <h2>Motif</h2>
       <select id="choix-motif"></select>
       <div id="reglages-motif"></div>
@@ -57,7 +52,7 @@
       </div>
     </section>
 
-    <section id="section-robot">
+    <section>
       <h2>Robot</h2>
       <p class="petit">Clique sur la palette pour la déplacer (flèches) ou la tourner (anneau).</p>
       <p id="legende-portee" class="petit"></p>
@@ -88,13 +83,17 @@
       </div>
       <div class="boutons">
         <button id="export-script" type="button">Programme du robot (URScript)</button>
-        <button id="export-gcode" type="button" hidden>G-code (Klipper)</button>
       </div>
+      <div class="maquette">
+        <label>Cordon d'essai <input id="largeur-essai" type="number" min="1" max="40" step="0.5" value="5"> mm</label>
+        <button id="export-gcode" type="button">Maquette G-code</button>
+      </div>
+      <p id="info-maquette" class="petit"></p>
       <p class="petit">DXF et SVG pour les ingénieurs : une série par calque, les liaisons, le
         chemin complet et les repères du plateau. Hauteurs réelles, en mm.<br>
-        <span id="note-script">Programme du robot : à valider dans URSim avant tout passage sur le robot.</span>
-        <span id="note-gcode" hidden>G-code : à essayer d'abord à vide et à vitesse réduite ; débit de
-        l'axe E à calibrer (config/cellule.toml).</span></p>
+        Programme du robot : à valider dans URSim avant tout passage sur le robot.<br>
+        Maquette G-code (machine cartésienne 700 × 700, Klipper) : toute la trame réduite à l'échelle
+        du cordon d'essai. À essayer d'abord à vide ; débit de l'axe E à calibrer.</p>
     </section>
 
     <section>

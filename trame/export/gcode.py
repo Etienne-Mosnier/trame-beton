@@ -1,8 +1,12 @@
 """Export G-code pour la machine cartésienne (Klipper), plateau 700 × 700 × 700 mm.
 
+La machine cartésienne sert de MAQUETTE : la trame conçue en vraie grandeur (palette, cordon
+final) est imprimée réduite dans le rapport  cordon d'essai / cordon final, en X, Y ET Z
+(bosses, couches et proportions du cordon comprises). La maquette est centrée sur le plateau.
+
 Origine au coin avant gauche, Z = 0 au plateau. Extrusion par l'axe E en mode relatif (M83) :
-pour chaque segment, E = longueur × largeur × hauteur du cordon / section du filament équivalent.
-Toutes les valeurs de la machine sont dans config/cellule.toml, section [cartesienne].
+pour chaque segment, E = longueur × largeur × hauteur du cordon d'essai / section du filament
+équivalent. Valeurs de la machine : config/cellule.toml, section [cartesienne].
 À ESSAYER D'ABORD À VIDE (sans béton) ET À VITESSE RÉDUITE.
 """
 
@@ -14,19 +18,33 @@ def ascii(texte):
     return unicodedata.normalize("NFKD", texte).encode("ascii", "ignore").decode("ascii")
 
 
-def generer(path, machine, largeur, hauteur, entete=()):
-    """Texte G-code du chemin.
+def echelle(largeur_finale, largeur_essai):
+    """Rapport de réduction de la maquette : cordon d'essai / cordon final."""
+    if largeur_essai <= 0 or largeur_finale <= 0:
+        raise ValueError("La largeur du cordon d'essai doit être positive.")
+    return largeur_essai / largeur_finale
 
-    path    : points (x, y, z) en mm dans le repère du plateau ; z = hauteur au-dessus de la
-              première couche (0 pour la première couche)
-    machine : section [cartesienne] de config/cellule.toml
-    largeur, hauteur : largeur du cordon et hauteur de couche (mm)
+
+def generer(path, machine, largeur, hauteur, largeur_essai, palette, entete=()):
+    """Texte G-code de la maquette.
+
+    path     : chemin en vraie grandeur, points (x, y, z) en mm dans le repère de la palette ;
+               z = hauteur au-dessus de la première couche (0 pour la première couche)
+    machine  : section [cartesienne] de config/cellule.toml
+    largeur, hauteur : cordon final (largeur, hauteur de couche), en mm
+    largeur_essai    : largeur du cordon de la maquette (mm)
+    palette  : (longueur, largeur) de la palette en vraie grandeur, pour centrer la maquette
     """
-    hb = machine["hauteur_buse"] or hauteur
+    k = echelle(largeur, largeur_essai)
+    largeur_m, hauteur_m = largeur * k, hauteur * k            # cordon d'essai
+    # la palette réduite, centrée sur le plateau
+    dx = (machine["longueur"] - palette[0] * k) / 2
+    dy = (machine["largeur"] - palette[1] * k) / 2
+    hb = machine["hauteur_buse"] or hauteur_m
     points = []
     for p in path:
-        q = (p[0], p[1], (p[2] if len(p) > 2 else 0.0) + hb)
-        if not points or math.dist(points[-1], q) >= 0.05:
+        q = (p[0] * k + dx, p[1] * k + dy, (p[2] if len(p) > 2 else 0.0) * k + hb)
+        if not points or math.dist(points[-1], q) >= 0.02:
             points.append(q)
     if len(points) < 2:
         raise ValueError("Le chemin est vide : rien à imprimer.")
@@ -36,11 +54,11 @@ def generer(path, machine, largeur, hauteur, entete=()):
     h = machine["hauteur_approche"]
     for x, y, z in points:
         if not (0 <= x <= lx and 0 <= y <= ly and 0 <= z + h <= lz):
-            raise ValueError("Le chemin sort de la machine (%g × %g × %g mm) au point (%.0f, %.0f, %.0f)."
-                             % (lx, ly, lz, x, y, z))
+            raise ValueError("La maquette au 1:%g ne tient pas dans la machine (%g × %g × %g mm) : "
+                             "prends un cordon d'essai plus fin." % (round(1 / k, 2), lx, ly, lz))
 
     section = math.pi * machine["diametre_filament"] ** 2 / 4
-    e_par_mm = largeur * hauteur / section * machine["multiplicateur_extrusion"]
+    e_par_mm = largeur_m * hauteur_m / section * machine["multiplicateur_extrusion"]
     f_imp = machine["vitesse"] * 60           # G-code : mm/min
     f_dep = machine["vitesse_deplacement"] * 60
     longueur = sum(math.dist(a, b) for a, b in zip(points, points[1:]))
@@ -49,11 +67,15 @@ def generer(path, machine, largeur, hauteur, entete=()):
               "; Machine cartesienne (Klipper), %g x %g x %g mm, origine coin avant gauche" % (lx, ly, lz),
               "; ESSAYER D'ABORD A VIDE (sans beton) ET A VITESSE REDUITE"]
     lignes += ["; " + ascii(t) for t in entete]
-    lignes += ["; %d points, %.1f m de cordon, environ %d min a %g mm/s"
+    lignes += ["; MAQUETTE a l'echelle 1:%g (cordon final %g x %g mm -> essai %g x %g mm)"
+               % (round(1 / k, 2), largeur, hauteur, largeur_m, hauteur_m),
+               "; palette %g x %g mm -> %g x %g mm, centree sur le plateau"
+               % (palette[0], palette[1], palette[0] * k, palette[1] * k),
+               "; %d points, %.1f m de cordon, environ %d min a %g mm/s"
                % (len(points), longueur / 1000, round(longueur / machine["vitesse"] / 60), machine["vitesse"]),
-               "; cordon %g x %g mm, E = %.4f mm par mm de cordon" % (largeur, hauteur, e_par_mm),
-               "; Klipper [extruder] : max_extrude_cross_section doit valoir au moins %.0f (mm2)"
-               % (largeur * hauteur * machine["multiplicateur_extrusion"] * 1.1),
+               "; E = %.4f mm par mm de cordon" % e_par_mm,
+               "; Klipper [extruder] : max_extrude_cross_section doit valoir au moins %.1f (mm2)"
+               % (largeur_m * hauteur_m * machine["multiplicateur_extrusion"] * 1.1),
                "G21 ; millimetres",
                "G90 ; positions absolues",
                "M83 ; extrusion relative",

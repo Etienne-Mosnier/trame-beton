@@ -120,3 +120,8 @@ p.erreur, span.erreur { color: var(--erreur); white-space: pre-wrap; }
 
 .pastille-point { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
   background: #f97316; margin-right: 6px; vertical-align: middle; }
+
+.maquette { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.maquette label { flex: 1; font-size: 13px; }
+.maquette input { width: 60px; font: inherit; padding: 4px 6px; border: 1px solid var(--bord); border-radius: 6px; }
+.maquette button { width: auto; flex: none; }

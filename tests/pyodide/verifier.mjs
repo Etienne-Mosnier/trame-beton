@@ -49,10 +49,10 @@ const zone = JSON.parse(app.placement(""));
 console.log(`placement : ${zone.atteignable} % de la palette atteignable`);
 console.log(`robot : ${bras.angles.length} poses, ${bras.hors_portee.length} hors de portée, ${((performance.now() - debutRobot) / 1000).toFixed(2)} s`);
 
-// machine cartésienne et G-code
-const rc = JSON.parse(app.calculer("exemple", JSON.stringify({ machine: "cartesienne" }), await readFile("contours/haricot.dxf", "utf8"), "haricot.dxf"));
+// maquette G-code à l'échelle 1:4
+const rc = JSON.parse(app.calculer("exemple", JSON.stringify({ moteur: { largeur_cordon: 20 } }), await readFile("contours/haricot.dxf", "utf8"), "haricot.dxf"));
 if (rc.erreur) throw new Error(rc.erreur);
-const g = JSON.parse(app.exporter("gcode"));
+const g = JSON.parse(app.exporter("gcode", JSON.stringify({ largeur_essai: 5 })));
 if (g.erreur) throw new Error(g.erreur);
 console.log(`G-code : ${Math.round(g.texte.length / 1024)} Ko`);
 
