@@ -9,9 +9,11 @@ Les nouveaux motifs des groupes sont ainsi pris en compte sans modifier web/.
 """
 
 import json
+import os
 import pathlib
 import shutil
 import sys
+import time
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 MOTIFS = ["trame/**/*.py", "motifs/*/motif.py", "motifs/*/aide.md",
@@ -45,6 +47,22 @@ def assembler_site(dossier):
         cible = site / f
         cible.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(RACINE / f, cible)
+    # numéro de version dans les noms des fichiers de la page : après une mise à jour, le
+    # navigateur recharge la nouvelle version au lieu de garder l'ancienne en cache
+    version = os.environ.get("GITHUB_SHA", str(int(time.time())))[:12]
+    remplacements = {
+        "index.html": [('src="app.js"', 'src="app.js?v=%s"' % version),
+                       ('href="style.css"', 'href="style.css?v=%s"' % version)],
+        "app.js": [('"./pyodide_trame.mjs"', '"./pyodide_trame.mjs?v=%s"' % version),
+                   ('"./robot.js"', '"./robot.js?v=%s"' % version)],
+    }
+    for nom, paires in remplacements.items():
+        fichier = site / "web" / nom
+        texte = fichier.read_text(encoding="utf-8")
+        for avant, apres in paires:
+            assert avant in texte, (nom, avant)
+            texte = texte.replace(avant, apres)
+        fichier.write_text(texte, encoding="utf-8")
     (site / "index.html").write_text(ACCUEIL, encoding="utf-8")
     (site / ".nojekyll").write_text("", encoding="utf-8")   # GitHub Pages : servir tel quel
 

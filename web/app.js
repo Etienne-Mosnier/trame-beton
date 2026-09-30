@@ -766,7 +766,8 @@ function telecharger(format) {
 }
 
 async function lireTexte(chemin) {
-  const reponse = await fetch("../" + chemin);
+  // « no-cache » : on redemande toujours au serveur si le fichier a changé (après une mise à jour)
+  const reponse = await fetch("../" + chemin, { cache: "no-cache" });
   if (!reponse.ok) throw new Error(`Fichier introuvable : ${chemin}`);
   return reponse.text();
 }
