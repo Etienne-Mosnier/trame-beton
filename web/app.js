@@ -645,6 +645,58 @@ function point(conteneur, nom, p) {
   conteneur.appendChild(bloc);
 }
 
+// paramètre « Liste » : un curseur par élément, « + Ajouter » et « × » pour retirer
+const LETTRES = "ABCDEFGHIJ";
+function liste(conteneur, nom, p) {
+  reglages.motif[nom] = [...p.valeur];
+  const bloc = document.createElement("div");
+  bloc.className = "reglage liste";
+  conteneur.appendChild(bloc);
+  const unite = p.unite ? " " + p.unite : "";
+  const dessiner = () => {
+    const v = reglages.motif[nom];
+    bloc.innerHTML = `<div class="ligne"><span>${nom.replaceAll("_", " ")}</span><output>${v.length}</output></div>
+      <p class="aide">${p.aide}</p>`;
+    v.forEach((x, i) => {
+      const titre = p.element ? `${p.element} ${LETTRES[i] ?? i + 1}` : `${i + 1}`;
+      const ligne = document.createElement("div");
+      ligne.className = "element";
+      ligne.innerHTML = `
+        <div class="ligne"><span>${titre}</span><output>${x}${unite}</output>
+          ${v.length > p.mini ? `<button type="button" class="retirer" title="Retirer">×</button>` : ""}</div>
+        <input type="range" min="${p.bornes[0]}" max="${p.bornes[1]}" step="${p.pas}" value="${x}">`;
+      const curseur = ligne.querySelector("input");
+      curseur.addEventListener("input", () => (ligne.querySelector("output").textContent = curseur.value + unite));
+      curseur.addEventListener("change", () => { v[i] = Number(curseur.value); calculer(); });
+      ligne.querySelector(".retirer")?.addEventListener("click", () => { v.splice(i, 1); dessiner(); calculer(); });
+      bloc.appendChild(ligne);
+    });
+    if (v.length < p.maxi) {
+      const ajouter = document.createElement("button");
+      ajouter.type = "button";
+      ajouter.className = "ajouter";
+      ajouter.textContent = `+ Ajouter ${p.element ? "une " + p.element.toLowerCase() : "un élément"}`;
+      ajouter.addEventListener("click", () => {
+        // nouvelle valeur : la plus éloignée de toutes celles qui existent déjà (pour des
+        // directions : l'angle le plus ouvert, les angles étant circulaires sur 180° ou 360°)
+        const [bas, haut] = p.bornes;
+        const circulaire = haut - bas === 180 || haut - bas === 360;
+        const ecart = (a, b) => circulaire ? Math.min(Math.abs(a - b), haut - bas - Math.abs(a - b)) : Math.abs(a - b);
+        let meilleur = bas, plusLoin = -1;
+        for (let x = bas; x <= haut; x += p.pas) {
+          const d = v.length ? Math.min(...v.map((y) => ecart(x, y))) : 0;
+          if (d > plusLoin) { plusLoin = d; meilleur = x; }
+        }
+        v.push(Math.round(meilleur / p.pas) * p.pas);
+        dessiner();
+        calculer();
+      });
+      bloc.appendChild(ajouter);
+    }
+  };
+  dessiner();
+}
+
 // paramètre « Choix » : une liste déroulante
 function choix(conteneur, nom, p) {
   reglages.motif[nom] = p.valeur;
@@ -707,6 +759,7 @@ function choisirMotif(id) {
     if (p.type === "point" || p.type === "points") point(conteneur, nom, p);
     else if (p.type === "choix") choix(conteneur, nom, p);
     else if (p.type === "case") caseACocher(conteneur, nom, p);
+    else if (p.type === "liste") liste(conteneur, nom, p);
     else curseur(conteneur, nom, p, reglages.motif);
   }
   dessinerPoints();

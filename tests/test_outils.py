@@ -6,7 +6,7 @@ import pytest
 from shapely.geometry import box
 
 from trame import outils
-from trame.parametres import Case, Choix, Parametre, Point, Points, valeurs
+from trame.parametres import Case, Choix, Liste, Parametre, Point, Points, valeurs
 
 FORME = box(0, 0, 400, 200)
 
@@ -67,3 +67,11 @@ def test_choix_case_points():
     assert v["attractions"] == [(100.0, 100.0), (1200.0, 50.0), (300.0, 300.0)]   # 3 au plus, sur la palette
     assert valeurs(P, {"attractions": []})["attractions"] == [(400.0, 400.0)]    # 1 au moins
     assert P["attractions"].vers_dict()["type"] == "points"
+
+
+def test_liste():
+    P = {"directions": Liste([160, 29, 135], mini=2, maxi=5, bornes=(0, 180), unite="°", element="Série")}
+    assert valeurs(P) == {"directions": [160, 29, 135]}
+    assert valeurs(P, {"directions": [10, 200, 30, 40, 50, 60]})["directions"] == [10, 180, 30, 40, 50]
+    assert valeurs(P, {"directions": [45]})["directions"] == [45, 160]            # 2 au moins
+    assert P["directions"].vers_dict()["type"] == "liste"

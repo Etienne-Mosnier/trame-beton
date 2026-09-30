@@ -12,7 +12,7 @@ import pytest
 from shapely.geometry import LineString, box
 
 from trame.moteur.chemin import calculer_chemin
-from trame.parametres import TYPES, Parametre, Points, valeurs
+from trame.parametres import TYPES, Liste, Parametre, Points, valeurs
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 # un motif = un dossier qui contient motif.py : motifs/exemple/ ou motifs/groupe_1/vagues/
@@ -87,6 +87,10 @@ def test_series_valides(nom, reglage):
             return getattr(p, reglage)
         if isinstance(p, Points):
             return p.valeur[:p.mini] if reglage == "mini" else p.valeur
+        if isinstance(p, Liste):
+            # le moins d'éléments possible à la borne basse, le plus possible à la borne haute
+            n = p.mini if reglage == "mini" else p.maxi
+            return [p.bornes[0 if reglage == "mini" else 1]] * n
         return p.valeur
 
     choix = {cle: essai(p) for cle, p in motif.PARAMETRES.items()}

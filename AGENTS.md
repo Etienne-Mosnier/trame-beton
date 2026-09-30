@@ -63,6 +63,8 @@ PARAMETRES = {
     "inverser": Case(False, aide="Inverser le sens des vagues"),
     "centre": Point(600, 400, aide="Centre des cercles"),
     "attractions": Points([(400, 400)], mini=0, maxi=8, aide="Points qui attirent les lignes"),
+    "directions": Liste([160, 29, 135], mini=2, maxi=5, bornes=(0, 180), unite="°", element="Série",
+                        aide="Direction des lignes de chaque série"),
     ...
 }
 
@@ -80,7 +82,7 @@ Règles :
   par un designer.
 - Tout paramètre qu'un étudiant voudrait régler dans l'aperçu doit être dans `PARAMETRES`,
   jamais écrit en dur dans le code.
-- **Tout ce que l'étudiant veut régler passe par ces 5 types** (`from trame.parametres import …`) ;
+- **Tout ce que l'étudiant veut régler passe par ces 6 types** (`from trame.parametres import …`) ;
   l'aperçu sait tous les afficher. **Tu n'as jamais besoin de modifier `web/` pour un motif.**
 
   | Type | Dans l'aperçu | Valeur dans `p["nom"]` |
@@ -90,6 +92,10 @@ Règles :
   | `Case(valeur, aide)` | une case oui / non | `True` / `False` |
   | `Point(x, y, aide)` | une poignée (boule noire) à déplacer sur la palette | `(x, y)` en mm |
   | `Points([(x, y), …], mini, maxi, aide)` | des poignées que l'on **ajoute** (double-clic sur la palette), **déplace** (clic) et **supprime** (double-clic sur le point) | liste de `(x, y)` en mm |
+  | `Liste([v, …], mini, maxi, bornes, unite, element, aide)` | un curseur par élément, **+ Ajouter** / **×** pour retirer | liste de nombres |
+
+  Pour un nombre de séries réglable (ajouter / retirer des séries), utilise une `Liste` avec
+  `element="Série"` (une valeur par série, ex. sa direction) : voir `motifs/exemple/`.
 
   Points en mm, repère palette (origine au coin, x le long du grand côté). Pour des points
   d'attraction, centres, départs… utilise `Point` ou `Points`, jamais deux curseurs x et y.
