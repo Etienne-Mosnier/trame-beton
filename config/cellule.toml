@@ -65,7 +65,10 @@ largeur_cordon_essai = 5.0            # mm, largeur du cordon de la maquette (mo
 longueur = 700.0                      # mm, course en X
 largeur = 700.0                       # mm, course en Y
 hauteur = 700.0                       # mm, course en Z
-vitesse = 20.0                        # mm/s pendant l'impression, À RÉGLER aux essais
+# Vitesse d'impression automatique, comme dans Orca : vitesse = débit / section du cordon d'essai,
+# plafonnée à vitesse_max. Un cordon plus fin s'imprime donc plus vite, à débit égal.
+debit_volumique_max = 125.0           # mm³/s que l'extrudeur pousse sans décrocher, À MESURER
+vitesse_max = 60.0                    # mm/s, vitesse d'impression maximale de la machine
 vitesse_deplacement = 60.0            # mm/s sans impression (approche, dégagement)
 hauteur_buse = 0.0                    # mm au-dessus du plateau pour la 1re couche (0 = couche d'essai)
 hauteur_approche = 20.0               # mm, la buse arrive et repart à cette hauteur au-dessus du chemin

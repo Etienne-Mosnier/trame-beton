@@ -135,6 +135,8 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
     try:
         reglages = json.loads(reglages_json or "{}")
         plateau = (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"])
+        # vitesse d'impression du robot : champ de l'aperçu, sinon celle de la config
+        vitesse = min(max(float(reglages.get("vitesse") or CONFIG["impression"]["vitesse"]), 1.0), 250.0)
         beton = valeurs(MOTEUR, reglages.get("moteur"))
         moteur = reglages_du_moteur(beton)
         motif = module_motif(motif_id)
@@ -171,12 +173,13 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
             "palette": plateau,
             "marge": 0.0,     # le contour est déjà placé avec sa marge ; ici : rester sur la palette
         })
-        q = quantites(r, beton["largeur_cordon"], moteur["amp"], CONFIG["impression"]["vitesse"])
+        q = quantites(r, beton["largeur_cordon"], moteur["amp"], vitesse)
         path = r["path"] or []
         _dernier.update(resultat=r, contour=forme, motif=motif_id, nom_contour=contour_nom,
                         lane=moteur["lane"], largeur=beton["largeur_cordon"],
-                        amp=moteur["amp"], palette=plateau)
+                        amp=moteur["amp"], palette=plateau, vitesse=vitesse)
         return json.dumps({
+            "vitesse": vitesse,
             "points_motif": points_motif,
             "palette": list(plateau),
             "contour": arrondir(forme.exterior.coords),
@@ -353,6 +356,7 @@ def placement(reglages_json):
 def reglages_impression():
     """Réglages d'impression, avec la hauteur de buse provisoire si elle n'est pas fixée."""
     imp = dict(CONFIG["impression"])
+    imp["vitesse"] = _dernier.get("vitesse", imp["vitesse"])     # vitesse choisie dans l'aperçu
     if not imp["hauteur_buse"]:
         # la hauteur de couche choisie dans l'aperçu (dernier calcul), sinon celle de la config
         imp["hauteur_buse"] = _dernier.get("amp", BETON["hauteur_couche"])
@@ -398,8 +402,12 @@ def maquette(largeur_essai):
     hauteur = (max(p[2] for p in path) + _dernier["amp"]) * k + m["hauteur_approche"]
     tient = min(xs) >= 0 and max(xs) <= m["longueur"] and min(ys) >= 0 and max(ys) <= m["largeur"] \
         and hauteur <= m["hauteur"]
+    largeur_m, hauteur_m = _dernier["largeur"] * k, _dernier["amp"] * k
+    vitesse = gcode.vitesse_impression(m, largeur_m, hauteur_m)
+    longueur = sum(math.dist(a, b) for a, b in zip(path, path[1:])) * k
     return json.dumps({"rapport": round(1 / k, 2), "taille": [round(max(xs) - min(xs)), round(max(ys) - min(ys))],
-                       "hauteur_couche": round(_dernier["amp"] * k, 2), "tient": tient})
+                       "hauteur_couche": round(hauteur_m, 2), "tient": tient,
+                       "vitesse": round(vitesse, 1), "duree": round(longueur / vitesse)})
 
 
 def exporter(format_fichier, options_json="{}"):

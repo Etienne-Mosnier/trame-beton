@@ -25,6 +25,13 @@ def echelle(largeur_finale, largeur_essai):
     return largeur_essai / largeur_finale
 
 
+def vitesse_impression(machine, largeur_essai, hauteur_essai):
+    """Vitesse d'impression (mm/s), comme Orca : débit volumique maximal / section du cordon,
+    plafonnée à la vitesse maximale de la machine."""
+    section = largeur_essai * hauteur_essai
+    return min(machine["vitesse_max"], machine["debit_volumique_max"] / section)
+
+
 def generer(path, machine, largeur, hauteur, largeur_essai, palette, entete=()):
     """Texte G-code de la maquette.
 
@@ -59,7 +66,8 @@ def generer(path, machine, largeur, hauteur, largeur_essai, palette, entete=()):
 
     section = math.pi * machine["diametre_filament"] ** 2 / 4
     e_par_mm = largeur_m * hauteur_m / section * machine["multiplicateur_extrusion"]
-    f_imp = machine["vitesse"] * 60           # G-code : mm/min
+    vitesse = vitesse_impression(machine, largeur_m, hauteur_m)
+    f_imp = vitesse * 60                       # G-code : mm/min
     f_dep = machine["vitesse_deplacement"] * 60
     longueur = sum(math.dist(a, b) for a, b in zip(points, points[1:]))
 
@@ -71,8 +79,10 @@ def generer(path, machine, largeur, hauteur, largeur_essai, palette, entete=()):
                % (round(1 / k, 2), largeur, hauteur, largeur_m, hauteur_m),
                "; palette %g x %g mm -> %g x %g mm, centree sur le plateau"
                % (palette[0], palette[1], palette[0] * k, palette[1] * k),
-               "; %d points, %.1f m de cordon, environ %d min a %g mm/s"
-               % (len(points), longueur / 1000, round(longueur / machine["vitesse"] / 60), machine["vitesse"]),
+               "; vitesse %.1f mm/s = debit %g mm3/s / section %.2f mm2 (plafond %g mm/s)"
+               % (vitesse, machine["debit_volumique_max"], largeur_m * hauteur_m, machine["vitesse_max"]),
+               "; %d points, %.1f m de cordon, environ %d min"
+               % (len(points), longueur / 1000, round(longueur / vitesse / 60)),
                "; E = %.4f mm par mm de cordon" % e_par_mm,
                "; Klipper [extruder] : max_extrude_cross_section doit valoir au moins %.1f (mm2)"
                % (largeur_m * hauteur_m * machine["multiplicateur_extrusion"] * 1.1),
