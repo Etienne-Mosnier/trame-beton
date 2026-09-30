@@ -6,8 +6,6 @@
  "contours/rectangle.svg",
  "motifs/exemple/aide.md",
  "motifs/exemple/motif.py",
- "motifs/groupe_1/point_d_attraction/aide.md",
- "motifs/groupe_1/point_d_attraction/motif.py",
  "trame/__init__.py",
  "trame/app.py",
  "trame/bilan.py",
