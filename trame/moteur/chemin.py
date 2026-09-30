@@ -35,6 +35,7 @@ from shapely.geometry import LineString, Point, Polygon
 import shapely
 from shapely.ops import substring
 
+from trame.moteur import couches as module_couches
 from trame.moteur import croisements
 from trame.moteur.croisements import en3d, supprimer_courts
 
@@ -47,6 +48,7 @@ REGLAGES = {
     "route": "series",   # "series", "chrono", "zigzag" ou "contour"
     "hop": 0.0,          # hauteur de levée pendant les sauts (mm)
     "zigzag": True,      # True = un seul chemin continu
+    "couches": 1,        # nombre de couches : la trame est réimprimée par-dessus (1 à 5)
 }
 
 
@@ -104,7 +106,8 @@ def position_bord(ctx, pt):
     cle = (round(pt[0], 6), round(pt[1], 6), round(pt[2], 6))
     if cle not in ctx["cache"]:
         l = ctx["bord"].project(Point(pt[0], pt[1]))
-        ctx["cache"][cle] = (l, math.dist(pt, point_bord(ctx, l)))
+        # distance mesurée à plat : un cordon posé en hauteur sur le bord reste « sur le bord »
+        ctx["cache"][cle] = (l, math.dist(pt[:2], point_bord(ctx, l)[:2]))
     return ctx["cache"][cle]
 
 
@@ -1043,6 +1046,27 @@ def calculer_chemin(series, contour=None, **reglages):
             if final and pts_i and math.dist(final[-1], pts_i[0]) < tol:
                 pts_i = pts_i[1:]
             final.extend(pts_i)
+
+        # --- couches 2, 3… : la même trame réimprimée par-dessus ----------------------
+        nb_couches = min(max(int(reg.get("couches", 1)), 1), 5)
+        ordre = [i for i, _, _ in seg_range if len(seg_pts[i]) > 1]
+        if nb_couches > 1 and ordre:
+            couloir = decaler_vers_exterieur(anneau, lane * (len(S) - 1)) if lane > 0 else anneau
+            imprimes = [w for i in ordre for w in waves[i]]
+            for couche in range(2, nb_couches + 1):
+                for rang, i in enumerate(ordre):
+                    trace = seg_pts[i]
+                    if rang == 0:
+                        # passage de la fin de la couche précédente au début de celle-ci
+                        trace = module_couches.liaison_de_couche(final[-1], trace[0], couloir) + list(trace[1:])
+                    pts_i = module_couches.monter(trace, imprimes, amp, reg["d"])
+                    imprimes.append(pts_i)
+                    waves[i].append(pts_i)
+                    if math.dist(final[-1][:2], pts_i[0][:2]) < tol:
+                        final.append(pts_i[0])          # montée verticale sur la couche du dessous
+                        pts_i = pts_i[1:]
+                    final.extend(pts_i)
+            log.append("   couches : %d (hauteur max %.1f mm)" % (nb_couches, max(p[2] for p in final)))
         chains = [final]
 
     if series_mode and lane > 0:

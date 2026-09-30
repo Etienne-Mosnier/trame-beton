@@ -19,6 +19,7 @@
  "trame/export/svg.py",
  "trame/moteur/__init__.py",
  "trame/moteur/chemin.py",
+ "trame/moteur/couches.py",
  "trame/moteur/croisements.py",
  "trame/outils.py",
  "trame/parametres.py",

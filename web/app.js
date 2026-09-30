@@ -305,7 +305,10 @@ function calculerRobot() {
   $("temps").step = fin / 1000;
   $("message-robot").textContent = d.simulation
     ? "Palette placée selon la calibration de simulation (pas encore relevée sur le robot)." : "";
+  // si l'animation était à la fin (ou pas lancée), on montre la nouvelle trame entière
+  if (!robot.lecture && (robot.finPrecedente === undefined || robot.t >= robot.finPrecedente)) robot.t = fin;
   robot.t = Math.min(robot.t, fin);
+  robot.finPrecedente = fin;
   poserRobot(robot.t);
 }
 
