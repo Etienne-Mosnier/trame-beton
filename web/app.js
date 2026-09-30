@@ -9,8 +9,8 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=7e1f6f62c517";
-import { creerBuse, creerRobot } from "./robot.js?v=7e1f6f62c517";
+import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=58868b4886d1";
+import { creerBuse, creerRobot } from "./robot.js?v=58868b4886d1";
 
 // une couleur par série, dans l'ordre d'impression
 const COULEURS = ["#6b7280", "#2563eb", "#16a34a", "#9333ea", "#d97706"]; // le rouge est gardé pour les problèmes
