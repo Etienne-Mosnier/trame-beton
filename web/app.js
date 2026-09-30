@@ -9,8 +9,8 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs";
-import { creerBuse, creerRobot } from "./robot.js";
+import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=25e69c6c07e1";
+import { creerBuse, creerRobot } from "./robot.js?v=25e69c6c07e1";
 
 // une couleur par série, dans l'ordre d'impression
 const COULEURS = ["#6b7280", "#2563eb", "#16a34a", "#9333ea", "#d97706"]; // le rouge est gardé pour les problèmes
@@ -766,7 +766,8 @@ function telecharger(format) {
 }
 
 async function lireTexte(chemin) {
-  const reponse = await fetch("../" + chemin);
+  // « no-cache » : on redemande toujours au serveur si le fichier a changé (après une mise à jour)
+  const reponse = await fetch("../" + chemin, { cache: "no-cache" });
   if (!reponse.ok) throw new Error(`Fichier introuvable : ${chemin}`);
   return reponse.text();
 }
