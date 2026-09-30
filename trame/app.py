@@ -105,24 +105,6 @@ def reglages_moteur():
 _contours = {}
 _dernier = {}   # dernier calcul, pour les exports
 
-# Les machines : le plateau sur lequel on imprime, et l'export qui va avec.
-MACHINES = {
-    "ur10e": {"nom": "Bras UR10e, palette %g × %g mm" % (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]),
-              "plateau": (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]),
-              "marge": CONFIG["palette"]["marge"], "vitesse": CONFIG["impression"]["vitesse"],
-              "export": "script"},
-    "cartesienne": {"nom": "Cartésienne, plateau %g × %g mm" % (CONFIG["cartesienne"]["longueur"],
-                                                                CONFIG["cartesienne"]["largeur"]),
-                    "plateau": (CONFIG["cartesienne"]["longueur"], CONFIG["cartesienne"]["largeur"]),
-                    "marge": CONFIG["cartesienne"]["marge"], "vitesse": CONFIG["cartesienne"]["vitesse"],
-                    "export": "gcode"},
-}
-
-
-def liste_machines():
-    return json.dumps({k: {"nom": m["nom"], "export": m["export"]} for k, m in MACHINES.items()})
-
-
 def lire_contour(texte, nom, marge=None, plateau=None):
     """Contour placé sur le plateau (la palette par défaut) avec la marge donnée ; gardé en mémoire."""
     palette = CONFIG["palette"]
@@ -152,9 +134,7 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
     """
     try:
         reglages = json.loads(reglages_json or "{}")
-        nom_machine = reglages.get("machine") if reglages.get("machine") in MACHINES else "ur10e"
-        machine = MACHINES[nom_machine]
-        plateau = machine["plateau"]
+        plateau = (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"])
         beton = valeurs(MOTEUR, reglages.get("moteur"))
         moteur = reglages_du_moteur(beton)
         motif = module_motif(motif_id)
@@ -173,11 +153,11 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
         # placement de la forme : on laisse la place des couloirs (qui dépend du nombre de
         # séries, connu seulement après un premier calcul du motif)
         largeur = beton["largeur_cordon"]
-        marge = marge_couloirs(largeur, 3, machine["marge"])
+        marge = marge_couloirs(largeur, 3)
         place = lire_contour(contour_texte, contour_nom, marge, plateau)
         series = motif.series(place["contour"], p)
         if len(series) != 3:
-            marge = marge_couloirs(largeur, len(series), machine["marge"])
+            marge = marge_couloirs(largeur, len(series))
             place = lire_contour(contour_texte, contour_nom, marge, plateau)
             series = motif.series(place["contour"], p)
         forme = place["contour"]
@@ -191,18 +171,16 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
             "palette": plateau,
             "marge": 0.0,     # le contour est déjà placé avec sa marge ; ici : rester sur la palette
         })
-        q = quantites(r, beton["largeur_cordon"], moteur["amp"], machine["vitesse"])
+        q = quantites(r, beton["largeur_cordon"], moteur["amp"], CONFIG["impression"]["vitesse"])
         path = r["path"] or []
         _dernier.update(resultat=r, contour=forme, motif=motif_id, nom_contour=contour_nom,
                         lane=moteur["lane"], largeur=beton["largeur_cordon"],
-                        amp=moteur["amp"], palette=plateau, machine=nom_machine)
+                        amp=moteur["amp"], palette=plateau)
         return json.dumps({
-            "machine": nom_machine,
             "points_motif": points_motif,
             "palette": list(plateau),
             "contour": arrondir(forme.exterior.coords),
-            "message_contour": place["message"] if nom_machine == "ur10e"
-                               else place["message"].replace("la palette", "le plateau"),
+            "message_contour": place["message"],
             "waves": [[arrondir(v) for v in serie] for serie in r["waves"]],
             "path": arrondir(path),
             "jumps": [arrondir(j) for j in r["jumps"]],
@@ -403,21 +381,41 @@ def programme_robot(d):
     return urscript.generer(d["resultat"]["path"] or [], repere, reglages, entete, simulation)
 
 
-def exporter(format_fichier):
+def maquette(largeur_essai):
+    """Rapport et taille de la maquette pour un cordon d'essai donné (texte JSON)."""
+    if not _dernier:
+        return json.dumps({"erreur": "Lance d'abord un calcul."})
+    try:
+        k = gcode.echelle(_dernier["largeur"], float(largeur_essai))
+    except (ValueError, TypeError):
+        return json.dumps({"erreur": "Largeur d'essai incorrecte."})
+    lx, ly = _dernier["palette"]
+    m = CONFIG["cartesienne"]
+    path = _dernier["resultat"]["path"] or [(0, 0, 0)]
+    # la trame réduite, centrée comme dans le G-code (centre de la palette au centre du plateau)
+    xs = [(p[0] - lx / 2) * k + m["longueur"] / 2 for p in path]
+    ys = [(p[1] - ly / 2) * k + m["largeur"] / 2 for p in path]
+    hauteur = (max(p[2] for p in path) + _dernier["amp"]) * k + m["hauteur_approche"]
+    tient = min(xs) >= 0 and max(xs) <= m["longueur"] and min(ys) >= 0 and max(ys) <= m["largeur"] \
+        and hauteur <= m["hauteur"]
+    return json.dumps({"rapport": round(1 / k, 2), "taille": [round(max(xs) - min(xs)), round(max(ys) - min(ys))],
+                       "hauteur_couche": round(_dernier["amp"] * k, 2), "tient": tient})
+
+
+def exporter(format_fichier, options_json="{}"):
     """Fichier du dernier calcul : DXF, SVG, programme du robot (script) ou G-code.
     Renvoie {"nom": ..., "texte": ...} ou {"erreur": ...}."""
     if not _dernier:
         return json.dumps({"erreur": "Rien à exporter : lance d'abord un calcul."})
     d = _dernier
-    if format_fichier in ("script", "gcode") and MACHINES[d["machine"]]["export"] != format_fichier:
-        return json.dumps({"erreur": "Cet export ne correspond pas à la machine choisie."})
+    options = json.loads(options_json or "{}")
     if format_fichier == "gcode":
         entete = ["Motif : %s, contour : %s" % (d["motif"], d["nom_contour"])]
-        for nom in PROVISOIRES:
-            entete.append("PROVISOIRE : %s" % nom)
         entete.append("A CALIBRER : diametre_filament / multiplicateur_extrusion (config/cellule.toml)")
+        essai = float(options.get("largeur_essai", CONFIG["cartesienne"]["largeur_cordon_essai"]))
         try:
-            texte = gcode.generer(d["resultat"]["path"] or [], CONFIG["cartesienne"], d["largeur"], d["amp"], entete)
+            texte = gcode.generer(d["resultat"]["path"] or [], CONFIG["cartesienne"], d["largeur"], d["amp"],
+                                  essai, d["palette"], entete)
         except ValueError as e:
             return json.dumps({"erreur": str(e)})
     elif format_fichier == "script":
