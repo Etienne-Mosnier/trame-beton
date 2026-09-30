@@ -21,13 +21,13 @@ def test_liste_motifs():
 
 def test_reglages_moteur_en_francais():
     reglages = json.loads(app.reglages_moteur())
-    assert set(reglages) == {"hauteur_bosse", "longueur_montée", "écart_couloirs", "couches"}
+    assert set(reglages) == {"largeur_cordon", "hauteur_couche", "couches"}
     assert all(r["aide"] for r in reglages.values())
 
 
 def test_calculer():
     texte = (CONTOURS / "haricot.dxf").read_text()
-    reglages = {"motif": {"espacement": 80}, "moteur": {"hauteur_bosse": 4}}
+    reglages = {"motif": {"espacement": 80}, "moteur": {"hauteur_couche": 4}}
     r = json.loads(app.calculer("exemple", json.dumps(reglages), texte, "haricot.dxf"))
     assert "erreur" not in r
     assert r["palette"] == [1200.0, 800.0]
@@ -49,3 +49,14 @@ def test_bilan_texte():
     texte = bilan("exemple", "rectangle.svg")
     assert "OK        Chemin continu" in texte
     assert "ATTENTION Virages assez doux (contour)" in texte
+
+
+def test_moteur_deduit_du_cordon():
+    assert app.reglages_du_moteur({"largeur_cordon": 12, "hauteur_couche": 6, "couches": 2}) == \
+        {"amp": 6, "d": 12, "lane": 12, "couches": 2}
+    texte = (CONTOURS / "rectangle.svg").read_text()
+    r = json.loads(app.calculer("exemple", json.dumps({"moteur": {"largeur_cordon": 12, "hauteur_couche": 6}}),
+                                texte, "rectangle.svg"))
+    assert r["beton"]["largeur_cordon"] == 12 and r["amp"] == 6
+    assert max(p[2] for p in r["path"]) == 12                  # deux cordons de 6 mm
+    assert "hauteur de couche (6 mm)" in json.loads(app.exporter("script"))["texte"]
