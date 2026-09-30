@@ -75,3 +75,12 @@ def test_liste():
     assert valeurs(P, {"directions": [10, 200, 30, 40, 50, 60]})["directions"] == [10, 180, 30, 40, 50]
     assert valeurs(P, {"directions": [45]})["directions"] == [45, 160]            # 2 au moins
     assert P["directions"].vers_dict()["type"] == "liste"
+
+
+def test_liste_a_plusieurs_champs():
+    P = {"series": Liste([{"angle": 160, "espacement": 50}, {"angle": 29, "espacement": 50}], mini=2, maxi=3,
+                         champs={"angle": Parametre(90, mini=0, maxi=180), "espacement": Parametre(50, mini=20, maxi=150)})}
+    v = valeurs(P, {"series": [{"angle": 200, "espacement": 10}, {"angle": 45}, {}, {"angle": 1}]})["series"]
+    assert v == [{"angle": 180, "espacement": 20}, {"angle": 45, "espacement": 50}, {"angle": 90, "espacement": 50}]
+    d = P["series"].vers_dict()
+    assert set(d["champs"]) == {"angle", "espacement"} and d["champs"]["angle"]["maxi"] == 180

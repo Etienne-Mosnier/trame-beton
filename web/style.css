@@ -207,9 +207,15 @@ p.erreur, span.erreur { color: var(--erreur); white-space: pre-wrap; }
   #panneau { top: auto; bottom: 8px; left: 8px; width: calc(100vw - 16px); height: 50vh; }
 }
 
-/* réglage « Liste » : un curseur par élément */
-.liste .element { margin: 8px 0 0 10px; padding-left: 10px; border-left: 2px solid var(--orange-pale); }
-.liste .element .ligne { font-weight: 500; align-items: center; }
-.liste .element .ligne output { margin-left: auto; }
-.liste .retirer { width: 20px; height: 20px; padding: 0; line-height: 1; border-radius: 50%; font-size: 13px; flex: none; }
+/* réglage « Liste » : une ligne par élément, ses curseurs côte à côte */
+.liste .element { margin: 8px 0 0; padding: 6px 0 0 10px; border-left: 2px solid var(--orange-pale); }
+.liste .titre-element { display: flex; align-items: center; justify-content: space-between; font-weight: 600; }
+.liste .champs { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 4px 12px; }
+.liste .champ { display: block; font-size: 11.5px; cursor: pointer; }
+.liste .champ .ligne { display: flex; justify-content: space-between; gap: 4px; font-weight: 500; white-space: nowrap; }
+.liste .champ .ligne span { overflow: hidden; text-overflow: ellipsis; }
+.liste .champ .ligne span::first-letter { text-transform: uppercase; }
+.liste .champ output { font-weight: 600; color: var(--orange-fonce); font-variant-numeric: tabular-nums; }
+.liste .champ input[type=range] { margin: 5px 0 2px; }
+.liste .retirer { width: 18px; height: 18px; padding: 0; line-height: 1; border-radius: 50%; font-size: 12px; flex: none; }
 .liste .ajouter { margin-top: 10px; border-style: dashed; }

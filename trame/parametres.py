@@ -126,11 +126,20 @@ class Points:
 
 
 class Liste:
-    """Une liste de nombres de longueur variable (entre 'mini' et 'maxi' éléments) : un curseur
-    par élément, que l'on ajoute ou retire dans l'aperçu. Ex. une direction par série.
+    """Une liste de longueur variable (entre 'mini' et 'maxi' éléments), que l'on complète ou
+    réduit dans l'aperçu (« + Ajouter » / « × »). Deux formes :
+
+    - des nombres : Liste([160, 29, 135], mini=2, maxi=5, bornes=(0, 180), unite="°")
+      -> un curseur par élément ; p["nom"] = [160, 29, 135]
+    - des éléments à plusieurs réglages, décrits par 'champs' (des Parametre) :
+      Liste([{"angle": 160, "espacement": 50}, …], mini=2, maxi=5, element="Série",
+            champs={"angle": Parametre(…), "espacement": Parametre(…)})
+      -> une ligne par élément, ses curseurs côte à côte ; p["nom"] = [{"angle": 160, …}, …]
+
     element : nom affiché de chaque élément (« Série » -> Série A, Série B… ; sinon numérotés)."""
 
-    def __init__(self, valeur, mini, maxi, bornes, unite="", aide="", element="", pas=None):
+    def __init__(self, valeur, mini, maxi, bornes=(0, 100), unite="", aide="", element="", pas=None,
+                 champs=None):
         self.valeur = list(valeur)
         self.mini = mini
         self.maxi = maxi
@@ -138,22 +147,33 @@ class Liste:
         self.unite = unite
         self.aide = aide
         self.element = element
-        entiers = all(isinstance(v, int) for v in (*self.valeur, *bornes))
+        self.champs = champs
+        entiers = all(isinstance(v, int) for v in bornes) and all(isinstance(v, int) for v in self.valeur)
         self.pas = pas if pas is not None else (1 if entiers else (bornes[1] - bornes[0]) / 100)
 
-    def borner(self, v):
+    def borner_element(self, x):
+        if self.champs:
+            x = x if isinstance(x, dict) else {}
+            return {nom: champ.borner(x.get(nom, champ.valeur)) for nom, champ in self.champs.items()}
         bas, haut = self.bornes
-        nombres = [min(max(type(self.valeur[0])(x), bas), haut) for x in v][:self.maxi]
+        return min(max(type(self.valeur[0])(x), bas), haut)
+
+    def borner(self, v):
+        elements = [self.borner_element(x) for x in v][:self.maxi]
         for x in self.valeur:                 # s'il en manque, on complète avec ceux de départ
-            if len(nombres) >= self.mini:
+            if len(elements) >= self.mini:
                 break
-            nombres.append(x)
-        return nombres
+            elements.append(self.borner_element(x))
+        return elements
 
     def vers_dict(self):
-        return {"type": "liste", "valeur": self.valeur, "mini": self.mini, "maxi": self.maxi,
-                "bornes": list(self.bornes), "pas": self.pas, "unite": self.unite,
-                "aide": self.aide, "element": self.element}
+        d = {"type": "liste", "valeur": self.valeur, "mini": self.mini, "maxi": self.maxi,
+             "aide": self.aide, "element": self.element}
+        if self.champs:
+            d["champs"] = {nom: champ.vers_dict() for nom, champ in self.champs.items()}
+        else:
+            d.update(bornes=list(self.bornes), pas=self.pas, unite=self.unite)
+        return d
 
 
 TYPES = (Parametre, Choix, Case, Point, Points, Liste)

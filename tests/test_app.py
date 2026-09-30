@@ -14,7 +14,8 @@ def test_liste_motifs():
     motifs = json.loads(app.liste_motifs())
     exemple = next(m for m in motifs if m["id"] == "exemple")
     assert exemple["nom"].startswith("Exemple")
-    assert exemple["parametres"]["espacement"]["valeur"] == 50
+    assert exemple["parametres"]["series"]["valeur"][0] == {"angle": 160, "espacement": 50}
+    assert set(exemple["parametres"]["series"]["champs"]) == {"angle", "espacement"}
     assert "série" in exemple["aide"]
     assert motifs[-1]["id"] == "exemple"       # les motifs des groupes d'abord
     groupe = next(m for m in motifs if m["id"] == "groupe_1/point_d_attraction")
@@ -29,7 +30,8 @@ def test_reglages_moteur_en_francais():
 
 def test_calculer():
     texte = (CONTOURS / "haricot.dxf").read_text()
-    reglages = {"motif": {"espacement": 80}, "moteur": {"hauteur_couche": 4}}
+    reglages = {"motif": {"series": [{"angle": 160, "espacement": 80}, {"angle": 29, "espacement": 80},
+                                     {"angle": 135, "espacement": 80}]}, "moteur": {"hauteur_couche": 4}}
     r = json.loads(app.calculer("exemple", json.dumps(reglages), texte, "haricot.dxf"))
     assert "erreur" not in r
     assert r["palette"] == [1200.0, 800.0]

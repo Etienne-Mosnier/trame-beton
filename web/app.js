@@ -387,7 +387,7 @@ function dessinerPortee(p) {
   // sur le côté de l'anneau (à 90° de la direction de la palette), pour ne pas la cacher
   const versPalette = new THREE.Vector2(paletteMobile.position.x, paletteMobile.position.y).normalize();
   texte.position.set(p.centre[0] + versPalette.y * p.rayon_ext, p.centre[1] - versPalette.x * p.rayon_ext, 40);
-  $("legende-portee").textContent = `Anneau vert : zone où la buse peut imprimer, de ${m(p.rayon_int)} à ` +
+  $("legende-portee").textContent = `Anneau orange : zone où la buse peut imprimer, de ${m(p.rayon_int)} à ` +
     `${m(p.rayon_ext)} m d'un centre décalé de ${Math.round(Math.hypot(...p.centre) / 10)} cm par rapport au ` +
     `pied du robot (la buse est déportée sur le côté).`;
   groupePortee.add(texte);
@@ -645,14 +645,42 @@ function point(conteneur, nom, p) {
   conteneur.appendChild(bloc);
 }
 
-// paramètre « Liste » : un curseur par élément, « + Ajouter » et « × » pour retirer
+// paramètre « Liste » : des éléments que l'on ajoute (« + Ajouter ») ou retire (« × ») ;
+// chaque élément a un curseur, ou plusieurs côte à côte s'il a des « champs »
 const LETTRES = "ABCDEFGHIJ";
+
+// valeur la plus éloignée de celles qui existent (angles : circulaires sur 180° ou 360°)
+function plusEloignee(existantes, bas, haut, pas) {
+  const circulaire = haut - bas === 180 || haut - bas === 360;
+  const ecart = (a, b) => circulaire ? Math.min(Math.abs(a - b), haut - bas - Math.abs(a - b)) : Math.abs(a - b);
+  let meilleur = bas, plusLoin = -1;
+  for (let x = bas; x <= haut; x += pas) {
+    const d = existantes.length ? Math.min(...existantes.map((y) => ecart(x, y))) : 0;
+    if (d > plusLoin) { plusLoin = d; meilleur = x; }
+  }
+  return Math.round(meilleur / pas) * pas;
+}
+
 function liste(conteneur, nom, p) {
-  reglages.motif[nom] = [...p.valeur];
+  reglages.motif[nom] = p.valeur.map((x) => (typeof x === "object" ? { ...x } : x));
   const bloc = document.createElement("div");
   bloc.className = "reglage liste";
   conteneur.appendChild(bloc);
-  const unite = p.unite ? " " + p.unite : "";
+
+  // un curseur compact : libellé, valeur, glissière
+  const petitCurseur = (libelle, valeur, q, changer) => {
+    const unite = q.unite ? " " + q.unite : "";
+    const zone = document.createElement("label");
+    zone.className = "champ";
+    zone.title = q.aide || "";
+    zone.innerHTML = `<span class="ligne"><span>${libelle}</span><output>${valeur}${unite}</output></span>
+      <input type="range" min="${q.mini}" max="${q.maxi}" step="${q.pas}" value="${valeur}">`;
+    const entree = zone.querySelector("input");
+    entree.addEventListener("input", () => (zone.querySelector("output").textContent = entree.value + unite));
+    entree.addEventListener("change", () => changer(Number(entree.value)));
+    return zone;
+  };
+
   const dessiner = () => {
     const v = reglages.motif[nom];
     bloc.innerHTML = `<div class="ligne"><span>${nom.replaceAll("_", " ")}</span><output>${v.length}</output></div>
@@ -661,13 +689,18 @@ function liste(conteneur, nom, p) {
       const titre = p.element ? `${p.element} ${LETTRES[i] ?? i + 1}` : `${i + 1}`;
       const ligne = document.createElement("div");
       ligne.className = "element";
-      ligne.innerHTML = `
-        <div class="ligne"><span>${titre}</span><output>${x}${unite}</output>
-          ${v.length > p.mini ? `<button type="button" class="retirer" title="Retirer">×</button>` : ""}</div>
-        <input type="range" min="${p.bornes[0]}" max="${p.bornes[1]}" step="${p.pas}" value="${x}">`;
-      const curseur = ligne.querySelector("input");
-      curseur.addEventListener("input", () => (ligne.querySelector("output").textContent = curseur.value + unite));
-      curseur.addEventListener("change", () => { v[i] = Number(curseur.value); calculer(); });
+      ligne.innerHTML = `<div class="titre-element"><span>${titre}</span>
+        ${v.length > p.mini ? `<button type="button" class="retirer" title="Retirer">×</button>` : ""}</div>
+        <div class="champs"></div>`;
+      const champs = ligne.querySelector(".champs");
+      if (p.champs) {
+        for (const [cle, q] of Object.entries(p.champs)) {
+          champs.appendChild(petitCurseur(cle.replaceAll("_", " "), x[cle], q, (val) => { x[cle] = val; calculer(); }));
+        }
+      } else {
+        const q = { mini: p.bornes[0], maxi: p.bornes[1], pas: p.pas, unite: p.unite };
+        champs.appendChild(petitCurseur("valeur", x, q, (val) => { v[i] = val; calculer(); }));
+      }
       ligne.querySelector(".retirer")?.addEventListener("click", () => { v.splice(i, 1); dessiner(); calculer(); });
       bloc.appendChild(ligne);
     });
@@ -677,17 +710,18 @@ function liste(conteneur, nom, p) {
       ajouter.className = "ajouter";
       ajouter.textContent = `+ Ajouter ${p.element ? "une " + p.element.toLowerCase() : "un élément"}`;
       ajouter.addEventListener("click", () => {
-        // nouvelle valeur : la plus éloignée de toutes celles qui existent déjà (pour des
-        // directions : l'angle le plus ouvert, les angles étant circulaires sur 180° ou 360°)
-        const [bas, haut] = p.bornes;
-        const circulaire = haut - bas === 180 || haut - bas === 360;
-        const ecart = (a, b) => circulaire ? Math.min(Math.abs(a - b), haut - bas - Math.abs(a - b)) : Math.abs(a - b);
-        let meilleur = bas, plusLoin = -1;
-        for (let x = bas; x <= haut; x += p.pas) {
-          const d = v.length ? Math.min(...v.map((y) => ecart(x, y))) : 0;
-          if (d > plusLoin) { plusLoin = d; meilleur = x; }
+        // un angle prend la direction la plus ouverte ; les autres réglages copient le dernier élément
+        if (p.champs) {
+          const nouveau = {};
+          for (const [cle, q] of Object.entries(p.champs)) {
+            const circulaire = q.maxi - q.mini === 180 || q.maxi - q.mini === 360;
+            nouveau[cle] = circulaire ? plusEloignee(v.map((e) => e[cle]), q.mini, q.maxi, q.pas)
+                                      : (v.at(-1)?.[cle] ?? q.valeur);
+          }
+          v.push(nouveau);
+        } else {
+          v.push(plusEloignee(v, p.bornes[0], p.bornes[1], p.pas));
         }
-        v.push(Math.round(meilleur / p.pas) * p.pas);
         dessiner();
         calculer();
       });

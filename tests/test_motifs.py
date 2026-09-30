@@ -88,8 +88,10 @@ def test_series_valides(nom, reglage):
         if isinstance(p, Points):
             return p.valeur[:p.mini] if reglage == "mini" else p.valeur
         if isinstance(p, Liste):
-            # le moins d'éléments possible à la borne basse, le plus possible à la borne haute
+            # le moins d'éléments possible aux bornes basses, le plus possible aux bornes hautes
             n = p.mini if reglage == "mini" else p.maxi
+            if p.champs:
+                return [{k: getattr(c, reglage) for k, c in p.champs.items()}] * n
             return [p.bornes[0 if reglage == "mini" else 1]] * n
         return p.valeur
 
