@@ -33,7 +33,7 @@ body:
       description: |
         Un nom court, en minuscules, sans accents ni espaces (ex. spirale, reseau_cellules).
         Pour une variante, ajoute de quel motif partir (ex. « spirale_dense, à partir de spirale »).
-        Pour modifier, le nom du motif tel qu'il est (ex. point_d_attraction).
+        Pour modifier, le nom du motif tel qu'il est (ex. spirale).
       placeholder: "spirale"
     validations:
       required: true

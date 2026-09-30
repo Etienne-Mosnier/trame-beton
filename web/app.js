@@ -683,7 +683,8 @@ function liste(conteneur, nom, p) {
 
   const dessiner = () => {
     const v = reglages.motif[nom];
-    bloc.innerHTML = `<div class="ligne"><span>${nom.replaceAll("_", " ")}</span><output>${v.length}</output></div>
+    const titre = p.element ? p.element + "s" : nom.replaceAll("_", " ");   // « Série » -> « Séries »
+    bloc.innerHTML = `<div class="ligne"><span>${titre}</span><output>${v.length}</output></div>
       <p class="aide">${p.aide}</p>`;
     v.forEach((x, i) => {
       const titre = p.element ? `${p.element} ${LETTRES[i] ?? i + 1}` : `${i + 1}`;

@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Design, Innovation Matériaux et Fabrication Numérique : guide étudiant</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+  :root { --noir: #111; --gris: #6b6b6b; --trait: #e7e5e4; --orange: #f97316; --orange-fonce: #c2410c;
+          --voile: #fff7ed; --pale: #ffedd5; --erreur: #dc2626; }
+  @page {
+    size: A4; margin: 18mm 17mm 20mm;
+    @bottom-left { content: "Design, Innovation Matériaux et Fabrication Numérique · Guide étudiant";
+                   font: 7.5pt "Bricolage Grotesque"; color: #6b6b6b; }
+    @bottom-right { content: counter(page); font: 600 8pt "Bricolage Grotesque"; color: #111; }
+  }
+  @page couverture { @bottom-left { content: none; } @bottom-right { content: none; } }
+  * { box-sizing: border-box; }
+  html { font-family: "Bricolage Grotesque", sans-serif; font-size: 9.6pt; line-height: 1.45; color: var(--noir); }
+  body { margin: 0; }
+  code, .url { font-family: "JetBrains Mono", monospace; font-size: 0.86em; background: var(--voile);
+               padding: 0 3px; border-radius: 3px; }
+  b, strong { font-weight: 700; }
+  h1 { font-size: 22pt; line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 3mm; font-weight: 800; }
+  h2 { font-size: 12pt; margin: 7mm 0 2.5mm; font-weight: 700; display: flex; gap: 2.5mm; align-items: baseline;
+       break-after: avoid; }
+  h2 .n { color: var(--orange); font-size: 9.5pt; font-variant-numeric: tabular-nums; }
+  h3 { font-size: 10pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p { margin: 0 0 2mm; }
+  ul, ol { margin: 0 0 2mm; padding-left: 5mm; }
+  li { margin: 0.6mm 0; }
+  .partie { break-before: page; }
+  .surtitre { font-size: 7.5pt; letter-spacing: 0.16em; text-transform: uppercase; color: var(--orange); font-weight: 700; margin: 0 0 1.5mm; }
+  .entete-partie { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1.5px solid var(--noir);
+                   padding-bottom: 3mm; margin-bottom: 4mm; }
+  .entete-partie .grand { font-size: 34pt; font-weight: 800; color: var(--orange); line-height: 0.9; }
+  .chapo { font-size: 10.5pt; max-width: 150mm; }
+
+  /* couverture */
+  .couverture { page: couverture; height: 257mm; display: flex; flex-direction: column; }
+  .couverture .haut { display: flex; justify-content: space-between; font-size: 7.5pt; letter-spacing: 0.18em; text-transform: uppercase; }
+  .couverture h1 { font-size: 34pt; margin-top: 22mm; }
+  .couverture h1 em { font-style: normal; color: var(--orange); }
+  .couverture .parties { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5mm; margin-top: 14mm; }
+  .couverture .parties div { border-top: 1.5px solid var(--noir); padding-top: 3mm; font-size: 8.5pt; }
+  .couverture .parties b { display: block; color: var(--orange); font-size: 14pt; margin-bottom: 1mm; }
+  .couverture .pied { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; font-size: 8pt; color: var(--gris); }
+  .couverture .pied .trame { width: 60mm; }
+
+  /* encadrés */
+  .note { background: var(--voile); border-radius: 3mm; padding: 3mm 4mm; margin: 3mm 0; break-inside: avoid; }
+  .note.alerte { background: #fff; border: 1.5px solid var(--orange); }
+  .note h4 { margin: 0 0 1mm; font-size: 9.6pt; }
+  .note p:last-child, .note ul:last-child { margin-bottom: 0; }
+  .coche { list-style: none; padding-left: 0; break-inside: avoid; }
+  .coche li::before { content: "☐ "; }
+
+  /* figures annotées */
+  figure { margin: 3mm 0; break-inside: avoid; }
+  .annote { position: relative; display: block; }
+  .annote img { width: 100%; display: block; border-radius: 2.5mm; border: 1px solid var(--trait); }
+  .cadre { position: absolute; border: 1.6px solid var(--orange); border-radius: 1.5mm; }
+  .cadre b, .pastille { position: absolute; width: 5mm; height: 5mm; border-radius: 50%; background: var(--orange); color: #fff;
+            font-size: 7.5pt; font-weight: 700; display: flex; align-items: center; justify-content: center;
+            border: 1.2px solid #fff; box-shadow: 0 0 0 0.6px var(--orange); }
+  .cadre b { left: -2.8mm; top: -2.8mm; }
+  .cadre.droite b { left: auto; right: -2.8mm; }
+  .pastille { position: static; display: inline-flex; flex: none; margin-right: 1.8mm; vertical-align: -1.2mm; }
+  .legendes { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6mm 6mm; margin: 2.5mm 0 3mm; font-size: 8.8pt; break-inside: avoid; }
+  .legendes.une { grid-template-columns: 1fr; }
+  .legendes div { display: flex; align-items: flex-start; }
+  .cote { display: grid; grid-template-columns: 62mm 1fr; gap: 6mm; align-items: start; break-inside: avoid; margin: 3mm 0; }
+  .cote.large { grid-template-columns: 78mm 1fr; }
+  .cote figure { margin: 0; }
+  .cote .legendes { grid-template-columns: 1fr; margin-top: 0; }
+
+  /* schéma de principe */
+  .flux { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2mm; margin: 4mm 0 1mm; text-align: center; font-size: 8pt; }
+  .flux div { border: 1.2px solid var(--noir); border-radius: 2.5mm; padding: 2.5mm 1mm; }
+  .flux div b { display: block; font-size: 10pt; }
+  .flux .fort { background: var(--orange); border-color: var(--orange); color: #fff; }
+  .flux .noir { background: var(--noir); color: #fff; }
+  .boucle { text-align: center; font-size: 8pt; color: var(--orange-fonce); margin-bottom: 3mm; }
+
+  .vocab { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 8mm; }
+  .vocab div { border-top: 1px solid var(--trait); padding-top: 1.5mm; break-inside: avoid; }
+  .vocab b { display: block; }
+  table { border-collapse: collapse; width: 100%; font-size: 8.8pt; margin: 2mm 0 3mm; break-inside: avoid; }
+  td, th { text-align: left; vertical-align: top; padding: 1.8mm 2mm; border-top: 1px solid var(--trait); }
+  th { font-weight: 700; width: 38%; }
+  .deux { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .exemple-demande div { border-radius: 2.5mm; padding: 3mm; font-size: 8.8pt; }
+  .mauvais { background: #f5f5f4; }
+  .bon { background: var(--voile); border: 1.2px solid var(--orange); }
+</style>
+</head>
+<body>
+
+<!-- ============================ COUVERTURE ============================ -->
+<section class="couverture">
+  <div class="haut"><span>ESAD Orléans</span><span>Impression béton · UR10e</span></div>
+  <h1>Design, Innovation Matériaux<br>et Fabrication Numérique<br><em>guide étudiant</em></h1>
+  <div class="parties">
+    <div><b>1</b>Compte GitHub, préalable à la première séance</div>
+    <div><b>2</b>L'aperçu : tracé, motif, béton, robot</div>
+    <div><b>3</b>Évolution du motif avec Copilot</div>
+    <div><b>4</b>Exports, maquette et impression</div>
+    <div><b>5</b>L'algorithme dans Grasshopper</div>
+  </div>
+  <div class="pied">
+    <span>Aperçu : <span class="url">etienne-mosnier.github.io/trame-beton</span><br>
+      Projet : <span class="url">github.com/Etienne-Mosnier/trame-beton</span></span>
+    <svg class="trame" viewBox="0 0 120 80" aria-hidden="true">
+      <g fill="none" stroke-width="1.6">
+        <g stroke="#111"><path d="M0 70 L120 20 M0 50 L120 0 M0 90 L120 40 M20 80 L120 60"/></g>
+        <g stroke="#f97316"><path d="M10 0 L70 80 M40 0 L100 80 M70 0 L130 80 M-20 0 L40 80"/></g>
+      </g>
+    </svg>
+  </div>
+</section>
+
+<!-- ============================ INTRODUCTION ============================ -->
+<section class="partie">
+  <p class="surtitre">Introduction</p>
+  <h1>Principe de fonctionnement</h1>
+  <p class="chapo">L'atelier ne demande aucune compétence en programmation. Chaque groupe formule ses intentions
+    par écrit ; <b>GitHub Copilot</b>, un agent de programmation assisté par intelligence artificielle, écrit
+    le motif du groupe en conséquence ; le résultat est évalué dans l'<b>aperçu</b>, une application web qui
+    affiche la trame sur la palette et simule son impression par le robot.</p>
+
+  <div class="flux">
+    <div><b>Idée</b>intention</div>
+    <div><b>Issue</b>demande écrite</div>
+    <div class="fort"><b>Copilot</b>programmation</div>
+    <div><b>Pull request</b>+ aperçu, évaluation</div>
+    <div><b>Fusion</b>Merge</div>
+    <div class="noir"><b>Béton</b>impression</div>
+  </div>
+  <p class="boucle">↺ ajustements : « @copilot … », autant d'itérations que nécessaire</p>
+
+  <div class="note">
+    <h4>Organisation du projet</h4>
+    <p>Chaque groupe dispose de son propre dossier de motifs, et Copilot n'est autorisé à modifier que ce
+      dossier. Le moteur de calcul des croisements, la commande du robot et l'application elle-même sont
+      protégés et relèvent de l'enseignant : les modifications d'un groupe ne peuvent pas affecter le travail
+      des autres groupes.</p>
+  </div>
+
+  <h2>Vocabulaire</h2>
+  <div class="vocab">
+    <div><b>Tracé de base</b>Contour fermé (SVG ou DXF) qui délimite la trame sur la palette.</div>
+    <div><b>Motif</b>Générateur de trame propre à un groupe : il produit les lignes à imprimer à l'intérieur du tracé. Un groupe peut en développer plusieurs.</div>
+    <div><b>Série</b>Ensemble de lignes imprimées en une fois. Les séries sont imprimées successivement (A, puis B, puis C…) ; chacune passe au-dessus des précédentes.</div>
+    <div><b>Bosse</b>Au croisement d'une série déjà imprimée, la buse s'élève d'une hauteur de couche pour la franchir ; les bosses s'additionnent quand plusieurs cordons sont empilés.</div>
+    <div><b>Couche</b>Réimpression de toute la trame par-dessus elle-même (1 à 5 couches) pour l'épaissir.</div>
+    <div><b>Une seule ligne</b>Quel que soit le motif, la buse imprime un seul trait continu : les lignes sont reliées en zigzag le long du bord, les courbes fermées emboîtées en spirale.</div>
+    <div><b>Issue</b>Demande formulée par écrit sur GitHub, décrivant le résultat attendu. C'est la consigne transmise à Copilot.</div>
+    <div><b>Pull request (PR)</b>Proposition de modification produite par Copilot, accompagnée d'un aperçu permettant de l'évaluer.</div>
+    <div><b>Merge (fusion)</b>Validation de la pull request : le motif est intégré à l'aperçu principal.</div>
+    <div><b>Aperçu</b>Application web du projet : <span class="url">etienne-mosnier.github.io/trame-beton</span></div>
+  </div>
+</section>
+
+<!-- ============================ PARTIE 1 ============================ -->
+<section class="partie">
+  <p class="surtitre">Partie 1 · Préalable à la première séance</p>
+  <div class="entete-partie"><h1>Compte GitHub</h1><span class="grand">1</span></div>
+  <p class="chapo">Trois démarches sont à effectuer dès réception de ce guide : la vérification du statut étudiant
+    par GitHub peut demander plusieurs jours.</p>
+
+  <h2><span class="n">1.1</span>Créer un compte GitHub</h2>
+  <p>Rendez-vous sur <span class="url">github.com/signup</span> et suivez la procédure. Un compte existant peut être conservé.</p>
+  <ul>
+    <li>Choisissez un identifiant sobre (par exemple <code>prenom-nom</code>) : il devra être communiqué à l'enseignant.</li>
+    <li>Utilisez de préférence votre adresse électronique de l'école, qui facilite la vérification du statut étudiant.</li>
+  </ul>
+
+  <h2><span class="n">1.2</span>Demander le GitHub Student Developer Pack</h2>
+  <p>Cette offre gratuite réservée aux étudiants comprend GitHub Copilot, indispensable pour l'atelier.</p>
+  <figure><img src="img/student_pack.jpg" style="width:85%; border-radius:2.5mm"></figure>
+  <div class="legendes une"><div><span class="pastille">1</span><span>Sur <span class="url">education.github.com/pack</span>, connectez-vous puis sélectionnez <b>Sign up for Student Developer Pack</b>.</span></div></div>
+  <ul>
+    <li>Indiquez <b>ESAD Orléans</b> comme établissement.</li>
+    <li>Un justificatif est demandé : photographie lisible et datée de la carte étudiante ou du certificat de scolarité.</li>
+    <li>La validation est notifiée par courriel, généralement sous quelques jours. En cas de refus, informez-en l'enseignant sans délai.</li>
+  </ul>
+
+  <h2><span class="n">1.3</span>Rejoindre le projet</h2>
+  <ul>
+    <li>Communiquez votre identifiant GitHub à l'enseignant.</li>
+    <li>Vous recevrez un courriel intitulé « Etienne-Mosnier invited you to collaborate on trame-beton ». Acceptez l'invitation au moyen du bouton <b>Accept invitation</b>. L'invitation expire après 7 jours.</li>
+  </ul>
+  <div class="note">
+    <h4>Vérifications avant la première séance</h4>
+    <ul class="coche">
+      <li>la connexion à GitHub fonctionne (identifiant, mot de passe et, le cas échéant, double authentification) ;</li>
+      <li>le courriel de validation du Student Developer Pack a été reçu ;</li>
+      <li>l'invitation a été acceptée et le projet est accessible à l'adresse <span class="url">github.com/Etienne-Mosnier/trame-beton</span>.</li>
+    </ul>
+    <p>La disponibilité de Copilot sur chaque compte sera vérifiée collectivement lors de la première séance.</p>
+  </div>
+</section>
+
+<!-- ============================ PARTIE 2 ============================ -->
+<section class="partie">
+  <p class="surtitre">Partie 2</p>
+  <div class="entete-partie"><h1>L'aperçu</h1><span class="grand">2</span></div>
+  <p class="chapo">L'aperçu est une application web qui ne nécessite aucune installation. Ouvrez
+    <span class="url">etienne-mosnier.github.io/trame-beton</span> dans un navigateur récent (Chrome, Firefox, Safari).
+    Le premier chargement demande une dizaine de secondes, le temps de démarrer l'environnement de calcul et de
+    charger le robot. Le panneau se lit de haut en bas, dans l'ordre du travail : <b>01 Tracé de base</b>,
+    <b>02 Motif</b>, <b>03 Béton</b>, <b>04 Vue</b>, <b>05 Robot</b>, <b>06 Exports</b>, <b>07 Bilan</b>.</p>
+
+  <h2><span class="n">2.1</span>Présentation de l'interface</h2>
+  <figure class="annote"><img src="img/interface.jpg">
+    <span class="cadre" style="left:1%;top:12%;width:20.8%;height:86.4%"><b>1</b></span>
+    <span class="cadre droite" style="left:1%;top:1.7%;width:20.7%;height:9.3%"><b>2</b></span>
+    <span class="cadre droite" style="left:20.4%;top:96.8%;width:1.8%;height:2.2%"><b>3</b></span>
+    <span class="cadre" style="left:83.5%;top:1.6%;width:15.6%;height:8.3%"><b>4</b></span>
+    <span class="cadre" style="left:42%;top:37.6%;width:27%;height:26.4%"><b>5</b></span>
+    <span class="cadre" style="left:41%;top:61.5%;width:14%;height:21%"><b>6</b></span>
+    <span class="cadre" style="left:67%;top:82.4%;width:13.4%;height:3.4%"><b>7</b></span>
+    <span class="cadre" style="left:89.8%;top:72%;width:4%;height:5.5%"><b>8</b></span>
+  </figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span><b>Panneau</b> : tous les réglages, à faire défiler, section par section.</span></div>
+    <div><span class="pastille">2</span><span><b>Titre</b> : le saisir pour déplacer le panneau flottant.</span></div>
+    <div><span class="pastille">3</span><span><b>Coin</b> : le tirer pour agrandir ou réduire le panneau.</span></div>
+    <div><span class="pastille">4</span><span><b>Légende</b> : une couleur par série, dans l'ordre d'impression.</span></div>
+    <div><span class="pastille">5</span><span><b>Palette</b> (1200 × 800 mm) et trame. Glisser pour orienter la vue, molette pour zoomer.</span></div>
+    <div><span class="pastille">6</span><span><b>Robot UR10e</b> et ses axes X et Y.</span></div>
+    <div><span class="pastille">7</span><span><b>Anneau orange</b> : zone où la buse peut imprimer. Les parties de palette en rouge sont hors de portée.</span></div>
+    <div><span class="pastille">8</span><span><b>Boussole</b> : orientation nord-sud de l'atelier.</span></div>
+  </div>
+
+  <h2><span class="n">2.2</span>Le tracé de base</h2>
+  <div class="cote">
+    <figure class="annote"><img src="img/trace.jpg">
+      <span class="cadre" style="left:3.3%;top:18.4%;width:93.3%;height:11.6%"><b>1</b></span>
+      <span class="cadre" style="left:3.3%;top:30.9%;width:93.3%;height:11.6%"><b>2</b></span>
+      <span class="cadre" style="left:3.3%;top:44.9%;width:93.3%;height:32.5%"><b>3</b></span>
+      <span class="cadre" style="left:3.3%;top:79.8%;width:93.3%;height:12.8%"><b>4</b></span>
+    </figure>
+    <div>
+      <p>On commence par le contour qui délimite la trame.</p>
+      <div class="legendes">
+        <div><span class="pastille">1</span><span>Choix d'un tracé prédéfini.</span></div>
+        <div><span class="pastille">2</span><span><b>Import</b> d'un tracé personnel au format SVG (Illustrator, Inkscape) ou DXF (Rhino, AutoCAD).</span></div>
+        <div><span class="pastille">3</span><span><b>Taille</b> : 100 % correspond à la plus grande taille qui tient sur la palette, marge et liaisons comprises. Impossible de dépasser. La taille obtenue s'affiche en millimètres.</span></div>
+        <div><span class="pastille">4</span><span>Compte rendu : dimensions d'origine, rotation éventuelle, taille retenue.</span></div>
+      </div>
+      <div class="note"><h4>Préparation du fichier</h4>
+        <ul>
+          <li>une seule forme fermée : seul le plus grand contour fermé est pris en compte ;</li>
+          <li>dessin en millimètres ; un fichier importé garde sa taille réelle s'il tient, puis se règle avec le curseur <b>Taille</b> ;</li>
+          <li>pas d'évidement : les formes intérieures sont ignorées.</li>
+        </ul></div>
+    </div>
+  </div>
+
+  <h2><span class="n">2.3</span>Le motif</h2>
+  <div class="cote">
+    <figure class="annote"><img src="img/motif.jpg">
+      <span class="cadre" style="left:3.3%;top:10.9%;width:93.3%;height:7.5%"><b>1</b></span>
+      <span class="cadre" style="left:3.3%;top:53.6%;width:93.3%;height:13.5%"><b>2</b></span>
+      <span class="cadre droite" style="left:88.9%;top:69.0%;width:7.8%;height:5.1%"><b>3</b></span>
+      <span class="cadre" style="left:3.3%;top:82.2%;width:93.3%;height:7.5%"><b>4</b></span>
+      <span class="cadre" style="left:3.3%;top:90.6%;width:36.6%;height:5.2%"><b>5</b></span>
+    </figure>
+    <div>
+      <p>La liste <b>Motif</b> regroupe les motifs par groupe. Le motif <b>Exemple</b> (séries de lignes droites)
+        montre seulement ce qu'est un motif : celui d'un groupe peut reposer sur une logique entièrement différente
+        (spirale, cellules, courbes attirées par des points…).</p>
+      <div class="legendes">
+        <div><span class="pastille">1</span><span>Choix du motif. Chaque réglage est accompagné d'une description ; l'aperçu est recalculé au relâchement du curseur.</span></div>
+        <div><span class="pastille">2</span><span>Une <b>série</b> par ligne, dans l'ordre d'impression, avec ses propres réglages côte à côte (ici l'angle et l'espacement de ses lignes).</span></div>
+        <div><span class="pastille">3</span><span><b>×</b> retire la série (2 au moins).</span></div>
+        <div><span class="pastille">4</span><span><b>+ Ajouter une série</b> (5 au plus) : elle prend l'angle le plus ouvert par rapport aux autres.</span></div>
+        <div><span class="pastille">5</span><span><b>Aide du motif</b> : fonctionnement et rôle de chaque réglage, rédigés par Copilot.</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note">
+    <h4>Points de contrôle sur la palette</h4>
+    <p>Certains motifs comportent des points (boules noires cerclées d'orange) manipulables directement dans la vue :
+      <b>double-clic</b> sur la palette pour en ajouter, <b>clic</b> puis glisser les flèches pour en déplacer un,
+      <b>double-clic</b> sur un point (ou touche Suppr) pour le supprimer.</p>
+    <p><b>Recommandation</b> : les curseurs ne sont pas mémorisés. Consignez les valeurs retenues : elles pourront être
+      reprises dans une demande à Copilot, par exemple pour en faire les valeurs par défaut.</p>
+  </div>
+
+  <h2><span class="n">2.4</span>Béton et couches</h2>
+  <div class="cote">
+    <figure class="annote"><img src="img/beton.jpg">
+      <span class="cadre" style="left:3.3%;top:15.7%;width:93.3%;height:27.1%"><b>1</b></span>
+      <span class="cadre" style="left:3.3%;top:44.6%;width:93.3%;height:22.3%"><b>2</b></span>
+      <span class="cadre" style="left:3.3%;top:68.7%;width:93.3%;height:22.3%"><b>3</b></span>
+    </figure>
+    <div>
+      <div class="legendes">
+        <div><span class="pastille">1</span><span><b>Largeur du cordon</b>. La longueur des montées aux croisements et l'écart entre les liaisons le long du bord en sont déduits automatiquement.</span></div>
+        <div><span class="pastille">2</span><span><b>Hauteur de couche</b> : c'est la hauteur d'une bosse.</span></div>
+        <div><span class="pastille">3</span><span><b>Couches</b> (1 à 5) : toute la trame est réimprimée par-dessus elle-même. Aux croisements, les bosses s'additionnent.</span></div>
+      </div>
+      <p>Ces valeurs dépendent du matériau réel : elles ne sont à modifier qu'en concertation avec les étudiants
+        ingénieurs. Élargir le cordon écarte les liaisons : la forme se réduit d'elle-même pour rester sur la palette.</p>
+    </div>
+  </div>
+  <figure class="annote"><img src="img/couches.jpg">
+    <span class="cadre" style="left:45.5%;top:17.5%;width:28.7%;height:33.8%"><b>1</b></span>
+  </figure>
+  <div class="legendes une"><div><span class="pastille">1</span><span>Trois couches d'une trame à trois séries (bosses exagérées × 3) : à chaque couche, chaque série se pose sur la précédente et monte au-dessus des croisements.</span></div></div>
+
+  <h2><span class="n">2.5</span>Vue</h2>
+  <div class="cote">
+    <figure class="annote"><img src="img/vue.jpg">
+      <span class="cadre" style="left:3.3%;top:32.3%;width:93.3%;height:19.2%"><b>1</b></span>
+      <span class="cadre" style="left:3.3%;top:56.6%;width:93.3%;height:24.0%"><b>2</b></span>
+    </figure>
+    <div class="legendes">
+      <div><span class="pastille">1</span><span><b>Dessus</b> ou <b>3D</b> : choix du point de vue.</span></div>
+      <div><span class="pastille">2</span><span><b>Bosses exagérées</b> : amplification visuelle des bosses, sans effet sur le motif ni sur l'impression.</span></div>
+    </div>
+  </div>
+
+  <h2><span class="n">2.6</span>Robot et simulation de l'impression</h2>
+  <div class="cote">
+    <figure class="annote"><img src="img/robot.jpg">
+      <span class="cadre" style="left:3.3%;top:8.6%;width:93.3%;height:6.2%"><b>1</b></span>
+      <span class="cadre" style="left:3.3%;top:43.0%;width:93.3%;height:6.2%"><b>2</b></span>
+      <span class="cadre" style="left:3.3%;top:49.8%;width:93.3%;height:7.6%"><b>3</b></span>
+      <span class="cadre" style="left:3.3%;top:64.4%;width:93.3%;height:28.7%"><b>4</b></span>
+    </figure>
+    <div class="legendes">
+      <div><span class="pastille">1</span><span><b>Vitesse d'impression</b> de la buse, constante (72 mm/s par défaut). La durée, l'animation et le programme du robot la suivent.</span></div>
+      <div><span class="pastille">2</span><span><b>Lecture</b> lance l'animation ; la liste en règle la vitesse (× 30 : trente fois la vitesse réelle).</span></div>
+      <div><span class="pastille">3</span><span><b>Temps</b> : position de la simulation à un instant donné.</span></div>
+      <div><span class="pastille">4</span><span><b>Contrôles du robot</b> : portée, limites des articulations, positions délicates du poignet, du coude et de l'épaule, collisions. Tous doivent être validés (✓) ; pendant l'animation, le bras se teinte en rouge sur un point en défaut.</span></div>
+    </div>
+  </div>
+  <figure class="annote"><img src="img/simulation.jpg">
+    <span class="cadre" style="left:63.5%;top:13.8%;width:5.2%;height:15%"><b>1</b></span>
+    <span class="cadre" style="left:48.4%;top:21.3%;width:25.2%;height:28.8%"><b>2</b></span>
+    <span class="cadre droite" style="left:70.5%;top:22%;width:9.5%;height:16%"><b>3</b></span>
+    <span class="cadre" style="left:76.6%;top:87.5%;width:17.4%;height:5%"><b>4</b></span>
+  </figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span>Buse en cours d'impression.</span></div>
+    <div><span class="pastille">2</span><span>Cordon déjà déposé, avec ses bosses (exagérées × 5).</span></div>
+    <div><span class="pastille">3</span><span>Zone rouge : partie de la palette hors de portée, que la trame ne doit pas atteindre.</span></div>
+    <div><span class="pastille">4</span><span>Anneau orange : la zone d'impression de la buse, de 0,34 à 1,17 m.</span></div>
+  </div>
+
+  <h2><span class="n">2.7</span>Déplacer la palette</h2>
+  <div class="cote large">
+    <figure class="annote"><img src="img/gizmo.jpg">
+      <span class="cadre droite" style="left:45%;top:52.5%;width:7%;height:8%"><b>1</b></span>
+      <span class="cadre" style="left:25%;top:26.5%;width:6.5%;height:8%"><b>2</b></span>
+      <span class="cadre" style="left:29.5%;top:44.5%;width:8.2%;height:10%"><b>3</b></span>
+      <span class="cadre" style="left:8%;top:47%;width:6%;height:14%"><b>4</b></span>
+    </figure>
+    <div>
+      <p>Un <b>clic sur la palette</b> fait apparaître ses poignées ; un clic dans le vide les cache.</p>
+      <div class="legendes">
+        <div><span class="pastille">1</span><span>Flèche rouge : déplacer le long du grand côté.</span></div>
+        <div><span class="pastille">2</span><span>Flèche verte : déplacer le long du petit côté.</span></div>
+        <div><span class="pastille">3</span><span>Carré : déplacer librement à plat.</span></div>
+        <div><span class="pastille">4</span><span>Anneau bleu : tourner la palette (par pas de 5°).</span></div>
+      </div>
+      <p>Au lâcher, la zone rouge, les contrôles et le robot sont recalculés. Cette manipulation sert à étudier la
+        portée du robot et n'affecte que l'affichage : la position réelle de la palette est fixée par l'enseignant.</p>
+    </div>
+  </div>
+
+  <h2><span class="n">2.8</span>Interpréter le bilan</h2>
+  <div class="cote">
+    <figure class="annote"><img src="img/bilan.jpg">
+      <span class="cadre" style="left:3.3%;top:9.7%;width:93.3%;height:4.9%"><b>1</b></span>
+      <span class="cadre" style="left:3.3%;top:15.0%;width:93.3%;height:12.2%"><b>2</b></span>
+      <span class="cadre" style="left:3.3%;top:28.3%;width:93.3%;height:4.8%"><b>3</b></span>
+      <span class="cadre" style="left:3.3%;top:69.2%;width:93.3%;height:11.5%"><b>4</b></span>
+    </figure>
+    <div>
+      <div class="legendes">
+        <div><span class="pastille">1</span><span><b>Montrer les problèmes dans la vue</b> : localise en rouge les zones concernées.</span></div>
+        <div><span class="pastille">2</span><span><b>Quantités</b> : longueur de cordon, durée d'impression, volume de béton.</span></div>
+        <div><span class="pastille">3</span><span>Critère validé (✓).</span></div>
+        <div><span class="pastille">4</span><span>Point d'attention (⚠), avec son explication.</span></div>
+      </div>
+      <table>
+        <tr><th>Chemin continu / une seule ligne</th><td>la buse imprime un seul trait, en zigzag ou en spirale</td></tr>
+        <tr><th>Dans la forme, sur la palette</th><td>rien ne dépasse</td></tr>
+        <tr><th>Lignes assez espacées</th><td>au moins 2 × la largeur du cordon dans une série</td></tr>
+        <tr><th>Aucune ligne ne se recoupe</th><td>une ligne ne repasse pas sur elle-même</td></tr>
+        <tr><th>Croisements assez ouverts</th><td>pas de croisement à moins de 20°</td></tr>
+        <tr><th>Virages assez doux</th><td>pas de virage trop serré ni d'angle vif</td></tr>
+        <tr><th>Passage en double</th><td>endroits imprimés deux fois (souvent le long du bord)</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="note alerte"><h4>Point d'attention et erreur</h4>
+    <p>Un point d'attention (⚠) n'est pas nécessairement bloquant : il est examiné avec les étudiants ingénieurs au
+      regard du matériau et du levage de la bâche. Une erreur (✕, en rouge) doit être corrigée avant l'impression.
+      La correction est demandée à Copilot (partie 3).</p></div>
+</section>
+
+<!-- ============================ PARTIE 3 ============================ -->
+<section class="partie">
+  <p class="surtitre">Partie 3</p>
+  <div class="entete-partie"><h1>Évolution du motif avec Copilot</h1><span class="grand">3</span></div>
+  <p class="chapo">La demande est formulée dans une <b>issue</b> assignée à Copilot. Celui-ci propose une
+    <b>pull request</b> accompagnée d'un aperçu ; le groupe l'évalue, demande si nécessaire des ajustements,
+    puis procède à la fusion.</p>
+
+  <h2><span class="n">3.1</span>Le projet sur GitHub</h2>
+  <figure><img src="img/gh_projet.jpg" style="width:100%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span><b>Issues</b> : demandes adressées à Copilot.</span></div>
+    <div><span class="pastille">2</span><span><b>Pull requests</b> : propositions de Copilot et leurs aperçus.</span></div>
+    <div><span class="pastille">3</span><span>Fichiers du projet. Aucune intervention directe n'est nécessaire : Copilot s'en charge.</span></div>
+    <div><span class="pastille">4</span><span><b>github-pages</b> : publication de l'aperçu en ligne. La coche verte indique qu'il est à jour.</span></div>
+  </div>
+
+  <h2><span class="n">3.2</span>Créer une issue</h2>
+  <figure><img src="img/gh_new_issue.jpg" style="width:100%"></figure>
+  <div class="legendes une"><div><span class="pastille">1</span><span>Onglet <b>Issues</b>, puis <b>New issue</b>.</span></div></div>
+  <figure><img src="img/gh_modele.jpg" style="width:100%"></figure>
+  <div class="legendes une"><div><span class="pastille">2</span><span>Sélectionnez le modèle <b>Idée de motif</b> (et non « Blank issue »).</span></div></div>
+
+  <h2><span class="n">3.3</span>Compléter le formulaire</h2>
+  <figure><img src="img/gh_formulaire.jpg" style="width:100%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span><b>Titre</b> : « Groupe N : nom du motif », par exemple <i>Groupe 2 : spirale</i>.</span></div>
+    <div><span class="pastille">2</span><span><b>Groupe</b> concerné.</span></div>
+    <div><span class="pastille">3</span><span><b>Que veux-tu faire ?</b> nouveau générateur (page blanche), variante d'un motif du groupe, ou modification d'un motif existant.</span></div>
+    <div><span class="pastille">4</span><span><b>Nom du motif</b> : court, en minuscules, sans accent ni espace (<code>spirale</code>, <code>reseau_cellules</code>). Pour une modification, le nom exact du motif.</span></div>
+    <div><span class="pastille">5</span><span><b>Assignees</b> : emplacement où Copilot sera assigné (étape 3.4).</span></div>
+  </div>
+  <figure><img src="img/gh_formulaire_bas.jpg" style="width:85%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span><b>Ce que tu veux voir</b> : champ principal. Description du résultat visuel et de l'ordre des séries.</span></div>
+    <div><span class="pastille">2</span><span><b>Ce que tu veux pouvoir régler</b> : réglages souhaités dans l'aperçu. Plus bas : croquis et remarques des ingénieurs.</span></div>
+    <div><span class="pastille">3</span><span><b>Create</b> : une fois le formulaire complet et Copilot assigné.</span></div>
+  </div>
+
+  <h3>Rédiger une demande exploitable</h3>
+  <p>Copilot travaille uniquement à partir du texte de la demande. La formulation relève du vocabulaire du design
+    et non de la programmation, mais elle doit décrire avec précision le résultat attendu.</p>
+  <div class="deux exemple-demande">
+    <div class="mauvais"><b>Formulation insuffisante</b><br>« Un motif organique et dynamique. »</div>
+    <div class="bon"><b>Formulation exploitable</b><br>« Une spirale partant du centre de la forme (série A), plus
+      serrée au centre qu'en périphérie. Au-dessus, des rayons rectilignes issus du même centre (série B), que je
+      peux ajouter ou retirer. Réglages souhaités : nombre de rayons, écart entre les spires, centre déplaçable à
+      la souris. »</div>
+  </div>
+  <ul>
+    <li><b>Géométrie</b> : lignes, courbes, spirales, cercles, ondulations, points attracteurs ou répulsifs…</li>
+    <li><b>Variations</b> : densité, direction, relation au tracé de base, zones particulières.</li>
+    <li><b>Séries</b> : nombre (2 à 5), ordre de superposition, réglages propres à chaque série, possibilité d'en ajouter ou d'en retirer.</li>
+    <li><b>Une seule ligne</b> : les lignes ouvertes doivent traverser la forme d'un bord à l'autre ; les courbes fermées (cercles, contours) doivent être emboîtées les unes dans les autres, pour être imprimées en spirale.</li>
+    <li><b>Réglages attendus</b> et ordres de grandeur (« entre 20 et 100 mm ») ; points à placer à la souris le cas échéant.</li>
+    <li><b>Documents visuels</b> : croquis ou capture Grasshopper joints dans le champ « Croquis ou images ».</li>
+  </ul>
+
+  <h2><span class="n">3.4</span>Assigner Copilot</h2>
+  <div class="cote">
+    <figure><img src="img/gh_assignees.jpg" style="width:100%"></figure>
+    <div>
+      <p>Dans la colonne de droite, ouvrez le menu <b>Assignees</b> (roue dentée) et cochez <span class="pastille">1</span><b>Copilot</b>.
+        L'assignation peut aussi être faite après la création de l'issue, au même emplacement.</p>
+      <p>Validez ensuite avec <b>Create</b>. Copilot signale la prise en compte par une réaction (icône « yeux »), puis commence le travail.</p>
+      <div class="note alerte"><h4>Copilot n'apparaît pas dans la liste</h4>
+        <p>Le Student Developer Pack n'est probablement pas encore validé, ou l'invitation au projet n'a pas été
+          acceptée. Créez l'issue et informez l'enseignant.</p></div>
+    </div>
+  </div>
+
+  <h2><span class="n">3.5</span>Suivi du travail de Copilot</h2>
+  <figure><img src="img/gh_suivi.jpg" style="width:100%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span>État du travail de Copilot (ici : terminé).</span></div>
+    <div><span class="pastille">2</span><span>Numéro de la pull request ouverte par Copilot.</span></div>
+    <div><span class="pastille">3</span><span>Assignation de Copilot.</span></div>
+    <div><span class="pastille">4</span><span><b>Development</b> : pull request liée à l'issue.</span></div>
+  </div>
+  <p>Le traitement demande en général de quelques minutes à un quart d'heure. GitHub adresse une notification lorsque la pull request est prête.</p>
+
+  <h2><span class="n">3.6</span>La pull request</h2>
+  <figure><img src="img/gh_pr.jpg" style="width:100%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span><b>Titre et état</b> : Open (en attente d'évaluation), puis Merged après fusion.</span></div>
+    <div><span class="pastille">2</span><span><b>Compte rendu de Copilot</b> : modifications réalisées, bilan des contrôles, éventuelles limites. À lire systématiquement.</span></div>
+    <div><span class="pastille">3</span><span><b>Checks</b> : tests automatiques (motif, une seule ligne, robot…).</span></div>
+  </div>
+  <div class="note">Si le bouton <b>Approve and run workflows</b> est affiché, il doit être activé : il déclenche les tests et la publication de l'aperçu de la pull request.</div>
+
+  <h2><span class="n">3.7</span>Évaluer le résultat dans l'aperçu de la pull request</h2>
+  <div class="cote large">
+    <figure><img src="img/gh_preview.jpg" style="width:100%"></figure>
+    <div>
+      <div class="legendes">
+        <div><span class="pastille">1</span><span>Une fois le travail de Copilot terminé, un commentaire est ajouté automatiquement.</span></div>
+        <div><span class="pastille">2</span><span><b>PR Preview</b> : le lien ouvre l'aperçu intégrant les modifications de Copilot ; le QR code l'ouvre sur un téléphone. Sélectionnez le motif concerné et procédez comme en partie 2.</span></div>
+      </div>
+      <p>Si le lien renvoie une erreur, la publication est encore en cours : patientez une à deux minutes. Pour comparer avec la version en vigueur, gardez l'aperçu principal ouvert dans un autre onglet.</p>
+    </div>
+  </div>
+
+  <h2><span class="n">3.8</span>Demander un ajustement</h2>
+  <div class="cote large">
+    <figure><img src="img/gh_commentaire.jpg" style="width:100%"></figure>
+    <div>
+      <p>En bas de la pull request, rédigez un commentaire commençant par <code>@copilot</code> <span class="pastille">1</span>, puis validez <span class="pastille">2</span>.
+        Copilot reprend le travail dans la même pull request et l'aperçu est mis à jour.</p>
+      <p>Décrivez l'écart entre le résultat observé et le résultat attendu, chiffré si possible (« réduire de moitié la hauteur des ondulations », « espacement minimal de 30 mm »). Une demande par commentaire.</p>
+    </div>
+  </div>
+
+  <h2><span class="n">3.9</span>Valider et fusionner</h2>
+  <p>Lorsque le résultat est satisfaisant et que les tests sont validés, sélectionnez <b>Merge pull request</b>, puis <b>Confirm merge</b>. Le motif est intégré à l'aperçu principal dans les minutes qui suivent.</p>
+  <figure><img src="img/gh_fusion.jpg" style="width:85%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span>Confirmation : pull request fusionnée et fermée. L'issue associée est fermée automatiquement.</span></div>
+    <div><span class="pastille">2</span><span>Tests validés.</span></div>
+  </div>
+  <div class="note alerte"><h4>Ne pas fusionner lorsque</h4>
+    <ul>
+      <li>un test est en échec (✗) : une correction doit d'abord être demandée à Copilot ;</li>
+      <li>Copilot indique qu'une modification serait nécessaire en dehors du dossier du groupe : ce point relève de l'enseignant et doit être signalé dans l'issue ;</li>
+      <li>l'aperçu de la pull request n'a pas été examiné.</li>
+    </ul></div>
+  <div class="note"><h4>Règles de fonctionnement</h4>
+    <ul>
+      <li><b>Une demande par issue.</b> Toute nouvelle intention fait l'objet d'une nouvelle issue.</li>
+      <li><b>Périmètre du groupe.</b> Aucune demande ne porte sur le motif d'un autre groupe.</li>
+      <li><b>Quota mensuel limité.</b> Une demande précise et complète vaut mieux que de nombreux échanges : préparez-la collectivement.</li>
+      <li><b>Traçabilité.</b> Les issues et pull requests restent consultables et constituent la mémoire du projet.</li>
+    </ul></div>
+</section>
+
+<!-- ============================ PARTIE 4 ============================ -->
+<section class="partie">
+  <p class="surtitre">Partie 4</p>
+  <div class="entete-partie"><h1>Exports, maquette et impression</h1><span class="grand">4</span></div>
+
+  <h2><span class="n">4.1</span>Les exports</h2>
+  <div class="cote">
+    <figure class="annote"><img src="img/exports.jpg">
+      <span class="cadre" style="left:3.3%;top:12.8%;width:93.3%;height:8.5%"><b>1</b></span>
+      <span class="cadre" style="left:3.3%;top:22.2%;width:93.3%;height:8.5%"><b>2</b></span>
+      <span class="cadre" style="left:3.3%;top:31.6%;width:47.5%;height:12.8%"><b>3</b></span>
+      <span class="cadre droite" style="left:52.0%;top:33.7%;width:44.7%;height:8.5%"><b>4</b></span>
+      <span class="cadre" style="left:3.3%;top:44.0%;width:93.3%;height:13.5%"><b>5</b></span>
+    </figure>
+    <div class="legendes">
+      <div><span class="pastille">1</span><span><b>DXF (3D)</b> pour Rhino ou AutoCAD, hauteurs réelles des bosses ; <b>SVG (dessus)</b> pour Illustrator ou Inkscape. Un calque par série, les liaisons, le chemin complet et les repères de la palette : la base de l'étude du levage par les ingénieurs.</span></div>
+      <div><span class="pastille">2</span><span><b>Programme du robot (URScript)</b> : réservé à l'enseignant, toujours validé dans le simulateur URSim avant toute exécution.</span></div>
+      <div><span class="pastille">3</span><span><b>Cordon d'essai</b> : largeur du cordon de la maquette, en millimètres.</span></div>
+      <div><span class="pastille">4</span><span><b>Maquette G-code</b> : programme pour la machine cartésienne (voir 4.2).</span></div>
+      <div><span class="pastille">5</span><span>Échelle, taille de la trame réduite, couche d'essai, vitesse et durée de la maquette.</span></div>
+    </div>
+  </div>
+
+  <h2><span class="n">4.2</span>La maquette à l'échelle du cordon</h2>
+  <p>Avant l'impression en béton, une trame peut être testée en céramique sur la <b>machine cartésienne</b>
+    (plateau 700 × 700 mm, extrudeur à piston et tête malaxeuse). La maquette est la <b>même trame réduite</b> dans
+    le rapport <i>cordon d'essai / cordon final</i>, en largeur, en longueur et en hauteur : espacements, bosses,
+    couches et proportions du cordon sont conservés.</p>
+  <table>
+    <tr><th>Exemple</th><td>cordon final 20 × 5 mm, cordon d'essai 5 mm : échelle 1:4. Une palette de 1200 × 800 mm devient 300 × 200 mm ; le cordon d'essai fait 5 × 1,25 mm.</td></tr>
+    <tr><th>Vitesse</th><td>calculée automatiquement d'après le débit de l'extrudeur et la section du cordon d'essai : un cordon plus fin s'imprime plus vite.</td></tr>
+    <tr><th>Trop grand</th><td>si la maquette ne tient pas dans la machine, le bouton se grise : choisir un cordon d'essai plus fin.</td></tr>
+  </table>
+  <p>La maquette est lancée par l'enseignant, d'abord à vide puis avec la céramique, après calibration de l'extrusion.</p>
+
+  <h2><span class="n">4.3</span>Préparation d'une séance d'impression</h2>
+  <ul class="coche">
+    <li>La version à imprimer est fusionnée et figure dans l'aperçu principal.</li>
+    <li>Le bilan a été examiné avec les étudiants ingénieurs, qui ont accepté chaque point d'attention restant.</li>
+    <li>Tous les contrôles du robot sont validés et la trame n'empiète pas sur la zone rouge.</li>
+    <li>La trame a été testée en maquette céramique, si nécessaire.</li>
+    <li>Les fichiers DXF/SVG ont été transmis aux ingénieurs, avec les valeurs de réglages retenues (cordon, couches, vitesse).</li>
+    <li>La durée d'impression et le volume de béton (bilan) sont connus pour préparer le mélange.</li>
+  </ul>
+
+  <h2><span class="n">4.4</span>Déroulement de l'impression</h2>
+  <ol>
+    <li>L'enseignant génère le programme du robot depuis l'aperçu et le valide dans URSim.</li>
+    <li>La palette et la bâche sont installées devant le robot, à la position définie pour l'atelier.</li>
+    <li>Le robot imprime les séries dans l'ordre (A, puis B, puis C…), couche après couche, en un seul trait continu. Une distance de sécurité avec le bras doit être respectée pendant toute la durée du mouvement.</li>
+    <li>Le levage de la bâche est réalisé selon le protocole établi avec les étudiants ingénieurs (béton frais ou pris, selon l'expérimentation). Chaque étape est documentée par la photographie.</li>
+  </ol>
+</section>
+
+<!-- ============================ PARTIE 5 ============================ -->
+<section class="partie">
+  <p class="surtitre">Partie 5 · Pour aller plus loin</p>
+  <div class="entete-partie"><h1>L'algorithme dans Grasshopper</h1><span class="grand">5</span></div>
+  <p class="chapo">L'application reprend un algorithme conçu à l'origine dans Grasshopper. Cette partie s'adresse aux
+    étudiants qui souhaitent explorer la définition, la modifier ou y prototyper un motif avant d'en demander
+    l'intégration dans l'application.</p>
+
+  <h2><span class="n">5.1</span>Prérequis</h2>
+  <ul>
+    <li>Rhino 8, dont le composant Script exécute du Python 3.</li>
+    <li>Le plugin <b>Robots</b> (visose), installable depuis le Package Manager de Rhino, pour le groupe Robot.</li>
+    <li>Le fichier de la définition, <code>betonrobot.ghx</code>, fourni par l'enseignant. Le script Python du composant est aussi disponible seul dans le dépôt : <code>reference/vagues_ghx.py</code>.</li>
+  </ul>
+
+  <h2><span class="n">5.2</span>Vue d'ensemble</h2>
+  <p>La définition est organisée en groupes colorés, qui se lisent de gauche à droite : de la géométrie de départ jusqu'aux fichiers destinés aux machines.</p>
+  <figure><img src="img/gh_vue_ensemble.jpg" style="width:100%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span><b>Géométrie</b> : le contour de la trame.</span></div>
+    <div><span class="pastille">2</span><span><b>Trame 1, 2, 3</b> : trois familles de lignes parallèles.</span></div>
+    <div><span class="pastille">3</span><span><b>Séries</b> : construction des bosses avec des composants natifs.</span></div>
+    <div><span class="pastille">4</span><span><b>Composant python</b> : croisements, empilement et chemin continu.</span></div>
+    <div><span class="pastille">5</span><span><b>Gcode</b> : traduction du chemin en G-code.</span></div>
+    <div><span class="pastille">6</span><span><b>Robot</b> : programme et simulation de l'UR10e (plugin Robots).</span></div>
+  </div>
+
+  <h2><span class="n">5.3</span>Géométrie et trames</h2>
+  <figure><img src="img/gh_geometrie.jpg" style="width:100%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span><b>Géométrie</b> : une courbe fermée dessinée dans Rhino (paramètre Curve), convertie en Surface.</span></div>
+    <div><span class="pastille">2</span><span><b>Curseurs</b> : angle de la trame en degrés (250°, 119°, 45°) et espacement des lignes (50 mm).</span></div>
+    <div><span class="pastille">3</span><span><b>Rotate</b> : oriente le vecteur Unit X autour de l'axe Unit Z.</span></div>
+    <div><span class="pastille">4</span><span><b>Contour</b> : coupe la surface par des plans parallèles et produit les lignes de la trame.</span></div>
+    <div><span class="pastille">5</span><span><b>Cull Index</b> : supprime des lignes par leur numéro, pour aérer une trame (vide par défaut).</span></div>
+  </div>
+  <p>Pour définir le contour : dans Rhino, dessinez une courbe plane et fermée à l'échelle réelle, en millimètres ; dans Grasshopper, clic droit sur le paramètre Curve du groupe Géométrie, puis <b>Set one Curve</b>. La courbe n'étant pas enregistrée dans le fichier, l'opération est à refaire à chaque ouverture.</p>
+  <div class="note"><h4>Ajouter une trame</h4>
+    <p>Dupliquez un groupe Trame, branchez sa sortie sur une nouvelle entrée du composant Entwine (groupe Composant python), puis ajoutez une valeur dans le panneau <code>weights</code> et, si la trame doit onduler, son numéro dans <code>active</code>. Toute courbe peut constituer une trame : arcs, spirales, décalages de contour, courbes dessinées dans Rhino.</p></div>
+
+  <h2><span class="n">5.4</span>Séries : les bosses avec des composants natifs</h2>
+  <p>Ce groupe construit les bosses sans script, pas à pas. Il permet de comprendre le principe géométrique que le composant Python automatise.</p>
+  <figure><img src="img/gh_series_1.jpg" style="width:100%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span><b>Curve | Curve</b> : points d'intersection entre deux trames.</span></div>
+    <div><span class="pastille">2</span><span><b>Trim Tree</b> : regroupe les points par ligne.</span></div>
+    <div><span class="pastille">3</span><span>Panneau de contrôle : nombre de croisements par ligne.</span></div>
+    <div><span class="pastille">4</span><span><b>Curve Closest Point</b> : position de chaque croisement sur sa ligne.</span></div>
+    <div><span class="pastille">5</span><span><b>Length Parameter</b> : distance du croisement depuis le début de la ligne.</span></div>
+    <div><span class="pastille">6</span><span><b>Sort List</b> : croisements triés dans l'ordre de parcours.</span></div>
+  </div>
+  <figure><img src="img/gh_series_2.jpg" style="width:100%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span>Demi-largeur de la bosse (7 mm) : la montée commence 7 mm avant le croisement et se termine 7 mm après.</span></div>
+    <div><span class="pastille">2</span><span><b>Subtraction / Addition</b> puis <b>Evaluate Length</b> : points de départ et d'arrivée de la bosse.</span></div>
+    <div><span class="pastille">3</span><span>Hauteur de la bosse (20 mm) : vecteur Unit Z.</span></div>
+    <div><span class="pastille">4</span><span><b>Move</b> : le point de croisement est élevé à la hauteur de la bosse.</span></div>
+    <div><span class="pastille">5</span><span><b>Weave</b> (motif 0, 1, 2) : alterne départ, sommet et arrivée de chaque bosse.</span></div>
+    <div><span class="pastille">6</span><span><b>End Points, Merge, PolyLine</b> : la ligne est reconstruite avec ses bosses.</span></div>
+  </div>
+
+  <h2><span class="n">5.5</span>Composant python</h2>
+  <figure><img src="img/gh_python.jpg" style="width:80%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span><b>Entwine</b> : réunit les trames en un arbre, une branche par série, dans l'ordre d'impression.</span></div>
+    <div><span class="pastille">2</span><span><b>Python 3 Script</b> « Vagues aux intersections » : double-clic pour lire le script et ses entrées.</span></div>
+    <div><span class="pastille">3</span><span>Panneaux <code>weights</code> (poids des séries) et <code>active</code> (séries qui ondulent).</span></div>
+    <div><span class="pastille">4</span><span><code>amp</code> (hauteur de bosse, 5 mm) et <code>d</code> (longueur de montée, 10 mm).</span></div>
+    <div><span class="pastille">5</span><span><code>zigzag</code> : relie toutes les courbes en un seul chemin continu.</span></div>
+    <div><span class="pastille">6</span><span><code>lane</code> (5 mm) : décalage des liaisons de chaque série le long du bord.</span></div>
+    <div><span class="pastille">7</span><span>Chemin produit, transmis aux groupes Gcode et Robot.</span></div>
+    <div><span class="pastille">8</span><span><b>List Length</b> : nombre de points du chemin, utilisé par le groupe Robot.</span></div>
+  </div>
+  <table>
+    <tr><th>boundary · courbe</th><td>Contour fermé. Les séries sont découpées et seule la partie intérieure est conservée.</td></tr>
+    <tr><th>series · arbre de courbes</th><td>Sortie d'Entwine : une branche par série.</td></tr>
+    <tr><th>weights · 1, 1, 2, 3</th><td>Poids de chaque série, dans l'ordre. Une valeur excédentaire est ignorée.</td></tr>
+    <tr><th>active · 1, 2, 3</th><td>Séries qui ondulent, numérotées à partir de 0 (A = 0, B = 1, C = 2). Ici B et C ondulent, A reste à plat.</td></tr>
+    <tr><th>mode · vide (« own »)</th><td>Chaque série monte d'une couche au-dessus de ce qu'elle recouvre (empilement). Autres valeurs : « min », « max », « mul ».</td></tr>
+    <tr><th>Entrées facultatives</th><td>tol, fuse, res, link, route (« series », « chrono », « zigzag », « contour »), hop.</td></tr>
+  </table>
+  <div class="note"><h4>Dans l'application</h4>
+    <p>L'application reprend ce composant et l'étend : hauteur et longueur des bosses déduites du cordon, couches
+      superposées, spirale pour les courbes fermées emboîtées. Branchez un Panel sur la sortie <code>info</code> :
+      la ligne « CONTRÔLE » donne les mêmes vérifications que le bilan de l'application.</p></div>
+
+  <h2><span class="n">5.6</span>Gcode</h2>
+  <figure><img src="img/gh_gcode.jpg" style="width:100%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span><b>Crv</b> : le chemin produit par le composant Python.</span></div>
+    <div><span class="pastille">2</span><span>Chaque point est décomposé (pDecon) et assemblé en ligne <code>G1 F… X… Y… Z…</code> (Concat).</span></div>
+    <div><span class="pastille">3</span><span>Vitesse des déplacements sans extrusion (10 000 mm/min).</span></div>
+    <div><span class="pastille">4</span><span>Aperçu des lignes de G-code générées.</span></div>
+    <div><span class="pastille">5</span><span>En-tête (<code>G92 E0</code> …) et fusion des blocs (Merge).</span></div>
+    <div><span class="pastille">6</span><span>Programme G-code complet.</span></div>
+  </div>
+  <p>Ce groupe produit une version G-code sans extrusion calculée. Pour la maquette céramique, utilisez l'export
+    <b>Maquette G-code</b> de l'application (partie 4), qui réduit la trame à l'échelle du cordon et calcule l'extrusion.</p>
+
+  <h2><span class="n">5.7</span>Robot</h2>
+  <figure><img src="img/gh_robot.jpg" style="width:100%"></figure>
+  <div class="legendes">
+    <div><span class="pastille">1</span><span><b>Horizontal Frames, Flip Plane, Align Plane</b> : un repère orienté en chaque point du chemin.</span></div>
+    <div><span class="pastille">2</span><span><b>Outil</b> : point de la buse, repère, masse et maillage (Create tool).</span></div>
+    <div><span class="pastille">3</span><span><b>Create Target</b> : cibles, configuration, vitesse (72 mm/s) et type de mouvement (Joint).</span></div>
+    <div><span class="pastille">4</span><span><b>Load robot system</b> : modèle UR10e de la bibliothèque Robots.</span></div>
+    <div><span class="pastille">5</span><span><b>Create program</b> : programme, code, durée, avertissements et erreurs.</span></div>
+    <div><span class="pastille">6</span><span><b>Program simulation</b> : rejoue le mouvement dans Rhino.</span></div>
+  </div>
+  <div class="note alerte"><h4>Usage réservé à l'étude</h4>
+    <p>Cette chaîne a servi aux premiers essais et présente trois limites, corrigées dans l'application : arrêt du
+      robot à chaque point (cordon irrégulier), sommets des bosses écrêtés par le redécoupage à pas constant, et
+      ni extrusion, ni approche, ni dégagement. Aucun programme issu de Grasshopper n'est exécuté sur le robot.</p></div>
+
+  <h2><span class="n">5.8</span>De Grasshopper à l'application</h2>
+  <ol>
+    <li>Rédigez une issue <b>Idée de motif</b> (partie 3) qui décrit la logique de génération des trames : composants utilisés, réglages et plages de valeurs.</li>
+    <li>Joignez une capture de la définition (File › Export Quick Image) et une capture du résultat dans Rhino.</li>
+    <li>Le cas échéant, joignez les courbes des trames exportées en DXF (Bake, puis export depuis Rhino) : elles servent de référence pour comparer le résultat de Copilot.</li>
+  </ol>
+  <p>Seule la génération des trames est à décrire : le calcul des bosses, des couches, du chemin et des programmes est déjà assuré par l'application.</p>
+</section>
+
+<!-- ============================ ANNEXE ============================ -->
+<section class="partie">
+  <p class="surtitre">Annexe</p>
+  <h1>Résolution des problèmes courants</h1>
+  <table>
+    <tr><th>L'aperçu reste bloqué sur « Démarrage de Python… »</th><td>Patienter une trentaine de secondes, puis recharger. À défaut, utiliser un autre navigateur récent (Chrome, Firefox).</td></tr>
+    <tr><th>L'aperçu n'affiche pas la dernière version</th><td>Recharger en forçant : Cmd + Maj + R (Mac) ou Ctrl + Maj + R (PC), ou ouvrir une fenêtre de navigation privée.</td></tr>
+    <tr><th>Le panneau gêne la vue</th><td>Le déplacer par son titre ou le réduire par son coin en bas à droite.</td></tr>
+    <tr><th>Le projet n'est pas accessible sur GitHub</th><td>L'invitation n'a pas été acceptée ou a expiré (7 jours). Demander une nouvelle invitation.</td></tr>
+    <tr><th>Copilot n'apparaît pas dans « Assignees »</th><td>Le Student Developer Pack n'est pas encore validé. Créer l'issue et informer l'enseignant.</td></tr>
+    <tr><th>Aucune réaction de Copilot</th><td>Vérifier l'assignation, patienter quelques minutes, puis informer l'enseignant.</td></tr>
+    <tr><th>Le lien « PR Preview » renvoie une erreur 404</th><td>La publication est en cours : patienter une à deux minutes. Vérifier si le bouton « Approve and run workflows » doit être activé.</td></tr>
+    <tr><th>Un test est en échec (✗)</th><td>Consulter le compte rendu de Copilot ou l'onglet « Checks », puis demander une correction avec <code>@copilot</code>. Ne pas fusionner.</td></tr>
+    <tr><th>« Une seule ligne : zigzag ou spirale » en alerte</th><td>Des courbes s'arrêtent au milieu de la forme ou des courbes fermées sont côte à côte : demander qu'elles traversent la forme, ou qu'elles soient emboîtées.</td></tr>
+    <tr><th>Copilot signale qu'une modification de l'interface ou du moteur est nécessaire</th><td>Ces éléments relèvent de l'enseignant. Le signaler dans l'issue.</td></tr>
+    <tr><th>Le tracé importé ne produit aucun résultat</th><td>Vérifier que le fichier contient une forme fermée dessinée en millimètres, et lire le message sous le bouton d'import.</td></tr>
+    <tr><th>Le bouton « Maquette G-code » est grisé</th><td>La maquette ne tient pas dans la machine : choisir un cordon d'essai plus fin.</td></tr>
+    <tr><th>Le quota Copilot est atteint</th><td>Il est renouvelé chaque mois. Poursuivre avec le compte d'un autre membre du groupe et préparer les demandes suivantes par écrit.</td></tr>
+  </table>
+  <div class="note"><h4>Adresses utiles</h4>
+    <p>Aperçu : <span class="url">etienne-mosnier.github.io/trame-beton</span><br>
+      Projet GitHub : <span class="url">github.com/Etienne-Mosnier/trame-beton</span><br>
+      Student Developer Pack : <span class="url">education.github.com/pack</span></p></div>
+</section>
+
+</body>
+</html>
