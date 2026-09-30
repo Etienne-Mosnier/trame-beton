@@ -63,8 +63,11 @@ PARAMETRES = {
     "inverser": Case(False, aide="Inverser le sens des vagues"),
     "centre": Point(600, 400, aide="Centre des cercles"),
     "attractions": Points([(400, 400)], mini=0, maxi=8, aide="Points qui attirent les lignes"),
-    "directions": Liste([160, 29, 135], mini=2, maxi=5, bornes=(0, 180), unite="°", element="Série",
-                        aide="Direction des lignes de chaque série"),
+    "series": Liste([{"angle": 160, "espacement": 50}, {"angle": 29, "espacement": 50}],
+                    mini=2, maxi=5, element="Série",
+                    champs={"angle": Parametre(90, mini=0, maxi=180, unite="°", aide="Direction"),
+                            "espacement": Parametre(50, mini=20, maxi=150, unite="mm", aide="Écart")},
+                    aide="Une ligne par série"),
     ...
 }
 
@@ -93,9 +96,10 @@ Règles :
   | `Point(x, y, aide)` | une poignée (boule noire) à déplacer sur la palette | `(x, y)` en mm |
   | `Points([(x, y), …], mini, maxi, aide)` | des poignées que l'on **ajoute** (double-clic sur la palette), **déplace** (clic) et **supprime** (double-clic sur le point) | liste de `(x, y)` en mm |
   | `Liste([v, …], mini, maxi, bornes, unite, element, aide)` | un curseur par élément, **+ Ajouter** / **×** pour retirer | liste de nombres |
+  | `Liste([{…}, …], mini, maxi, element, champs={nom: Parametre(…)}, aide)` | une ligne par élément, ses curseurs côte à côte, **+ Ajouter** / **×** | liste de dictionnaires |
 
-  Pour un nombre de séries réglable (ajouter / retirer des séries), utilise une `Liste` avec
-  `element="Série"` (une valeur par série, ex. sa direction) : voir `motifs/exemple/`.
+  Pour des séries que l'on ajoute ou retire, chacune avec ses propres réglages, utilise une
+  `Liste` avec `element="Série"` et des `champs` (ex. angle et espacement) : voir `motifs/exemple/`.
 
   Points en mm, repère palette (origine au coin, x le long du grand côté). Pour des points
   d'attraction, centres, départs… utilise `Point` ou `Points`, jamais deux curseurs x et y.
