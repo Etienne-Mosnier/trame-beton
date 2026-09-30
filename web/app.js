@@ -9,8 +9,8 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=c51bdfe8ad3c";
-import { creerBuse, creerRobot } from "./robot.js?v=c51bdfe8ad3c";
+import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=82a2a4abfe52";
+import { creerBuse, creerRobot } from "./robot.js?v=82a2a4abfe52";
 
 // une couleur par série, dans l'ordre d'impression
 // noir, orange, orange brûlé, orange clair, gris : le rouge est gardé pour les problèmes
@@ -383,7 +383,7 @@ function dessinerPortee(p) {
 
   // légende de l'anneau : où la buse peut imprimer
   const m = (v) => (v / 1000).toFixed(2).replace(".", ",");
-  const texte = etiquette(`zone d'impression : ${m(p.rayon_int)} à ${m(p.rayon_ext)} m`, "#c2410c", 70);
+  const texte = etiquette(`zone d'impression : ${m(p.rayon_int)} à ${m(p.rayon_ext)} m`, "#c2410c", 42);
   // sur le côté de l'anneau (à 90° de la direction de la palette), pour ne pas la cacher
   const versPalette = new THREE.Vector2(paletteMobile.position.x, paletteMobile.position.y).normalize();
   texte.position.set(p.centre[0] + versPalette.y * p.rayon_ext, p.centre[1] - versPalette.x * p.rayon_ext, 40);
@@ -395,7 +395,7 @@ function dessinerPortee(p) {
   // axes du robot (comme sur le pendant) : X rouge, Y vert, 40 cm
   const fleche = (v, couleur, nom) => {
     groupePortee.add(new THREE.ArrowHelper(new THREE.Vector3(...v, 0), new THREE.Vector3(0, 0, 5), 400, couleur, 60, 35));
-    const e = etiquette(nom, couleur, 90);
+    const e = etiquette(nom, couleur, 54);
     e.position.set(v[0] * 560, v[1] * 560, 30);
     groupePortee.add(e);
   };
@@ -406,9 +406,9 @@ function dessinerPortee(p) {
   const [nx, ny] = p.nord;
   const r = p.rayon_ext + Math.hypot(...p.centre) + 250;
   groupePortee.add(trait([[-nx * r, -ny * r, z + 1], [nx * r, ny * r, z + 1]], "#111111", 3, true));
-  const n = etiquette("N", "#111111", 160);
+  const n = etiquette("N", "#111111", 96);
   n.position.set(nx * (r + 60), ny * (r + 60), 30);
-  const s = etiquette("S", "#737373", 120);
+  const s = etiquette("S", "#737373", 72);
   s.position.set(-nx * (r + 60), -ny * (r + 60), 30);
   groupePortee.add(n, s);
 }
@@ -517,7 +517,7 @@ function creerPoignee(nom, index, [x, y]) {
   cerne.renderOrder = 9;
   poignee.add(cerne);
   const texte = nom.replaceAll("_", " ") + (index === null ? "" : " " + (index + 1));
-  const nomAffiche = etiquette(texte, "#111111", 40);
+  const nomAffiche = etiquette(texte, "#111111", 24);
   nomAffiche.position.z = 70;
   poignee.add(boule, nomAffiche);
   return poignee;
@@ -804,7 +804,26 @@ async function lireTexte(chemin) {
 // Démarrage
 // ---------------------------------------------------------------------------
 
+// panneau flottant : on le déplace en le tenant par son titre (il reste dans la fenêtre)
+function panneauDeplacable() {
+  const panneau = $("panneau");
+  let depart = null;
+  $("entete-panneau").addEventListener("pointerdown", (e) => {
+    depart = [e.clientX, e.clientY, panneau.offsetLeft, panneau.offsetTop];
+    e.target.setPointerCapture(e.pointerId);
+  });
+  $("entete-panneau").addEventListener("pointermove", (e) => {
+    if (!depart) return;
+    const x = Math.min(Math.max(depart[2] + e.clientX - depart[0], 0), window.innerWidth - 60);
+    const y = Math.min(Math.max(depart[3] + e.clientY - depart[1], 0), window.innerHeight - 40);
+    panneau.style.left = x + "px";
+    panneau.style.top = y + "px";
+  });
+  $("entete-panneau").addEventListener("pointerup", () => (depart = null));
+}
+
 async function demarrer() {
+  panneauDeplacable();
   redimensionner();
   window.addEventListener("resize", redimensionner);
   boucle();

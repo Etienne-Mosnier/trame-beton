@@ -19,53 +19,71 @@ html, body {
   margin: 0;
   height: 100%;
   font-family: "Bricolage Grotesque", system-ui, sans-serif;
-  font-size: 15px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.4;
   color: var(--noir);
   background: var(--blanc);
 }
 
-body { display: flex; }
+body { overflow: hidden; }
 
 /* ---------- panneau ---------- */
 
+/* panneau flottant : on le déplace par son titre, on le redimensionne par son coin */
 #panneau {
-  width: 360px;
-  flex: none;
-  height: 100%;
-  overflow-y: auto;
-  background: var(--blanc);
-  border-right: 1px solid var(--trait);
-  padding: 28px 24px 40px;
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 10;
+  width: 300px;
+  height: calc(100% - 28px);
+  min-width: 240px;
+  min-height: 180px;
+  max-width: calc(100vw - 28px);
+  max-height: calc(100vh - 28px);
+  overflow: auto;
+  resize: both;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(6px);
+  border: 1.5px solid var(--noir);
+  border-radius: 16px;
+  padding: 0 16px 20px;
   counter-reset: etape;
 }
+#entete-panneau {
+  position: sticky; top: 0; z-index: 1;
+  margin: 0 -16px; padding: 14px 16px 10px;
+  background: rgba(255, 255, 255, 0.96);
+  cursor: grab; user-select: none;
+}
+#entete-panneau:active { cursor: grabbing; }
 
 h1 {
-  font-size: 30px;
+  font-size: 20px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1;
   margin: 0 0 6px;
 }
 h1::after { content: "."; color: var(--orange); }
-.sous-titre { margin: 0 0 22px; color: var(--gris); font-size: 14px; }
+.sous-titre { margin: 0; color: var(--gris); font-size: 12px; }
 
-section { padding: 20px 0 18px; border-top: 1px solid var(--trait); }
+section { padding: 12px 0 10px; border-top: 1px solid var(--trait); }
 
 /* titres numérotés : l'ordre du travail */
 h2 {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  font-size: 19px;
+  gap: 8px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  margin: 0 0 12px;
+  margin: 0 0 8px;
 }
 h2::before {
   counter-increment: etape;
   content: counter(etape, decimal-leading-zero);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--orange);
   font-variant-numeric: tabular-nums;
@@ -75,67 +93,67 @@ h2::before {
 
 select, button, .bouton-fichier, input[type=number] {
   font: inherit;
-  font-size: 14px;
+  font-size: 12px;
   color: var(--noir);
   background: var(--blanc);
-  border: 1.5px solid var(--noir);
+  border: 1.2px solid var(--noir);
   border-radius: 999px;
-  padding: 8px 14px;
+  padding: 5px 11px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-select { width: 100%; appearance: none; padding-right: 36px;
-  background: var(--blanc) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23111' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 14px center; }
+select { width: 100%; appearance: none; padding-right: 30px;
+  background: var(--blanc) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23111' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 11px center; background-size: 10px; }
 button, .bouton-fichier { width: 100%; font-weight: 600; }
 button:hover, .bouton-fichier:hover { background: var(--noir); color: var(--blanc); }
 button:disabled { opacity: 0.35; cursor: not-allowed; background: var(--blanc); color: var(--noir); }
 select:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; }
 
-.bouton-fichier { display: block; margin-top: 8px; text-align: center; }
+.bouton-fichier { display: block; margin-top: 6px; text-align: center; }
 .bouton-fichier input { display: none; }
 
-.boutons { display: flex; gap: 8px; margin-bottom: 10px; }
+.boutons { display: flex; gap: 6px; margin-bottom: 8px; }
 .boutons button.actif { background: var(--noir); color: var(--blanc); }
 
 /* ---------- curseurs ---------- */
 
-.reglage { margin: 16px 0; }
+.reglage { margin: 10px 0; }
 .reglage .ligne { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
 .reglage .ligne > span:first-child::first-letter { text-transform: uppercase; }
 .reglage output { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--orange-fonce); }
-.reglage .aide, .petit { font-size: 13px; color: var(--gris); margin: 4px 0 0; }
+.reglage .aide, .petit { font-size: 11.5px; color: var(--gris); margin: 2px 0 0; }
 
 input[type=range] {
   -webkit-appearance: none; appearance: none;
-  width: 100%; height: 4px; margin: 12px 0 4px;
+  width: 100%; height: 3px; margin: 8px 0 3px;
   background: var(--trait); border-radius: 2px; cursor: pointer;
 }
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
-  width: 18px; height: 18px; border-radius: 50%;
-  background: var(--orange); border: 3px solid var(--blanc); box-shadow: 0 0 0 1.5px var(--noir);
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--orange); border: 2px solid var(--blanc); box-shadow: 0 0 0 1.2px var(--noir);
 }
 input[type=range]::-moz-range-thumb {
-  width: 14px; height: 14px; border-radius: 50%;
+  width: 10px; height: 10px; border-radius: 50%;
   background: var(--orange); border: 3px solid var(--blanc); box-shadow: 0 0 0 1.5px var(--noir);
 }
 
-input[type=checkbox] { accent-color: var(--orange); width: 16px; height: 16px; }
-.case { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; }
+input[type=checkbox] { accent-color: var(--orange); width: 13px; height: 13px; }
+.case { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; cursor: pointer; }
 
 /* champs de saisie courts (vitesse, cordon d'essai) */
-.maquette { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; }
-.maquette label { flex: 1; font-weight: 600; font-size: 14px; }
-.maquette input { width: 72px; cursor: text; text-align: center; margin: 0 4px; }
+.maquette { display: flex; align-items: center; gap: 8px; margin: 8px 0 3px; }
+.maquette label { flex: 1; font-weight: 600; font-size: 12px; }
+.maquette input { width: 58px; cursor: text; text-align: center; margin: 0 3px; }
 .maquette button { width: auto; flex: none; }
 
 /* ---------- aide du motif ---------- */
 
-details { margin-top: 10px; }
+details { margin-top: 8px; }
 details summary { cursor: pointer; font-weight: 600; color: var(--orange-fonce); }
-details div { font-size: 14px; }
-details h3 { font-size: 16px; margin: 12px 0 4px; }
-details h4 { font-size: 14px; margin: 12px 0 4px; }
+details div { font-size: 12px; }
+details h3 { font-size: 13px; margin: 10px 0 3px; }
+details h4 { font-size: 12px; margin: 10px 0 3px; }
 details ul, details ol { padding-left: 20px; margin: 4px 0; }
 details code { background: var(--orange-voile); padding: 0 4px; border-radius: 4px; }
 
@@ -152,7 +170,7 @@ pre#info, #calibration-placement {
 
 #bilan > p { margin: 4px 0; }
 #bilan strong { font-weight: 700; }
-.controle { margin: 8px 0; white-space: normal; }
+.controle { margin: 5px 0; white-space: normal; }
 .controle p { margin: 2px 0; }
 .controle .symbole { display: inline-block; width: 1.4em; font-weight: 700; }
 .controle.ok .symbole { color: var(--noir); }
@@ -166,27 +184,25 @@ p.erreur, span.erreur { color: var(--erreur); white-space: pre-wrap; }
 
 /* ---------- scène ---------- */
 
-#scene { position: relative; flex: 1; height: 100%; overflow: hidden; background: var(--blanc); }
+#scene { position: fixed; inset: 0; overflow: hidden; background: var(--blanc); }
 #scene canvas { display: block; }
 
 #legende, #etat {
-  position: absolute; top: 18px;
-  background: var(--blanc);
-  border: 1.5px solid var(--noir);
-  border-radius: 14px;
-  padding: 10px 14px;
-  font-size: 14px;
+  position: absolute; right: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1.2px solid var(--noir);
+  border-radius: 12px;
+  padding: 7px 11px;
+  font-size: 12px;
 }
-#legende { left: 18px; }
+#legende { top: 14px; }
 #legende:empty { display: none; }
-#legende div { display: flex; align-items: center; gap: 10px; margin: 3px 0; }
-#legende span.pastille { width: 26px; height: 6px; border-radius: 3px; display: inline-block; }
-#etat { right: 18px; font-weight: 600; }
+#legende div { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+#legende span.pastille { width: 20px; height: 4px; border-radius: 2px; display: inline-block; }
+#etat { bottom: 14px; font-weight: 600; }
 #etat:empty { display: none; }
 
 /* sur un écran étroit : panneau au-dessus de la vue */
 @media (max-width: 760px) {
-  body { flex-direction: column; }
-  #panneau { width: 100%; height: auto; max-height: 55%; border-right: none; border-bottom: 1px solid var(--trait); padding: 20px 16px; }
-  #scene { height: 45%; }
+  #panneau { top: auto; bottom: 8px; left: 8px; width: calc(100vw - 16px); height: 50vh; }
 }
