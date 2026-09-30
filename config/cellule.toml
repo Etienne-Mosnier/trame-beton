@@ -56,3 +56,20 @@ petit_cote = []
 origine = [-197.0, -437.0, 8.7]
 grand_cote = [-197.0, 763.0, 8.7]
 petit_cote = [-997.0, -437.0, 8.7]
+
+[cartesienne]
+# Machine cartésienne (portique) pilotée par Klipper. Origine : coin avant gauche, Z = 0 au plateau.
+longueur = 700.0                      # mm, course en X
+largeur = 700.0                       # mm, course en Y
+hauteur = 700.0                       # mm, course en Z
+marge = 20.0                          # mm, marge de sécurité au bord du plateau
+vitesse = 20.0                        # mm/s pendant l'impression, À RÉGLER aux essais
+vitesse_deplacement = 60.0            # mm/s sans impression (approche, dégagement)
+hauteur_buse = 0.0                    # mm au-dessus du plateau pour la 1re couche (0 = hauteur de couche)
+hauteur_approche = 20.0               # mm, la buse arrive et repart à cette hauteur au-dessus du chemin
+# Extrusion par l'axe E (extrudeur pas à pas), en mode relatif (M83).
+# E = volume du cordon (longueur × largeur × hauteur) / section du « filament » équivalent.
+# À CALIBRER : régler diametre_filament pour que 100 mm de E poussent le bon volume de béton.
+diametre_filament = 1.75              # mm, diamètre équivalent déclaré dans Klipper (extruder)
+multiplicateur_extrusion = 1.0        # ajustement fin du débit (1.0 = théorique)
+amorce = 0.0                          # mm de E poussés avant de commencer (0 = aucun)

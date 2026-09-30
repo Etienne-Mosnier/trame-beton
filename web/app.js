@@ -54,6 +54,8 @@ const groupeAlertesRobot = new THREE.Group(); // alertes robot, en rouge
 const groupePoints = new THREE.Group();  // poignées des paramètres « Point » du motif
 contenuPalette.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon, groupeAlertesRobot, groupePoints);
 // groupes fixes par rapport au robot
+const groupeVolume = new THREE.Group();  // volume de la machine cartésienne (fil de fer)
+scene.add(groupeVolume);
 const groupeZone = new THREE.Group();    // partie de la palette hors de portée (mode placement)
 const groupePortee = new THREE.Group();  // portée du robot, ses axes et la boussole
 scene.add(groupeZone, groupePortee);
@@ -255,13 +257,14 @@ async function chargerRobot() {
   robot.racine = new THREE.Group();
   robot.racine.scale.setScalar(1000);          // le bras est en mètres, la scène en mm
   robot.racine.add(robot.modele.groupe);
+  robot.racine.visible = avecRobot();
   scene.add(robot.racine);
   calculerRobot();
 }
 
 // angles du bras le long du chemin (calcul Python) et cordon à déposer
 function calculerRobot() {
-  if (!robot.modele || !app || !dernierResultat) return;
+  if (!avecRobot() || !robot.modele || !app || !dernierResultat) return;
   const d = JSON.parse(app.robot());
   if (d.erreur) { $("message-robot").textContent = d.erreur; return; }
   robot.donnees = d;
@@ -414,7 +417,7 @@ function dessinerPortee(p) {
 // Placement de la palette : zone d'impression du robot, partie de la palette hors de portée.
 // reglages = null : calibration en cours (simulation) ; sinon {x, y, z, rotation} du gizmo.
 function placer(reglages) {
-  if (!app) return;
+  if (!app || !avecRobot()) return;
   const r = JSON.parse(app.placement(reglages ? JSON.stringify(reglages) : ""));
   repereCourant = r.repere;
   positionnerPalette();
@@ -430,6 +433,39 @@ function placer(reglages) {
       `origine = [${c.origine.join(", ")}]\ngrand_cote = [${c.grand_cote.join(", ")}]\npetit_cote = [${c.petit_cote.join(", ")}]`
     : "";
   calculerRobot();
+}
+
+// machine cartésienne : son volume en fil de fer (plateau à l'origine, Z vers le haut)
+function dessinerVolume(r) {
+  vider(groupeVolume);
+  if (avecRobot()) return;
+  const [lx, ly] = r.palette;
+  const boite = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(lx, ly, 700)),
+    new THREE.LineBasicMaterial({ color: "#6b7280" }));
+  boite.position.set(lx / 2, ly / 2, 350);
+  groupeVolume.add(boite);
+}
+
+// changement de machine : robot ou cartésienne
+function choisirMachine(nom) {
+  machine = nom;
+  const bras = avecRobot();
+  $("section-robot").hidden = !bras;
+  $("export-script").hidden = !bras;
+  $("note-script").hidden = !bras;
+  $("export-gcode").hidden = bras;
+  $("note-gcode").hidden = bras;
+  for (const g of gizmos) g.detach();
+  arreterLecture();
+  if (robot.racine) robot.racine.visible = bras;
+  groupePortee.visible = bras;
+  groupeZone.visible = bras;
+  groupeCordon.visible = false;
+  groupeTrame.visible = true;
+  if (!bras) { repereCourant = null; robot.donnees = null; }
+  dejaCadre = false;
+  calculer();
 }
 
 // fin d'un déplacement au gizmo : position du coin (0, 0) et rotation -> placement
@@ -459,7 +495,7 @@ function selectionner(e) {
     return;
   }
   pointSelectionne = null;
-  const surPalette = rayon.intersectObjects(groupePalette.children, true).length > 0;
+  const surPalette = avecRobot() && rayon.intersectObjects(groupePalette.children, true).length > 0;
   for (const g of gizmos) {
     if (surPalette) g.attach(paletteMobile); else g.detach();
   }
@@ -585,6 +621,8 @@ function supprimerPoint(poignee) {
 // ---------------------------------------------------------------------------
 
 let app = null;
+let machine = "ur10e";            // machine choisie : "ur10e" (bras, palette) ou "cartesienne"
+const avecRobot = () => machine === "ur10e";
 let motifs = [];
 let contour = null; // { nom, texte }
 let dernierResultat = null;
@@ -728,7 +766,7 @@ function calculer() {
   // on laisse le navigateur afficher « Calcul… » avant de bloquer pendant le calcul
   setTimeout(() => {
     const debut = performance.now();
-    const r = JSON.parse(app.calculer($("choix-motif").value, JSON.stringify(reglages),
+    const r = JSON.parse(app.calculer($("choix-motif").value, JSON.stringify({ ...reglages, machine }),
                                       contour.texte, contour.nom));
     if (r.erreur) {
       etat.textContent = "";
@@ -738,16 +776,23 @@ function calculer() {
     }
     dernierResultat = r;
     palette = r.palette;
+    // points du motif ramenés sur le plateau par le calcul : les poignées suivent
+    let pointsBouges = false;
+    for (const [nom, v] of Object.entries(r.points_motif || {})) {
+      if (JSON.stringify(v) !== JSON.stringify(reglages.motif[nom])) { reglages.motif[nom] = v; pointsBouges = true; }
+    }
+    if (pointsBouges) dessinerPoints();
     positionnerPalette();
     dessinerPalette(r.contour);
     dessinerTrame(r, Number($("exageration").value));
     afficherBilan(r);
-    if (!dejaCadre) { placer(null); vue3d(); dejaCadre = true; }
+    dessinerVolume(r);
+    if (!dejaCadre) { if (avecRobot()) placer(null); vue3d(); dejaCadre = true; }
     // la nouvelle trame tout de suite ; le robot (plus long) juste après
     groupeTrame.visible = true;
     groupeCordon.visible = false;
     etat.textContent = "";
-    setTimeout(calculerRobot, 30);
+    if (avecRobot()) setTimeout(calculerRobot, 30);
     console.log(`calcul : ${((performance.now() - debut) / 1000).toFixed(2)} s`);
   }, 20);
 }
@@ -757,7 +802,7 @@ function telecharger(format) {
   if (!app) return;
   const r = JSON.parse(app.exporter(format));
   if (r.erreur) { alert(r.erreur); return; }
-  const type = { svg: "image/svg+xml", dxf: "application/dxf", script: "text/plain" }[format];
+  const type = { svg: "image/svg+xml", dxf: "application/dxf", script: "text/plain", gcode: "text/plain" }[format];
   const lien = document.createElement("a");
   lien.href = URL.createObjectURL(new Blob([r.texte], { type }));
   lien.download = r.nom;
@@ -822,6 +867,7 @@ async function demarrer() {
   $("export-dxf").onclick = () => telecharger("dxf");
   $("export-svg").onclick = () => telecharger("svg");
   $("export-script").onclick = () => telecharger("script");
+  $("export-gcode").onclick = () => telecharger("gcode");
   $("montrer-alertes").addEventListener("change", () => {
     if (dernierResultat) dessinerAlertes(dernierResultat, Number($("exageration").value));
     if (robot.donnees) marquer(groupeAlertesRobot, robot.donnees.alertes, Number($("exageration").value));
@@ -837,6 +883,12 @@ async function demarrer() {
     const pyodide = await loadPyodide({ indexURL: URL_PYODIDE });
     const pret = await preparer(pyodide, lireTexte, (m) => (etat.textContent = m));
     app = pret.app;
+
+    // machines
+    const machines = JSON.parse(app.liste_machines());
+    $("choix-machine").innerHTML = Object.entries(machines)
+      .map(([id, m]) => `<option value="${id}">${m.nom}</option>`).join("");
+    $("choix-machine").onchange = (e) => choisirMachine(e.target.value);
 
     // motifs
     motifs = JSON.parse(app.liste_motifs());
