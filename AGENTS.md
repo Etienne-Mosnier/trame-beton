@@ -88,7 +88,7 @@ Règles :
   | `Parametre(valeur, mini, maxi, unite, aide)` | un curseur | un nombre |
   | `Choix(valeur, [options], aide)` | une liste déroulante | le texte choisi |
   | `Case(valeur, aide)` | une case oui / non | `True` / `False` |
-  | `Point(x, y, aide)` | une poignée orange à déplacer sur la palette | `(x, y)` en mm |
+  | `Point(x, y, aide)` | une poignée (boule noire) à déplacer sur la palette | `(x, y)` en mm |
   | `Points([(x, y), …], mini, maxi, aide)` | des poignées que l'on **ajoute** (double-clic sur la palette), **déplace** (clic) et **supprime** (double-clic sur le point) | liste de `(x, y)` en mm |
 
   Points en mm, repère palette (origine au coin, x le long du grand côté). Pour des points
