@@ -9,8 +9,8 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=25e69c6c07e1";
-import { creerBuse, creerRobot } from "./robot.js?v=25e69c6c07e1";
+import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=69c414e7f4fa";
+import { creerBuse, creerRobot } from "./robot.js?v=69c414e7f4fa";
 
 // une couleur par série, dans l'ordre d'impression
 const COULEURS = ["#6b7280", "#2563eb", "#16a34a", "#9333ea", "#d97706"]; // le rouge est gardé pour les problèmes
@@ -841,10 +841,13 @@ async function demarrer() {
     // motifs
     motifs = JSON.parse(app.liste_motifs());
     // un groupe d'options par groupe d'étudiants, l'exemple à part
-    const groupes = [...new Set(motifs.map((m) => m.groupe))];
+    // les 4 groupes toujours présents, même sans motif ; l'exemple à la fin
+    const GROUPES = ["groupe_1", "groupe_2", "groupe_3", "groupe_4"];
+    const groupes = [...new Set([...GROUPES, ...motifs.map((m) => m.groupe).filter((g) => g), ""])];
     $("choix-motif").innerHTML = groupes.map((g) => {
       const titre = g ? g.replace("groupe_", "Groupe ") : "Exemple (référence)";
-      const options = motifs.filter((m) => m.groupe === g).map((m) => `<option value="${m.id}">${m.nom}</option>`);
+      let options = motifs.filter((m) => m.groupe === g).map((m) => `<option value="${m.id}">${m.nom}</option>`);
+      if (!options.length) options = ["<option disabled>aucun motif pour l'instant (à créer par une issue)</option>"];
       return `<optgroup label="${titre}">${options.join("")}</optgroup>`;
     }).join("");
     $("choix-motif").onchange = (e) => { choisirMotif(e.target.value); calculer(); };
