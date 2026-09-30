@@ -72,9 +72,11 @@ vitesse_max = 60.0                    # mm/s, vitesse d'impression maximale de l
 vitesse_deplacement = 60.0            # mm/s sans impression (approche, dégagement)
 hauteur_buse = 0.0                    # mm au-dessus du plateau pour la 1re couche (0 = couche d'essai)
 hauteur_approche = 20.0               # mm, la buse arrive et repart à cette hauteur au-dessus du chemin
-# Extrusion par l'axe E (extrudeur pas à pas), en mode relatif (M83).
-# E = volume du cordon (longueur × largeur × hauteur) / section du « filament » équivalent.
-# À CALIBRER : régler diametre_filament pour que 100 mm de E poussent le bon volume de béton.
-diametre_filament = 1.75              # mm, diamètre équivalent déclaré dans Klipper (extruder)
-multiplicateur_extrusion = 1.0        # ajustement fin du débit (1.0 = théorique)
-amorce = 0.0                          # mm de E poussés avant de commencer (0 = aucun)
+# Extrusion céramique : piston (NEMA 23, vis) -> tube PTFE Ø 10 mm -> tête malaxeuse sur X
+# (vis sans fin, NEMA 17). Dans Klipper : la tête = [extruder], le piston = [extruder_stepper]
+# synchronisé (voir docs/MAQUETTE.md). Axe E en mode relatif (M83), compté en millimètres de
+# matière dans le tube : E = volume du cordon (longueur × largeur × hauteur) / section du tube.
+diametre_filament = 10.0              # mm, diamètre intérieur du tube PTFE (= filament_diameter de Klipper)
+multiplicateur_extrusion = 1.0        # ajustement fin du débit après calibration (1.0 = théorique)
+amorce = 0.0                          # mm de E poussés avant de commencer (0 = aucun), pour remettre
+                                      # la céramique sous pression dans le tube et la tête

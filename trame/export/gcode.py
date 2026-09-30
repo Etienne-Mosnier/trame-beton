@@ -4,9 +4,10 @@ La machine cartésienne sert de MAQUETTE : la trame conçue en vraie grandeur (p
 final) est imprimée réduite dans le rapport  cordon d'essai / cordon final, en X, Y ET Z
 (bosses, couches et proportions du cordon comprises). La maquette est centrée sur le plateau.
 
-Origine au coin avant gauche, Z = 0 au plateau. Extrusion par l'axe E en mode relatif (M83) :
-pour chaque segment, E = longueur × largeur × hauteur du cordon d'essai / section du filament
-équivalent. Valeurs de la machine : config/cellule.toml, section [cartesienne].
+Origine au coin avant gauche, Z = 0 au plateau. Extrusion céramique : piston + tube PTFE Ø 10 mm
++ tête malaxeuse. Axe E en mode relatif (M83), en millimètres de matière dans le tube : pour chaque
+segment, E = longueur × largeur × hauteur du cordon d'essai / section du tube.
+Réglage de Klipper : docs/MAQUETTE.md. Valeurs de la machine : config/cellule.toml, [cartesienne].
 À ESSAYER D'ABORD À VIDE (sans béton) ET À VITESSE RÉDUITE.
 """
 
@@ -73,7 +74,7 @@ def generer(path, machine, largeur, hauteur, largeur_essai, palette, entete=()):
 
     lignes = ["; G-code genere par trame-beton : NE PAS MODIFIER A LA MAIN",
               "; Machine cartesienne (Klipper), %g x %g x %g mm, origine coin avant gauche" % (lx, ly, lz),
-              "; ESSAYER D'ABORD A VIDE (sans beton) ET A VITESSE REDUITE"]
+              "; ESSAYER D'ABORD A VIDE (sans ceramique) ET A VITESSE REDUITE"]
     lignes += ["; " + ascii(t) for t in entete]
     lignes += ["; MAQUETTE a l'echelle 1:%g (cordon final %g x %g mm -> essai %g x %g mm)"
                % (round(1 / k, 2), largeur, hauteur, largeur_m, hauteur_m),
@@ -83,7 +84,8 @@ def generer(path, machine, largeur, hauteur, largeur_essai, palette, entete=()):
                % (vitesse, machine["debit_volumique_max"], largeur_m * hauteur_m, machine["vitesse_max"]),
                "; %d points, %.1f m de cordon, environ %d min"
                % (len(points), longueur / 1000, round(longueur / vitesse / 60)),
-               "; E = %.4f mm par mm de cordon" % e_par_mm,
+               "; E = %.4f mm de matiere dans le tube (diametre %g mm) par mm de cordon"
+               % (e_par_mm, machine["diametre_filament"]),
                "; Klipper [extruder] : max_extrude_cross_section doit valoir au moins %.1f (mm2)"
                % (largeur_m * hauteur_m * machine["multiplicateur_extrusion"] * 1.1),
                "G21 ; millimetres",
