@@ -9,11 +9,12 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=7e8384d5272e";
-import { creerBuse, creerRobot } from "./robot.js?v=7e8384d5272e";
+import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=c51bdfe8ad3c";
+import { creerBuse, creerRobot } from "./robot.js?v=c51bdfe8ad3c";
 
 // une couleur par série, dans l'ordre d'impression
-const COULEURS = ["#6b7280", "#2563eb", "#16a34a", "#9333ea", "#d97706"]; // le rouge est gardé pour les problèmes
+// noir, orange, orange brûlé, orange clair, gris : le rouge est gardé pour les problèmes
+const COULEURS = ["#111111", "#f97316", "#9a3412", "#fdba74", "#737373"];
 const NOMS_SERIES = ["A", "B", "C", "D", "E"];
 const LARGEUR_CORDON = 4; // mm, pour le dessin seulement
 
@@ -26,14 +27,14 @@ const etat = $("etat");
 
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color("#f4f1ea");
+scene.background = new THREE.Color("#ffffff");
 const camera = new THREE.PerspectiveCamera(35, 1, 1, 20000);
 const rendu = new THREE.WebGLRenderer({ antialias: true });
 rendu.setPixelRatio(window.devicePixelRatio);
 $("scene").appendChild(rendu.domElement);
 const controles = new OrbitControls(camera, rendu.domElement);
 
-scene.add(new THREE.HemisphereLight("#ffffff", "#b9b2a4", 2.5));
+scene.add(new THREE.HemisphereLight("#ffffff", "#d6d3d1", 2.5));
 const soleil = new THREE.DirectionalLight("#ffffff", 1.5);
 soleil.position.set(300, -600, 1200);
 scene.add(soleil);
@@ -178,16 +179,16 @@ function dessinerPalette(contour) {
   // plateau de la palette (bois) et bâche
   const plateau = new THREE.Mesh(
     new THREE.BoxGeometry(lx, ly, 22),
-    new THREE.MeshStandardMaterial({ color: "#c8a878", roughness: 0.9 }),
+    new THREE.MeshStandardMaterial({ color: "#fdba74", roughness: 0.9 }),
   );
   plateau.position.set(lx / 2, ly / 2, -13);     // dessus à -2 mm, sous la bâche
   const bache = new THREE.Mesh(
     new THREE.PlaneGeometry(lx, ly),
-    new THREE.MeshStandardMaterial({ color: "#e9edf0", roughness: 1 }),
+    new THREE.MeshStandardMaterial({ color: "#fafaf9", roughness: 1 }),
   );
   bache.position.set(lx / 2, ly / 2, -0.4);
   groupePalette.add(plateau, bache);
-  groupePalette.add(trait(contour.map((p) => [p[0], p[1], 0.2]), "#1f2328", 1.5, true));
+  groupePalette.add(trait(contour.map((p) => [p[0], p[1], 0.2]), "#111111", 1.5, true));
 }
 
 function dessinerTrame(resultat, exageration) {
@@ -343,7 +344,7 @@ function arreterLecture() {
 function etiquette(texte, couleur, taille = 60) {
   const toile = document.createElement("canvas");
   const c = toile.getContext("2d");
-  const police = "bold 40px system-ui, sans-serif";
+  const police = "700 40px 'Bricolage Grotesque', system-ui, sans-serif";
   c.font = police;
   toile.width = Math.ceil(c.measureText(texte).width) + 16;   // support à la taille du texte
   toile.height = 64;
@@ -378,11 +379,11 @@ function dessinerPortee(p) {
   vider(groupePortee);
   if (!p) return;
   const z = p.z - 30;   // sous la palette : elle cache la zone qu'elle recouvre
-  groupePortee.add(surfaces(p.zone, "#16a34a", 0.09, z));
+  groupePortee.add(surfaces(p.zone, "#f97316", 0.10, z));
 
   // légende de l'anneau : où la buse peut imprimer
   const m = (v) => (v / 1000).toFixed(2).replace(".", ",");
-  const texte = etiquette(`zone d'impression : ${m(p.rayon_int)} à ${m(p.rayon_ext)} m`, "#15803d", 70);
+  const texte = etiquette(`zone d'impression : ${m(p.rayon_int)} à ${m(p.rayon_ext)} m`, "#c2410c", 70);
   // sur le côté de l'anneau (à 90° de la direction de la palette), pour ne pas la cacher
   const versPalette = new THREE.Vector2(paletteMobile.position.x, paletteMobile.position.y).normalize();
   texte.position.set(p.centre[0] + versPalette.y * p.rayon_ext, p.centre[1] - versPalette.x * p.rayon_ext, 40);
@@ -398,16 +399,16 @@ function dessinerPortee(p) {
     e.position.set(v[0] * 560, v[1] * 560, 30);
     groupePortee.add(e);
   };
-  fleche([1, 0], "#dc2626", "X robot");
-  fleche([0, 1], "#16a34a", "Y robot");
+  fleche([1, 0], "#111111", "X robot");
+  fleche([0, 1], "#f97316", "Y robot");
 
   // boussole : N et S, au-delà de la zone d'impression
   const [nx, ny] = p.nord;
   const r = p.rayon_ext + Math.hypot(...p.centre) + 250;
-  groupePortee.add(trait([[-nx * r, -ny * r, z + 1], [nx * r, ny * r, z + 1]], "#1f2328", 3, true));
-  const n = etiquette("N", "#1f2328", 160);
+  groupePortee.add(trait([[-nx * r, -ny * r, z + 1], [nx * r, ny * r, z + 1]], "#111111", 3, true));
+  const n = etiquette("N", "#111111", 160);
   n.position.set(nx * (r + 60), ny * (r + 60), 30);
-  const s = etiquette("S", "#6b7280", 120);
+  const s = etiquette("S", "#737373", 120);
   s.position.set(-nx * (r + 60), -ny * (r + 60), 30);
   groupePortee.add(n, s);
 }
@@ -507,16 +508,16 @@ function creerPoignee(nom, index, [x, y]) {
   poignee.userData = { nomParametre: nom, index };
   // toujours au premier plan : visible même sous le bras du robot
   const boule = new THREE.Mesh(new THREE.SphereGeometry(26, 24, 16),
-                               new THREE.MeshBasicMaterial({ color: "#f97316", depthTest: false }));
+                               new THREE.MeshBasicMaterial({ color: "#111111", depthTest: false }));
   boule.position.z = 26;
   boule.renderOrder = 10;
   const cerne = new THREE.Mesh(new THREE.RingGeometry(26, 32, 32),
-                               new THREE.MeshBasicMaterial({ color: "#ffffff", depthTest: false }));
+                               new THREE.MeshBasicMaterial({ color: "#f97316", depthTest: false }));
   cerne.position.z = 26;
   cerne.renderOrder = 9;
   poignee.add(cerne);
   const texte = nom.replaceAll("_", " ") + (index === null ? "" : " " + (index + 1));
-  const nomAffiche = etiquette(texte, "#c2410c", 40);
+  const nomAffiche = etiquette(texte, "#111111", 40);
   nomAffiche.position.z = 70;
   poignee.add(boule, nomAffiche);
   return poignee;
@@ -635,7 +636,7 @@ function point(conteneur, nom, p) {
   bloc.className = "reglage";
   bloc.dataset.point = nom;
   const geste = p.type === "point"
-    ? "Clique sur la boule orange pour la déplacer."
+    ? "Clique sur la boule noire pour la déplacer."
     : `Double-clic sur la palette : ajouter un point (${p.maxi} au plus). Clic sur un point : le déplacer. ` +
       `Double-clic sur un point : le supprimer.`;
   bloc.innerHTML = `
