@@ -32,6 +32,12 @@
       <label class="bouton-fichier">Importer un SVG ou un DXF…
         <input id="fichier-contour" type="file" accept=".svg,.dxf">
       </label>
+      <div class="reglage">
+        <div class="ligne"><span>taille</span><output id="valeur-taille"></output></div>
+        <input id="taille" type="range" min="5" max="100" step="1" value="100">
+        <p class="aide">100 % : la plus grande taille qui tient sur la palette, liaisons comprises.
+          Impossible de dépasser.</p>
+      </div>
       <p id="message-contour" class="petit"></p>
     </section>
 

@@ -81,3 +81,25 @@ def test_format_inconnu():
 
 def test_contour_est_un_polygone():
     assert isinstance(charger("grand.svg")["contour"], Polygon)
+
+
+@pytest.mark.parametrize("taille", [0.1, 0.5, 1.0])
+def test_taille_choisie_sans_jamais_depasser(taille):
+    r = charger("haricot.dxf", taille=taille)
+    assert r["taille"] == pytest.approx(taille)
+    assert PALETTE_UTILE.buffer(1e-6).covers(r["contour"])
+    # 100 % : la forme touche la marge d'un côté
+    if taille == 1.0:
+        xmin, ymin, xmax, ymax = r["contour"].bounds
+        assert min(xmin - 20, ymin - 20, 1180 - xmax, 780 - ymax) == pytest.approx(0, abs=0.01)
+
+
+def test_taille_petite_sans_rotation():
+    # à petite taille, la forme n'a pas besoin d'être tournée
+    assert charger("haricot.dxf", taille=0.3)["rotation"] == 0
+    assert charger("haricot.dxf", taille=1.0)["rotation"] == 90
+
+
+def test_taille_reelle_par_defaut():
+    r = charger("rectangle.svg")
+    assert r["dimensions"] == (280, 180) and 0 < r["taille"] < 1
