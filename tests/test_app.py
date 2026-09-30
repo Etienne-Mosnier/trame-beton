@@ -1,6 +1,8 @@
 """Point d'entrée de la page web (trame/app.py)."""
 
 import json
+
+import pytest
 import pathlib
 
 from trame import app
@@ -60,3 +62,16 @@ def test_moteur_deduit_du_cordon():
     assert r["beton"]["largeur_cordon"] == 12 and r["amp"] == 6
     assert max(p[2] for p in r["path"]) == 12                  # deux cordons de 6 mm
     assert "hauteur de couche (6 mm)" in json.loads(app.exporter("script"))["texte"]
+
+
+@pytest.mark.parametrize("largeur", [10, 25, 40])
+def test_couloirs_toujours_sur_la_palette(largeur):
+    # plus le cordon est large, plus les couloirs s'écartent : la forme est réduite pour que
+    # le bord du cordon reste à la marge de la palette (20 mm) ou plus
+    texte = (CONTOURS / "grand.svg").read_text()
+    r = json.loads(app.calculer("exemple", json.dumps({"moteur": {"largeur_cordon": largeur}}), texte, "grand.svg"))
+    xs = [p[0] for p in r["path"]]
+    ys = [p[1] for p in r["path"]]
+    demi = largeur / 2
+    assert min(xs) - demi >= 20 - 0.5 and max(xs) + demi <= 1180 + 0.5
+    assert min(ys) - demi >= 20 - 0.5 and max(ys) + demi <= 780 + 0.5
