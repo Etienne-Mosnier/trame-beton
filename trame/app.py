@@ -419,7 +419,7 @@ def exporter(format_fichier, options_json="{}"):
     options = json.loads(options_json or "{}")
     if format_fichier == "gcode":
         entete = ["Motif : %s, contour : %s" % (d["motif"], d["nom_contour"])]
-        entete.append("A CALIBRER : diametre_filament / multiplicateur_extrusion (config/cellule.toml)")
+        entete.append("A CALIBRER : piston, tete malaxeuse et debit (docs/MAQUETTE.md)")
         essai = float(options.get("largeur_essai", CONFIG["cartesienne"]["largeur_cordon_essai"]))
         try:
             texte = gcode.generer(d["resultat"]["path"] or [], CONFIG["cartesienne"], d["largeur"], d["amp"],
