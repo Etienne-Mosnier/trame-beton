@@ -1,5 +1,7 @@
 """Contrôles d'imprimabilité : chaque contrôle détecte son problème, et seulement lui."""
 
+import math
+
 import pytest
 from shapely.geometry import LineString, Point, box
 
@@ -100,3 +102,43 @@ def test_decoupe_ne_coupe_qu_au_bord():
     boucle = [(-50, 150), (250, 150), (200, 250), (150, 100), (450, 100)]
     r = calculer_chemin([[boucle], [[(200, -50), (200, 350)]]], FORME, lane=0)
     assert r["raccords_droits"] == 0 and r["controle"]["sauts"] == 0
+
+
+# --- dessin importé, en calques -----------------------------------------------------
+
+from trame.controles import croisements_rasants_trace, lignes_trop_proches_trace
+
+
+def spirale(pas, tours=3):
+    return LineString([((20 + pas * t / (2 * math.pi)) * math.cos(t), (20 + pas * t / (2 * math.pi)) * math.sin(t))
+                       for t in [k * 0.05 for k in range(int(tours * 2 * math.pi / 0.05))]])
+
+
+def test_deux_tours_de_spirale_trop_proches():
+    assert lignes_trop_proches_trace([[spirale(15)]], 20)["statut"] == "alerte"
+    assert lignes_trop_proches_trace([[spirale(60)]], 20)["statut"] == "ok"
+
+
+def test_epingle_trop_etroite():
+    # une seule ligne qui fait demi-tour : ses deux jambes à 14 mm l'une de l'autre
+    epingle = LineString([(0, 0), (300, 0)] + [(300 + 7 * math.sin(math.pi * k / 12), 7 - 7 * math.cos(math.pi * k / 12))
+                                                for k in range(13)] + [(0, 14)])
+    c = lignes_trop_proches_trace([[epingle]], 20)
+    assert c["statut"] == "alerte" and "14 mm" in c["message"]
+
+
+def test_une_boucle_qui_se_croise_n_est_pas_trop_proche():
+    # deux passages qui se croisent franchement ne sont pas « trop proches »
+    boucle = LineString([(0, 0), (200, 0), (200, 100), (100, 100), (100, -100)])
+    assert lignes_trop_proches_trace([[boucle]], 20)["statut"] == "ok"
+
+
+def test_croisement_rasant_dans_une_meme_ligne():
+    rasant = LineString([(0, 0), (200, 0), (200, 30), (-100, -30)])
+    c = croisements_rasants_trace([[rasant]])
+    assert c["statut"] == "alerte" and "11°" in c["message"]
+    # entre deux calques, comme avant
+    assert croisements_rasants_trace([[LineString([(0, 0), (100, 0)])], [LineString([(50, -50), (50, 50)])]])["statut"] == "ok"
+    # une courbe fermée ne se « croise » pas à son point de départ
+    cercle = LineString([(100 * math.cos(2 * math.pi * k / 72), 100 * math.sin(2 * math.pi * k / 72)) for k in range(73)])
+    assert croisements_rasants_trace([[cercle]])["statut"] == "ok"

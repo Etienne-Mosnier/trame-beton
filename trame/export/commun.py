@@ -57,14 +57,38 @@ def separer_liaisons(waves, contour, lane):
 
 
 def sommets_des_bosses(waves):
-    """Sommets des bosses : (x, y, z) là où la hauteur est plus grande qu'aux deux voisins."""
+    """Sommets des bosses : (x, y, z) là où la hauteur monte puis ne monte plus (un sommet pointu,
+    ou le début d'un sommet plat)."""
     sommets = []
     for serie in waves:
         for poly in serie:
             for k in range(1, len(poly) - 1):
-                if poly[k][2] > 0 and poly[k][2] > poly[k - 1][2] and poly[k][2] > poly[k + 1][2]:
+                if poly[k][2] > 0 and poly[k][2] > poly[k - 1][2] and poly[k][2] >= poly[k + 1][2]:
                     sommets.append(tuple(poly[k]))
     return sommets
+
+
+def noms_des_calques(nb, noms=None):
+    """Nom de chaque calque exporté, dans l'ordre d'impression : « 1. A vagues », « 2. B lignes »…
+    (le rang en tête : réimporté, le fichier garde le même ordre). Sans noms : SERIE_A, SERIE_B…
+    Les caractères refusés dans un nom de calque DXF sont remplacés par « _ »."""
+    if not noms:
+        return ["SERIE_%s" % LETTRES[i] for i in range(nb)]
+    propre = lambda nom: "".join("_" if c in '<>/\\":;?*|=`' else c for c in nom)
+    return ["%d. %s" % (i + 1, propre(nom)) for i, nom in enumerate(noms[:nb])]
+
+
+def attentes(resultat):
+    """Parcours levé de la buse et point d'attente : départ, chaque pause, fin.
+    Renvoie [(nom, trajet 3D, point d'attente), …]."""
+    sortie = []
+    if resultat.get("depart"):
+        sortie.append(("DEPART", resultat["depart"]["trajet"], resultat["depart"]["point"]))
+    for numero, (dep, pause) in enumerate(zip(resultat.get("deplacements", []), resultat.get("pauses", [])), 1):
+        sortie.append(("PAUSE %d" % numero, dep, pause["point"]))
+    if resultat.get("fin"):
+        sortie.append(("FIN", resultat["fin"]["trajet"], resultat["fin"]["point"]))
+    return sortie
 
 
 def reperes_palette(palette):

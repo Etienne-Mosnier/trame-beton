@@ -320,6 +320,103 @@ def depart_et_fin(resultat):
                     "en rouge). Changer l'ordre des calques." % " et ".join(bloques), segments=segments)
 
 
+def lignes_trop_proches_trace(calques, ecart_min, pas=2.0):
+    """Dans un même calque, deux passages à moins de ecart_min (2 × la largeur du cordon) : deux
+    lignes différentes, ou deux passages d'une même ligne (deux tours d'une spirale, les deux
+    jambes d'une épingle). Le long d'une même ligne, on ne compare que des points éloignés de plus
+    de 2 × ecart_min (sinon deux points voisins seraient toujours « trop proches »).
+    Deux passages qui se croisent sont forcément proches près du croisement : on ne compte que
+    les passages à peu près parallèles (moins de 30° d'écart, dans un sens ou dans l'autre)."""
+    import numpy as np
+    import shapely
+
+    titre = "Lignes assez espacées"
+    segments, plus_petit = [], None
+    for calque in calques:
+        P, S, C, D = [], [], [], []   # points tous les 'pas' mm, longueur sur leur ligne, ligne, direction
+        for numero, courbe in enumerate(calque):
+            s = np.linspace(0, courbe.length, max(1, math.ceil(courbe.length / pas)) + 1)
+            point = lambda l: shapely.get_coordinates(shapely.line_interpolate_point(courbe, l))
+            a, b = point(np.maximum(s - 1.0, 0.0)), point(np.minimum(s + 1.0, courbe.length))
+            norme = np.maximum(np.hypot(*(b - a).T), 1e-9)[:, None]
+            P.append(point(s))
+            S.append(s)
+            C.append(np.full(len(s), numero))
+            D.append((b - a) / norme)
+        if not P:
+            continue
+        P, S, C, D = np.concatenate(P), np.concatenate(S), np.concatenate(C), np.concatenate(D)
+        if len(P) < 2:
+            continue
+        arbre = shapely.STRtree(shapely.points(P))
+        i, j = arbre.query(shapely.points(P), predicate="dwithin", distance=ecart_min)
+        paralleles = np.abs((D[i] * D[j]).sum(axis=1)) > math.cos(math.radians(30))
+        garde = (i < j) & paralleles & ((C[i] != C[j]) | (np.abs(S[j] - S[i]) > 2 * ecart_min))
+        i, j = i[garde], j[garde]
+        if not len(i):
+            continue
+        distances = np.hypot(*(P[i] - P[j]).T)
+        plus_petit = float(distances.min()) if plus_petit is None else min(plus_petit, float(distances.min()))
+        # les endroits trop proches : un petit trait entre les deux passages
+        for a, b in zip(i[:: max(1, len(i) // MAX_MARQUES)], j[:: max(1, len(i) // MAX_MARQUES)]):
+            segments.append([[P[a][0], P[a][1], 0], [P[b][0], P[b][1], 0]])
+    if plus_petit is None:
+        return controle(titre, "ok", "Dans chaque calque, les passages sont à plus de %g mm." % ecart_min)
+    return controle(titre, "alerte",
+                    "Dans un même calque, des passages sont à moins de %g mm (2 × la largeur du cordon) : les "
+                    "cordons vont se toucher. Écart le plus petit : %.0f mm." % (ecart_min, plus_petit),
+                    segments=segments)
+
+
+def croisements_rasants_trace(calques, angle_min=ANGLE_MIN):
+    """Croisements plus rasants que angle_min : entre deux calques, et aussi quand une ligne se
+    recroise elle-même (une boucle), puisque le second passage monte sur le premier."""
+    import numpy as np
+    import shapely
+
+    titre = "Croisements assez ouverts"
+    A, B, ligne, rang, fermee, longueur_ligne = [], [], [], [], [], []
+    numero = 0
+    for calque in calques:
+        for courbe in calque:
+            c = list(courbe.coords)
+            for k in range(len(c) - 1):
+                A.append(c[k][:2])
+                B.append(c[k + 1][:2])
+                ligne.append(numero)
+                rang.append(k)
+            fermee.append(len(c) > 3 and math.dist(c[0][:2], c[-1][:2]) < 0.5)
+            longueur_ligne.append(len(c) - 1)
+            numero += 1
+    if not A:
+        return controle(titre, "ok", "Aucun croisement.")
+    A, B, ligne, rang = np.array(A), np.array(B), np.array(ligne), np.array(rang)
+    morceaux = shapely.linestrings(np.stack([A, B], axis=1))
+    i, j = shapely.STRtree(morceaux).query(morceaux, predicate="intersects")
+    voisins = (ligne[i] == ligne[j]) & (np.abs(rang[i] - rang[j]) <= 1)
+    # une courbe fermée : son dernier segment touche le premier
+    bouclage = (ligne[i] == ligne[j]) & np.array([fermee[l] for l in ligne[i]]) & \
+        (np.abs(rang[i] - rang[j]) == np.array([longueur_ligne[l] - 1 for l in ligne[i]]))
+    garde = (i < j) & ~voisins & ~bouclage
+    i, j = i[garde], j[garde]
+    points, plus_petit = [], None
+    for a, b, x in zip(i, j, shapely.intersection(morceaux[i], morceaux[j])):
+        if x.geom_type != "Point":
+            continue
+        u, v = B[a] - A[a], B[b] - A[b]
+        cos = abs(float(np.dot(u, v))) / (np.linalg.norm(u) * np.linalg.norm(v) or 1.0)
+        angle = math.degrees(math.acos(min(cos, 1.0)))
+        if angle < angle_min:
+            points.append((x.x, x.y))
+            plus_petit = angle if plus_petit is None else min(plus_petit, angle)
+    if plus_petit is None:
+        return controle(titre, "ok", "Toutes les lignes se croisent à plus de %g°." % angle_min)
+    return controle(titre, "alerte",
+                    "%d croisement(s) à moins de %g° : les bosses vont se chevaucher. "
+                    "Angle le plus petit : %.0f°." % (len(points), angle_min, plus_petit),
+                    points=points)
+
+
 def controler_trace(resultat, calques, noms, reglages):
     """Contrôles d'un dessin importé (sans contour).
 
@@ -334,8 +431,8 @@ def controler_trace(resultat, calques, noms, reglages):
         liaisons_ajoutees(resultat, noms),
         *([pauses_sans_survol(resultat, noms)] if resultat.get("pauses") else []),
         depart_et_fin(resultat),
-        lignes_trop_proches(calques, 2 * reglages["largeur_cordon"]),
-        croisements_rasants(calques),
+        lignes_trop_proches_trace(calques, 2 * reglages["largeur_cordon"]),
+        croisements_rasants_trace(calques),
         virages_serres(toutes, reglages["rayon_courbure_min"], "dessin"),
     ]
 

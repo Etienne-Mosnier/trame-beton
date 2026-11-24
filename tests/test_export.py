@@ -29,7 +29,10 @@ def test_dxf(calcul):
     assert r["nom"] == "trame_spirales.dxf"
     doc = ezdxf.read(io.StringIO(r["texte"]))
     calques = {c.dxf.name for c in doc.layers}
-    assert {"PALETTE", "SERIE_A", "SERIE_B", "SERIE_C", "LIAISONS", "CHEMIN", "BOSSES"} <= calques
+    # un calque par calque imprimé : son rang d'impression, puis le nom du dessin
+    assert {"PALETTE", "1. 1 spirale", "2. 2 boucles", "3. 3 vagues", "LIAISONS", "CHEMIN", "BOSSES",
+            "DEPLACEMENTS", "PAUSES"} <= calques
+    assert len(doc.modelspace().query('POINT[layer=="BOSSES"]')) > 0      # sommets des bosses
     assert "CONTOUR" not in calques                        # dessin importé : pas de contour
     msp = doc.modelspace()
     chemin = msp.query('POLYLINE[layer=="CHEMIN"]')[0]
@@ -73,3 +76,14 @@ def test_sommets_des_bosses():
 def test_exporter_sans_calcul():
     app._dernier.clear()
     assert "erreur" in json.loads(app.exporter("dxf"))
+
+
+def test_reimport_d_un_export():
+    # un fichier exporté se réimporte : l'ordre d'impression est gardé, les calques techniques éteints
+    from trame.dessin import lire_dessin
+    texte = (DESSINS / "vagues.svg").read_text()
+    app.calculer(json.dumps({"pauses": ["A vagues"], "calques": ["B lignes", "A vagues"]}), texte, "vagues.svg")
+    for format_fichier in ("dxf", "svg"):
+        d = lire_dessin(json.loads(app.exporter(format_fichier))["texte"], "export." + format_fichier)
+        imprimes = [c["nom"] for c in d["calques"] if c["imprime"]]
+        assert imprimes == ["1. B lignes", "2. A vagues"], format_fichier

@@ -207,7 +207,7 @@ def calculer(reglages_json, texte, nom):
         apres = set(reglages.get("pauses") or [])
         r = calculer_trace(place["courbes"], largeur, moteur["amp"], moteur["d"], moteur["couches"],
                            pauses=[n in apres for n in noms], levee=CONFIG["impression"]["hauteur_approche"],
-                           cadre=zone_de_travail() if apres else None)
+                           cadre=zone_de_travail())
 
         lignes = [[LineString(c) for c in courbes] for courbes in place["courbes"]]
         controles = controler_trace(r, lignes, noms, {
@@ -633,9 +633,9 @@ def exporter(format_fichier, options_json="{}"):
         except ValueError as e:
             return json.dumps({"erreur": str(e)})
     elif format_fichier == "dxf":
-        texte = exporter_dxf(d["resultat"], d["contour"], d["palette"], d["lane"])
+        texte = exporter_dxf(d["resultat"], d["contour"], d["palette"], d["lane"], d.get("noms"))
     elif format_fichier == "svg":
-        texte = exporter_svg(d["resultat"], d["contour"], d["palette"], d["lane"], d["amp"])
+        texte = exporter_svg(d["resultat"], d["contour"], d["palette"], d["lane"], d["amp"], d.get("noms"))
     else:
         return json.dumps({"erreur": "Format inconnu : %s" % format_fichier})
     return json.dumps({"nom": "trame_%s.%s" % (d["nom_export"], format_fichier), "texte": texte})

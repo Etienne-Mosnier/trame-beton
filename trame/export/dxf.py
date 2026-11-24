@@ -7,13 +7,13 @@ import io
 
 import ezdxf
 
-from trame.export.commun import LETTRES, lignes_et_liaisons, reperes_palette, sommets_des_bosses
+from trame.export.commun import attentes, lignes_et_liaisons, noms_des_calques, reperes_palette, sommets_des_bosses
 
 # couleurs AutoCAD (ACI) : gris, bleu, vert, magenta, orange — comme l'aperçu
 COULEURS = [8, 5, 3, 6, 30]
 
 
-def exporter_dxf(resultat, contour, palette, lane):
+def exporter_dxf(resultat, contour, palette, lane, noms=None):
     """Texte DXF du résultat de calculer_chemin, pour les étudiants ingénieurs."""
     doc = ezdxf.new("R2010", setup=True)
     doc.header["$INSUNITS"] = 4            # millimètres
@@ -45,7 +45,7 @@ def exporter_dxf(resultat, contour, palette, lane):
 
     # une série par calque, dans l'ordre d'impression
     for i, morceaux in enumerate(lignes):
-        attributs = calque("SERIE_%s" % LETTRES[i], COULEURS[i % len(COULEURS)])
+        attributs = calque(noms_des_calques(len(lignes), noms)[i], COULEURS[i % len(COULEURS)])
         for poly in morceaux:
             msp.add_polyline3d(poly, dxfattribs=attributs)
 
@@ -60,16 +60,13 @@ def exporter_dxf(resultat, contour, palette, lane):
     # le parcours complet de la buse, d'un seul tenant, dans l'ordre d'impression
     if resultat["path"]:
         msp.add_polyline3d(resultat["path"], dxfattribs=calque("CHEMIN", 7))
-    # pauses : partie levée du parcours de la buse, et point d'attente
-    if resultat.get("deplacements"):
-        attributs = calque("DEPLACEMENTS", 8, "DASHED")
-        for deplacement in resultat["deplacements"]:
-            msp.add_polyline3d(deplacement, dxfattribs=attributs)
-        attributs = calque("PAUSES", 1)
-        for numero, pause in enumerate(resultat["pauses"], 1):
-            x, y, z = pause["point"]
-            msp.add_circle((x, y, z), 15, dxfattribs=attributs)
-            msp.add_text("PAUSE %d" % numero, height=12, dxfattribs=attributs).set_placement((x + 20, y + 20, z))
+    # départ, pauses, fin : partie levée du parcours de la buse, et point d'attente
+    if attentes(resultat):
+        trajets, points = calque("DEPLACEMENTS", 8, "DASHED"), calque("PAUSES", 1)
+        for nom, trajet, (x, y, z) in attentes(resultat):
+            msp.add_polyline3d(trajet, dxfattribs=trajets)
+            msp.add_circle((x, y, z), 15, dxfattribs=points)
+            msp.add_text(nom, height=12, dxfattribs=points).set_placement((x + 20, y + 20, z))
     if resultat["jumps"]:
         attributs = calque("SAUTS", 1, "DASHED")
         for saut in resultat["jumps"]:
