@@ -179,8 +179,6 @@ pre#info, #calibration-placement {
 .controle .petit { margin-left: 1.4em; }
 p.erreur, span.erreur { color: var(--erreur); white-space: pre-wrap; }
 
-.pastille-point { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
-  background: var(--noir); box-shadow: 0 0 0 2px var(--orange); margin-right: 8px; vertical-align: middle; }
 
 /* ---------- scène ---------- */
 
@@ -207,15 +205,32 @@ p.erreur, span.erreur { color: var(--erreur); white-space: pre-wrap; }
   #panneau { top: auto; bottom: 8px; left: 8px; width: calc(100vw - 16px); height: 50vh; }
 }
 
-/* réglage « Liste » : une ligne par élément, ses curseurs côte à côte */
-.liste .element { margin: 8px 0 0; padding: 6px 0 0 10px; border-left: 2px solid var(--orange-pale); }
-.liste .titre-element { display: flex; align-items: center; justify-content: space-between; font-weight: 600; }
-.liste .champs { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 4px 12px; }
-.liste .champ { display: block; font-size: 11.5px; cursor: pointer; }
-.liste .champ .ligne { display: flex; justify-content: space-between; gap: 4px; font-weight: 500; white-space: nowrap; }
-.liste .champ .ligne span { overflow: hidden; text-overflow: ellipsis; }
-.liste .champ .ligne span::first-letter { text-transform: uppercase; }
-.liste .champ output { font-weight: 600; color: var(--orange-fonce); font-variant-numeric: tabular-nums; }
-.liste .champ input[type=range] { margin: 5px 0 2px; }
-.liste .retirer { width: 18px; height: 18px; padding: 0; line-height: 1; border-radius: 50%; font-size: 12px; flex: none; }
-.liste .ajouter { margin-top: 10px; border-style: dashed; }
+/* liste des calques : une ligne par calque, que l'on glisse pour changer l'ordre */
+#calques { list-style: none; margin: 10px 0 4px; padding: 0; }
+#calques:empty { display: none; }
+.calque {
+  display: flex; align-items: center; gap: 7px;
+  margin: 4px 0; padding: 5px 6px 5px 4px;
+  border: 1.2px solid var(--trait); border-radius: 9px;
+  background: var(--blanc); cursor: grab;
+}
+.calque:hover { border-color: var(--noir); }
+.calque.glisse { opacity: 0.4; }
+.calque.avant { box-shadow: 0 -3px 0 var(--orange); }
+.calque.apres { box-shadow: 0 3px 0 var(--orange); }
+.calque .poignee { color: var(--gris); letter-spacing: -2px; font-size: 12px; }
+.calque .rang { width: 1em; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.calque .pastille { width: 22px; height: 5px; border-radius: 3px; flex: none; border: 1px solid transparent; }
+.calque .nom { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calque .info { color: var(--gris); font-size: 11.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.calque .oeil {
+  width: 26px; height: 24px; padding: 0; flex: none;
+  display: grid; place-items: center; border: none; background: none; color: var(--noir);
+}
+.calque .oeil:hover { background: var(--orange-pale); color: var(--noir); }
+.calque.eteint .nom, .calque.eteint .info, .calque.eteint .oeil { color: var(--gris); }
+.calque.eteint .nom { font-weight: 500; text-decoration: line-through; }
+.calque.eteint .pastille { border-color: var(--gris); }
+
+/* un fichier glissé au-dessus de la vue */
+#scene.depot { outline: 4px dashed var(--orange); outline-offset: -10px; }

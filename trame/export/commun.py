@@ -17,6 +17,15 @@ def couloirs(contour, lane, nb_series):
     return [LineString(decaler_vers_exterieur(anneau, lane * i)) for i in range(max(nb_series, 1))]
 
 
+def lignes_et_liaisons(resultat, contour, lane):
+    """(lignes, liaisons) : lignes[i] = polylignes 3D de la série i hors liaisons,
+    liaisons = polylignes 3D ajoutées par le moteur pour relier les lignes.
+    Dessin importé : le moteur les donne déjà ; motif + contour : on les retrouve le long du bord."""
+    if "lignes" in resultat:
+        return resultat["lignes"], [l["points"] for l in resultat["liaisons"]]
+    return separer_liaisons(resultat["waves"], contour, lane)
+
+
 def separer_liaisons(waves, contour, lane):
     """Coupe chaque série en morceaux « lignes du motif » et morceaux « liaisons ».
 

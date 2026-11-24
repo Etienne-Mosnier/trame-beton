@@ -5,7 +5,7 @@ Avec --site DOSSIER, assemble aussi le site publié sur GitHub Pages dans DOSSIE
     python3 web/construire.py
 Pour la publication (GitHub Actions) :
     python3 web/construire.py --site _site
-Les nouveaux motifs des groupes sont ainsi pris en compte sans modifier web/.
+Les dessins d'exemple de dessins/ sont ainsi pris en compte sans modifier web/.
 """
 
 import json
@@ -16,9 +16,7 @@ import sys
 import time
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
-MOTIFS = ["trame/**/*.py", "motifs/*/motif.py", "motifs/*/aide.md",
-          "motifs/*/*/motif.py", "motifs/*/*/aide.md",
-          "contours/*.svg", "contours/*.dxf", "config/cellule.toml"]
+FICHIERS = ["trame/**/*.py", "dessins/*.svg", "dessins/*.dxf", "config/cellule.toml"]
 
 # page d'accueil du site : renvoie vers l'aperçu
 ACCUEIL = """<!doctype html>
@@ -31,7 +29,7 @@ ACCUEIL = """<!doctype html>
 
 def lister():
     fichiers = set()
-    for motif in MOTIFS:
+    for motif in FICHIERS:
         fichiers.update(p.relative_to(RACINE).as_posix() for p in RACINE.glob(motif))
     return sorted(f for f in fichiers if "__pycache__" not in f)
 

@@ -271,6 +271,44 @@ def controler(resultat, contour, series, reglages):
     ]
 
 
+def liaisons_ajoutees(resultat, noms):
+    """Liaisons droites ajoutées par le moteur : entre deux calques (choix « relié »), ou dans un
+    calque tracé en plusieurs morceaux (la règle est un calque = une seule ligne)."""
+    liaisons = resultat.get("liaisons", [])
+    longueur = sum(math.dist(a, b) for l in liaisons for a, b in zip(l["points"], l["points"][1:]))
+    cordon = "%d mm" % round(longueur) if longueur < 1000 else ("%.1f m" % (longueur / 1000)).replace(".", ",")
+    titre = "Liaisons ajoutées : %d (%s de cordon)" % (len(liaisons), cordon)
+    if not liaisons:
+        return controle("Liaisons ajoutées : aucune", "ok", "Le dessin s'imprime d'un seul trait.")
+    dans = [l for l in liaisons if l["dans_calque"]]
+    if not dans:
+        return controle(titre, "ok", "Une liaison droite entre deux calques qui se suivent.")
+    calques = sorted({noms[l["calque"]] for l in dans})
+    segments = [[p, q] for l in dans for p, q in zip(l["points"], l["points"][1:])]
+    return controle(titre, "alerte",
+                    "%d liaison(s) relient les morceaux d'un même calque (%s) : la règle est un calque = "
+                    "une seule ligne. Elles sont imprimées en ligne droite, montrées en rouge."
+                    % (len(dans), ", ".join("« %s »" % n for n in calques)), segments=segments)
+
+
+def controler_trace(resultat, calques, noms, reglages):
+    """Contrôles d'un dessin importé (sans contour).
+
+    resultat : sortie de enchainement.calculer_trace
+    calques  : courbes placées de chaque calque imprimé (listes de LineString), dans l'ordre
+    noms     : noms de ces calques
+    reglages : largeur_cordon, rayon_courbure_min, palette
+    """
+    toutes = [c for calque in calques for c in calque]
+    return [
+        sur_la_palette(resultat, reglages["palette"], 0.0),
+        liaisons_ajoutees(resultat, noms),
+        lignes_trop_proches(calques, 2 * reglages["largeur_cordon"]),
+        croisements_rasants(calques),
+        virages_serres(toutes, reglages["rayon_courbure_min"], "dessin"),
+    ]
+
+
 def quantites(resultat, largeur_cordon, hauteur_couche, vitesse):
     """Longueur de cordon (mm), durée (s) et volume de béton (litres), estimés."""
     path = resultat["path"] or []

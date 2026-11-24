@@ -1,11 +1,13 @@
-"""Point d'entrée appelé par la page web : motif + réglages -> résultat JSON.
+"""Point d'entrée appelé par la page web : dessin en calques + réglages -> résultat JSON.
 
 La page appelle :
-    liste_motifs()                    -> motifs disponibles, leurs réglages et leur aide
-    reglages_moteur()                 -> réglages du moteur (curseurs communs à tous les motifs)
-    calculer(motif, reglages, texte, nom) -> tout ce qu'il faut pour dessiner l'aperçu
-Toutes les fonctions renvoient un texte JSON. En cas d'erreur, calculer() renvoie
+    lire_calques(texte, nom)          -> les calques du dessin importé (SVG ou DXF)
+    reglages_moteur()                 -> réglages du béton (curseurs)
+    calculer(reglages, texte, nom)    -> tout ce qu'il faut pour dessiner l'aperçu
+Toutes les fonctions renvoient un texte JSON. En cas d'erreur, elles renvoient
 {"erreur": "message en français"} au lieu de planter.
+
+(liste_motifs et calculer_motif : ancien fonctionnement par motifs, retiré bientôt.)
 """
 
 import importlib
@@ -16,8 +18,11 @@ import sys
 import tomllib
 import traceback
 
+from shapely.geometry import LineString
+
 from trame.contour import lire_forme, placer
-from trame.controles import controler, quantites
+from trame.controles import controler, controler_trace, quantites
+from trame.dessin import lire_dessin, placer_dessin
 from trame.export.dxf import exporter_dxf
 from trame.export import gcode
 from trame.export.svg import exporter_svg
@@ -26,6 +31,7 @@ import numpy as np
 from trame.robot import alertes, cinematique, urscript
 from trame.robot.calibration import repere_palette, vers_robot
 from trame.moteur.chemin import calculer_chemin
+from trame.moteur.enchainement import calculer_trace
 from trame.parametres import Parametre, Point, Points, valeurs
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
@@ -49,8 +55,8 @@ HAUTEUR_COUCHE = BETON["hauteur_couche"]
 # (voir reglages_du_moteur) : il n'y a que le cordon à décider.
 MOTEUR = {
     "largeur_cordon": Parametre(BETON["largeur_cordon"], mini=4.0, maxi=40.0, unite="mm", pas=0.5,
-                                aide="Largeur du cordon, mesurée pendant les essais. Les montées aux croisements et "
-                                     "l'écart entre les liaisons le long du bord en découlent."),
+                                aide="Largeur du cordon, mesurée pendant les essais. La longueur des montées aux "
+                                     "croisements en découle."),
     "hauteur_couche": Parametre(HAUTEUR_COUCHE, mini=1.0, maxi=20.0, unite="mm", pas=0.5,
                                 aide="Épaisseur d'une couche, mesurée pendant les essais : c'est la hauteur d'une bosse."),
     "couches": Parametre(1, mini=1, maxi=5, unite="",
@@ -129,7 +135,113 @@ def arrondir(points, chiffres=2):
     return [[round(v, chiffres) for v in p] for p in points]
 
 
-def calculer(motif_id, reglages_json, contour_texte, contour_nom):
+# --- dessin importé, en calques -------------------------------------------------------
+
+MAX_CALQUES = 5          # 2 à 5 niveaux de cordon (cahier des charges)
+_dessins = {}            # dernier fichier lu (gardé en mémoire : on ne le relit pas à chaque calcul)
+
+
+def dessin_lu(texte, nom):
+    cle = (nom, len(texte), hash(texte))
+    if cle not in _dessins:
+        _dessins.clear()
+        _dessins[cle] = lire_dessin(texte, nom)
+    return _dessins[cle]
+
+
+def en_erreur(e):
+    """Erreur prévue (fichier illisible…) : le message suffit ; sinon le détail technique."""
+    if isinstance(e, ValueError):
+        return json.dumps({"erreur": str(e), "details": traceback.format_exc()})
+    return json.dumps({"erreur": "%s : %s" % (type(e).__name__, e), "details": traceback.format_exc()})
+
+
+def lire_calques(texte, nom):
+    """Les calques du fichier, dans l'ordre alphabétique : nom, couleur dans le fichier,
+    imprimé au départ ou non, nombre de lignes, longueur (mm)."""
+    try:
+        dessin = dessin_lu(texte, nom)
+        return json.dumps({
+            "message": dessin["message"],
+            "calques": [{"nom": c["nom"], "couleur": c["couleur"], "imprime": c["imprime"],
+                         "lignes": len(c["courbes"]),
+                         "longueur": round(sum(LineString(p).length for p in c["courbes"]))}
+                        for c in dessin["calques"]],
+        })
+    except Exception as e:
+        return en_erreur(e)
+
+
+def calculer(reglages_json, texte, nom):
+    """Calcul complet pour l'aperçu, à partir du fichier importé.
+
+    reglages_json : {"calques": [noms des calques à imprimer, dans l'ordre d'impression],
+                     "moteur": {nom: valeur}, "taille": 0 à 1 ou absent, "vitesse": mm/s}
+    Sans "calques" : les calques imprimés au départ, dans l'ordre alphabétique.
+    """
+    try:
+        reglages = json.loads(reglages_json or "{}")
+        plateau = (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"])
+        vitesse = min(max(float(reglages.get("vitesse") or CONFIG["impression"]["vitesse"]), 1.0), 250.0)
+        beton = valeurs(MOTEUR, reglages.get("moteur"))
+        moteur = reglages_du_moteur(beton)
+        dessin = dessin_lu(texte, nom)
+
+        par_nom = {c["nom"]: c for c in dessin["calques"]}
+        noms = reglages.get("calques")
+        if noms is None:
+            noms = [c["nom"] for c in dessin["calques"] if c["imprime"]]
+        noms = [n for n in noms if n in par_nom]
+        if not noms:
+            raise ValueError("Aucun calque à imprimer : rallumer au moins un calque (œil) dans la liste.")
+        if len(noms) > MAX_CALQUES:
+            raise ValueError("%d calques à imprimer : %d au plus. Éteindre les autres (œil) dans la liste."
+                             % (len(noms), MAX_CALQUES))
+
+        # le dessin centré sur la palette, le bord du cordon à la marge de la palette
+        largeur = beton["largeur_cordon"]
+        marge = CONFIG["palette"]["marge"] + largeur / 2
+        place = placer_dessin([par_nom[n]["courbes"] for n in noms], marge, plateau, reglages.get("taille"))
+        r = calculer_trace(place["courbes"], largeur, moteur["amp"], moteur["d"], moteur["couches"])
+
+        lignes = [[LineString(c) for c in courbes] for courbes in place["courbes"]]
+        controles = controler_trace(r, lignes, noms, {
+            "largeur_cordon": largeur,
+            "rayon_courbure_min": BETON["rayon_courbure_min"],
+            "palette": plateau,
+        })
+        q = quantites(r, largeur, moteur["amp"], vitesse)
+        nom_court = pathlib.Path(nom).stem
+        _dernier.clear()
+        _dernier.update(resultat=r, contour=None, titre="Dessin : %s" % nom, nom_export=nom_court,
+                        lane=0.0, largeur=largeur, amp=moteur["amp"], palette=plateau, vitesse=vitesse)
+        return json.dumps({
+            "vitesse": vitesse,
+            "palette": list(plateau),
+            "calques": noms,
+            "message_dessin": "%s %s." % (place["message"], dessin["message"].capitalize()),
+            "taille": round(place["taille"], 3),
+            "dimensions": place["dimensions"],
+            "waves": [[arrondir(v) for v in serie] for serie in r["waves"]],
+            "path": arrondir(r["path"] or []),
+            "jumps": [],
+            "controle": r["controle"],
+            "controles": [dict(c, points=arrondir(c["points"]), segments=[arrondir(s) for s in c["segments"]])
+                          for c in controles],
+            "info": r["info"],
+            **q,
+            "beton": dict(BETON, largeur_cordon=largeur, hauteur_couche=beton["hauteur_couche"]),
+            "provisoires": PROVISOIRES,
+            "amp": moteur["amp"],
+        })
+    except Exception as e:
+        return en_erreur(e)
+
+
+# --- ancien fonctionnement : motif + contour (retiré bientôt) ----------------------------
+
+
+def calculer_motif(motif_id, reglages_json, contour_texte, contour_nom):
     """Calcul complet pour l'aperçu.
 
     reglages_json : {"motif": {nom: valeur}, "moteur": {nom: valeur}}
@@ -178,7 +290,9 @@ def calculer(motif_id, reglages_json, contour_texte, contour_nom):
         })
         q = quantites(r, beton["largeur_cordon"], moteur["amp"], vitesse)
         path = r["path"] or []
-        _dernier.update(resultat=r, contour=forme, motif=motif_id, nom_contour=contour_nom,
+        _dernier.clear()
+        _dernier.update(resultat=r, contour=forme, titre="Motif : %s, contour : %s" % (motif_id, contour_nom),
+                        nom_export=motif_id.replace("/", "_"),
                         lane=moteur["lane"], largeur=beton["largeur_cordon"],
                         amp=moteur["amp"], palette=plateau, vitesse=vitesse)
         return json.dumps({
@@ -372,7 +486,7 @@ def programme_robot(d):
     """Texte URScript du dernier calcul."""
     repere, simulation = calibration()
     imp = reglages_impression()
-    entete = ["Motif : %s, contour : %s" % (d["motif"], d["nom_contour"])]
+    entete = [d["titre"]]
     if not CONFIG["impression"]["hauteur_buse"]:
         entete.append("PROVISOIRE : hauteur de la buse = hauteur de couche (%g mm)" % imp["hauteur_buse"])
     choisis = {"largeur_cordon": d.get("largeur", BETON["largeur_cordon"]), "hauteur_couche": d["amp"]}
@@ -423,7 +537,7 @@ def exporter(format_fichier, options_json="{}"):
     d = _dernier
     options = json.loads(options_json or "{}")
     if format_fichier == "gcode":
-        entete = ["Motif : %s, contour : %s" % (d["motif"], d["nom_contour"])]
+        entete = [d["titre"]]
         entete.append("A CALIBRER : piston, tete malaxeuse et debit (docs/MAQUETTE.md)")
         essai = float(options.get("largeur_essai", CONFIG["cartesienne"]["largeur_cordon_essai"]))
         try:
@@ -442,7 +556,7 @@ def exporter(format_fichier, options_json="{}"):
         texte = exporter_svg(d["resultat"], d["contour"], d["palette"], d["lane"], d["amp"])
     else:
         return json.dumps({"erreur": "Format inconnu : %s" % format_fichier})
-    return json.dumps({"nom": "trame_%s.%s" % (d["motif"].replace("/", "_"), format_fichier), "texte": texte})
+    return json.dumps({"nom": "trame_%s.%s" % (d["nom_export"], format_fichier), "texte": texte})
 
 
 def robot():

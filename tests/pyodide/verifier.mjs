@@ -18,21 +18,20 @@ if (!resultat.ok || resultat.croisement[0] !== 50 || resultat.croisement[1] !== 
   throw new Error("Résultat inattendu");
 }
 
-// les 4 contours exemples, lus et placés dans Pyodide (copiés par preparer)
-const noms = ["rectangle.svg", "haricot.dxf", "grand.svg", "lignes.dxf"];
-const messages = pyodide.runPython(`
-from trame.contour import charger_contour
-[charger_contour(open("contours/" + n).read(), n)["message"] for n in ${JSON.stringify(noms)}]
-`).toJs();
-console.log(messages);
-if (!messages[1].includes("tournée")) throw new Error("Le haricot aurait dû être tourné");
+// les dessins d'exemple : calques lus dans Pyodide (copiés par preparer)
+for (const [nom, attendus] of [["vagues.svg", 2], ["spirales.dxf", 3]]) {
+  const c = JSON.parse(app.lire_calques(await readFile("dessins/" + nom, "utf8"), nom));
+  if (c.erreur || c.calques.length !== attendus) throw new Error(`Calques de ${nom} mal lus : ${c.erreur}`);
+  console.log(`${nom} : ${c.calques.map((k) => k.nom).join(", ")}`);
+}
 
-// le calcul complet de l'aperçu : motif exemple sur le haricot
+// le calcul complet de l'aperçu : dessin d'exemple, ordre des calques choisi
 const debut = performance.now();
-const r = JSON.parse(app.calculer("exemple", "{}", await readFile("contours/haricot.dxf", "utf8"), "haricot.dxf"));
-console.log(`aperçu : ${r.path?.length} points, ${r.controle?.sauts} saut(s), ${((performance.now() - debut) / 1000).toFixed(2)} s`);
+const texte = await readFile("dessins/spirales.dxf", "utf8");
+const r = JSON.parse(app.calculer(JSON.stringify({ calques: ["3 vagues", "1 spirale", "2 boucles"] }), texte, "spirales.dxf"));
 if (r.erreur) throw new Error(r.erreur);
-if (r.controle.sauts !== 0) throw new Error("Le chemin devrait être continu");
+console.log(`aperçu : ${r.path.length} points, ${r.calques.join(" > ")}, ${((performance.now() - debut) / 1000).toFixed(2)} s`);
+if (r.calques[0] !== "3 vagues" || r.jumps.length !== 0) throw new Error("Ordre des calques ou chemin inattendu");
 
 // exports DXF, SVG et programme du robot du dernier calcul
 for (const format of ["dxf", "svg", "script"]) {
@@ -50,7 +49,7 @@ console.log(`placement : ${zone.atteignable} % de la palette atteignable`);
 console.log(`robot : ${bras.angles.length} poses, ${bras.hors_portee.length} hors de portée, ${((performance.now() - debutRobot) / 1000).toFixed(2)} s`);
 
 // maquette G-code à l'échelle 1:4
-const rc = JSON.parse(app.calculer("exemple", JSON.stringify({ moteur: { largeur_cordon: 20 } }), await readFile("contours/haricot.dxf", "utf8"), "haricot.dxf"));
+const rc = JSON.parse(app.calculer(JSON.stringify({ moteur: { largeur_cordon: 20 } }), texte, "spirales.dxf"));
 if (rc.erreur) throw new Error(rc.erreur);
 const g = JSON.parse(app.exporter("gcode", JSON.stringify({ largeur_essai: 5 })));
 if (g.erreur) throw new Error(g.erreur);

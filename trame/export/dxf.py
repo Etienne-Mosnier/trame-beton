@@ -7,7 +7,7 @@ import io
 
 import ezdxf
 
-from trame.export.commun import LETTRES, reperes_palette, separer_liaisons, sommets_des_bosses
+from trame.export.commun import LETTRES, lignes_et_liaisons, reperes_palette, sommets_des_bosses
 
 # couleurs AutoCAD (ACI) : gris, bleu, vert, magenta, orange — comme l'aperçu
 COULEURS = [8, 5, 3, 6, 30]
@@ -19,7 +19,7 @@ def exporter_dxf(resultat, contour, palette, lane):
     doc.header["$INSUNITS"] = 4            # millimètres
     msp = doc.modelspace()
     waves = resultat["waves"]
-    lignes, liaisons = separer_liaisons(waves, contour, lane)
+    lignes, liaisons = lignes_et_liaisons(resultat, contour, lane)
 
     def calque(nom, couleur, type_trait="Continuous"):
         doc.layers.add(nom, color=couleur, linetype=type_trait)
@@ -39,8 +39,9 @@ def exporter_dxf(resultat, contour, palette, lane):
     msp.add_text("Palette EPAL %g x %g mm - origine (0, 0) en bas a gauche" % (lx, ly),
                  height=15, dxfattribs=attributs).set_placement((0, -40))
 
-    attributs = calque("CONTOUR", 7, "DASHED")
-    msp.add_lwpolyline(list(contour.exterior.coords), close=True, dxfattribs=attributs)
+    if contour is not None:
+        attributs = calque("CONTOUR", 7, "DASHED")
+        msp.add_lwpolyline(list(contour.exterior.coords), close=True, dxfattribs=attributs)
 
     # une série par calque, dans l'ordre d'impression
     for i, morceaux in enumerate(lignes):

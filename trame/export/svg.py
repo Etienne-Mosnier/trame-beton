@@ -5,7 +5,7 @@ Inkscape et comme groupes dans Illustrator. Les sommets des bosses sont des peti
 cercles, d'autant plus grands que la bosse est haute.
 """
 
-from trame.export.commun import LETTRES, reperes_palette, separer_liaisons, sommets_des_bosses
+from trame.export.commun import LETTRES, lignes_et_liaisons, reperes_palette, sommets_des_bosses
 
 COULEURS = ["#6b7280", "#2563eb", "#16a34a", "#9333ea", "#d97706"]
 
@@ -13,7 +13,7 @@ COULEURS = ["#6b7280", "#2563eb", "#16a34a", "#9333ea", "#d97706"]
 def exporter_svg(resultat, contour, palette, lane, amp):
     lx, ly = palette
     waves = resultat["waves"]
-    lignes, liaisons = separer_liaisons(waves, contour, lane)
+    lignes, liaisons = lignes_et_liaisons(resultat, contour, lane)
 
     def pts(poly):
         # y de la palette vers le haut, y du SVG vers le bas
@@ -34,9 +34,10 @@ def exporter_svg(resultat, contour, palette, lane, amp):
         palette_svg.append('<text x="%g" y="%g" font-size="12">%s</text>' % (x + 12, ly - y - 12, nom))
     morceaux.append(calque("palette", "Palette", palette_svg))
 
-    morceaux.append(calque("contour", "Contour", [
-        '<polygon points="%s" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 4"/>'
-        % pts(contour.exterior.coords)]))
+    if contour is not None:
+        morceaux.append(calque("contour", "Contour", [
+            '<polygon points="%s" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 4"/>'
+            % pts(contour.exterior.coords)]))
 
     for i, serie in enumerate(lignes):
         couleur = COULEURS[i % len(COULEURS)]

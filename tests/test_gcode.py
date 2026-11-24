@@ -11,14 +11,14 @@ import pytest
 from trame import app
 from trame.export import gcode
 
-CONTOURS = pathlib.Path(__file__).resolve().parent.parent / "contours"
+DESSINS = pathlib.Path(__file__).resolve().parent.parent / "dessins"
 MACHINE = app.CONFIG["cartesienne"]
 
 
 def calculer(largeur=20, hauteur=5, couches=1):
-    texte = (CONTOURS / "haricot.dxf").read_text()
+    texte = (DESSINS / "spirales.dxf").read_text()
     moteur = {"largeur_cordon": largeur, "hauteur_couche": hauteur, "couches": couches}
-    return json.loads(app.calculer("exemple", json.dumps({"moteur": moteur}), texte, "haricot.dxf"))
+    return json.loads(app.calculer(json.dumps({"moteur": moteur}), texte, "spirales.dxf"))
 
 
 def mouvements(texte):

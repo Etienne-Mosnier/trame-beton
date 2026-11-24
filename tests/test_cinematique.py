@@ -70,7 +70,7 @@ def test_continuite_des_tours():
 
 
 def test_robot_de_l_apercu():
-    app.calculer("exemple", "{}", (RACINE / "contours" / "haricot.dxf").read_text(), "haricot.dxf")
+    app.calculer("{}", (RACINE / "dessins" / "spirales.dxf").read_text(), "spirales.dxf")
     r = json.loads(app.robot())
     assert r["hors_portee"] == []
     assert len(r["angles"]) == len(r["points"]) == len(r["temps"]) == len(r["series"])

@@ -13,28 +13,31 @@ from trame import app
 from trame.export.commun import separer_liaisons, sommets_des_bosses
 from trame.moteur.chemin import calculer_chemin
 
-CONTOURS = pathlib.Path(__file__).resolve().parent.parent / "contours"
+DESSINS = pathlib.Path(__file__).resolve().parent.parent / "dessins"
 FORME = box(100, 100, 500, 400)
 
 
 @pytest.fixture(scope="module")
 def calcul():
-    r = json.loads(app.calculer("exemple", "{}", (CONTOURS / "haricot.dxf").read_text(), "haricot.dxf"))
+    r = json.loads(app.calculer(json.dumps({"moteur": {"couches": 2}}), (DESSINS / "spirales.dxf").read_text(), "spirales.dxf"))
     assert "erreur" not in r
     return r
 
 
 def test_dxf(calcul):
     r = json.loads(app.exporter("dxf"))
-    assert r["nom"] == "trame_exemple.dxf"
+    assert r["nom"] == "trame_spirales.dxf"
     doc = ezdxf.read(io.StringIO(r["texte"]))
     calques = {c.dxf.name for c in doc.layers}
-    assert {"PALETTE", "CONTOUR", "SERIE_A", "SERIE_B", "SERIE_C", "LIAISONS", "CHEMIN", "BOSSES"} <= calques
+    assert {"PALETTE", "SERIE_A", "SERIE_B", "SERIE_C", "LIAISONS", "CHEMIN", "BOSSES"} <= calques
+    assert "CONTOUR" not in calques                        # dessin importé : pas de contour
     msp = doc.modelspace()
     chemin = msp.query('POLYLINE[layer=="CHEMIN"]')[0]
     points = list(chemin.points())
     assert len(points) == len(calcul["path"])            # le chemin complet, point par point
-    assert max(p.z for p in points) == pytest.approx(10)  # deux couches de 5 mm, hauteur réelle
+    # hauteurs réelles, sans exagération : deux couches de 5 mm, et les bosses par-dessus
+    assert max(p.z for p in points) == pytest.approx(max(p[2] for p in calcul["path"]), abs=0.01)
+    assert max(p.z for p in points) > 10
     assert doc.header["$INSUNITS"] == 4                    # millimètres
 
 
@@ -43,10 +46,10 @@ def test_svg(calcul):
     racine = ET.fromstring(r["texte"])
     ns = {"svg": "http://www.w3.org/2000/svg"}
     ids = {g.get("id") for g in racine.findall("svg:g", ns)}
-    assert {"palette", "contour", "serie_A", "serie_B", "serie_C", "liaisons", "bosses"} <= ids
+    assert {"palette", "serie_A", "serie_B", "serie_C", "liaisons", "bosses"} <= ids
     assert racine.get("width") == "1320mm"                # palette + 60 mm de marge de chaque côté
     serie_b = racine.find("svg:g[@id='serie_B']", ns)
-    assert len(serie_b.findall("svg:polyline", ns)) > 5
+    assert len(serie_b.findall("svg:polyline", ns)) == 2  # une seule ligne, imprimée sur deux couches
 
 
 def test_liaisons_separees():

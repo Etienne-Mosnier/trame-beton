@@ -80,7 +80,7 @@ def test_points_de_placement():
 
 
 def test_placement_et_zone_atteignable():
-    app.calculer("exemple", "{}", (RACINE / "contours" / "haricot.dxf").read_text(), "haricot.dxf")
+    app.calculer("{}", (RACINE / "dessins" / "spirales.dxf").read_text(), "spirales.dxf")
     proche = json.loads(app.placement(""))
     assert proche["atteignable"] > 90
     loin = json.loads(app.placement(json.dumps({"x": -2500, "y": -437, "z": 8.7, "rotation": 90})))
@@ -95,7 +95,7 @@ def test_placement_et_zone_atteignable():
 
 
 def test_robot_renvoie_les_alertes():
-    app.calculer("exemple", "{}", (RACINE / "contours" / "haricot.dxf").read_text(), "haricot.dxf")
+    app.calculer("{}", (RACINE / "dessins" / "spirales.dxf").read_text(), "spirales.dxf")
     r = json.loads(app.robot())
     s = statuts(r["alertes"])
     assert s["Tout est à portée du robot"] == "ok"

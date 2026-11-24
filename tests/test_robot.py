@@ -12,7 +12,7 @@ from trame.robot import urscript
 from trame.robot.calibration import matrice, pose_ur, repere_palette, vecteur_rotation, vers_robot
 
 SIMU = ([-197.0, -437.0, 8.7], [-197.0, 763.0, 8.7], [-997.0, -437.0, 8.7])
-CONTOURS = pathlib.Path(__file__).resolve().parent.parent / "contours"
+DESSINS = pathlib.Path(__file__).resolve().parent.parent / "dessins"
 
 
 def pose_trans(pose, point_mm):
@@ -128,21 +128,21 @@ def test_extrusion_sans_sortie():
 
 
 def test_export_depuis_l_apercu():
-    app.calculer("exemple", "{}", (CONTOURS / "rectangle.svg").read_text(), "rectangle.svg")
+    app.calculer("{}", (DESSINS / "vagues.svg").read_text(), "vagues.svg")
     r = json.loads(app.exporter("script"))
-    assert r["nom"] == "trame_exemple.script"
+    assert r["nom"] == "trame_vagues.script"
     assert "SIMULATION" in r["texte"] and "popup(" in r["texte"]
     assert "PROVISOIRE : hauteur de la buse" in r["texte"]
     assert "Extrusion desactivee" in r["texte"]
 
 
 def test_vitesse_du_robot_reglable():
-    texte = (CONTOURS / "rectangle.svg").read_text()
-    lent = json.loads(app.calculer("exemple", json.dumps({"vitesse": 36}), texte, "rectangle.svg"))
+    texte = (DESSINS / "vagues.svg").read_text()
+    lent = json.loads(app.calculer(json.dumps({"vitesse": 36}), texte, "vagues.svg"))
     assert lent["vitesse"] == 36
     script = json.loads(app.exporter("script"))["texte"]
     assert "  V = 0.0360  # vitesse d'impression (m/s)" in script.splitlines()
-    rapide = json.loads(app.calculer("exemple", json.dumps({"vitesse": 72}), texte, "rectangle.svg"))
+    rapide = json.loads(app.calculer(json.dumps({"vitesse": 72}), texte, "vagues.svg"))
     assert lent["duree"] == pytest.approx(2 * rapide["duree"], abs=1)
     # l'animation du robot suit la vitesse choisie
     temps = json.loads(app.robot())["temps"]
