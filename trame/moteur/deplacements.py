@@ -156,36 +156,47 @@ def direction(a, b):
 def trajet_de_pause(fin, avant_fin, debut, apres_debut, imprime, futur, enveloppe, cadre, rayon, pas=5.0):
     """Trajet d'une pause, vu de dessus : [fin, sortie, …, attente, …, entrée, début].
 
-    fin, avant_fin     : dernier et avant-dernier points imprimés
-    debut, apres_debut : premier et deuxième points du calque suivant
+    fin, avant_fin     : dernier et avant-dernier points imprimés (None : départ du dessin)
+    debut, apres_debut : premier et deuxième points du calque suivant (None : fin du dessin)
     imprime, futur     : polylignes déjà imprimées, et celles à imprimer ensuite
     enveloppe          : forme du dessin entier (vu de dessus), pour placer le point d'attente
     cadre              : là où la buse peut aller (polygone : palette dans la portée du robot)
     Renvoie {"points", "sortie", "entree", "attente", "libre"} : entre 'fin' et 'sortie', et entre
     'entree' et 'debut', la buse est à hauteur de cordon ; entre les deux, elle est levée.
+    Au départ du dessin, le trajet commence au point d'attente ; à la fin, il s'y arrête.
     'libre' est faux s'il a fallu passer au-dessus du béton déjà imprimé.
     """
     essai = None
     for lignes in (list(imprime) + list(futur), list(imprime)):
         zone = obstacles(lignes, rayon, cadre)
         marge = rayon + 2.0
+        ok = True
+        points = []
         # on quitte le bout du cordon dans son prolongement, et l'on arrive au début du suivant
         # dans le sens où il part
-        sortie = degager(fin, direction(avant_fin, fin), zone, marge)
-        entree = degager(debut, direction(apres_debut, debut), zone, marge)
-        ok = sortie is not None and entree is not None
-        sortie = sortie or tuple(fin[:2])
-        entree = entree or tuple(debut[:2])
-        attente = point_d_attente(sortie, enveloppe, cadre, zone, rayon)
+        sortie = entree = None
+        if fin is not None:
+            sortie = degager(fin, direction(avant_fin, fin), zone, marge)
+            ok = ok and sortie is not None
+            sortie = sortie or tuple(fin[:2])
+        if debut is not None:
+            entree = degager(debut, direction(apres_debut, debut), zone, marge)
+            ok = ok and entree is not None
+            entree = entree or tuple(debut[:2])
+        attente = point_d_attente(sortie or entree, enveloppe, cadre, zone, rayon)
         ok = ok and attente is not None
-        attente = attente or sortie
-        aller = chemin_libre(sortie, attente, zone, cadre.bounds, pas)
-        retour = chemin_libre(attente, entree, zone, cadre.bounds, pas)
-        ok = ok and aller is not None and retour is not None
-        aller = aller or [sortie, attente]
-        retour = retour or [attente, entree]
-        essai = {"points": [tuple(fin[:2])] + aller + retour[1:] + [tuple(debut[:2])],
-                 "sortie": sortie, "entree": entree, "attente": attente, "libre": ok}
+        attente = attente or sortie or entree
+        if fin is not None:
+            aller = chemin_libre(sortie, attente, zone, cadre.bounds, pas)
+            ok = ok and aller is not None
+            points += [tuple(fin[:2])] + (aller or [sortie, attente])
+        else:
+            points.append(attente)
+        if debut is not None:
+            retour = chemin_libre(attente, entree, zone, cadre.bounds, pas)
+            ok = ok and retour is not None
+            points += (retour or [attente, entree])[1:] + [tuple(debut[:2])]
+        essai = {"points": points, "sortie": sortie, "entree": entree, "attente": attente, "libre": ok}
         if ok:
             break
     return essai

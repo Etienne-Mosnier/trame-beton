@@ -101,12 +101,15 @@ def test_calculer_dessin():
     assert "erreur" not in r
     assert r["calques"] == ["A vagues", "B lignes"]           # ordre alphabétique au départ
     assert len(r["waves"]) == 2 and r["jumps"] == []
-    assert max(p[2] for p in r["path"]) == 4                   # B passe par-dessus A
+    beton = [p for serie in r["waves"] for w in serie for p in w]
+    assert max(p[2] for p in beton) == 4                       # B passe par-dessus A
     assert "taille réelle" in r["message_dessin"]
     assert {c["statut"] for c in r["controles"]} == {"ok"}
-    # le chemin reste sur la palette, à la marge près
-    xs, ys = [p[0] for p in r["path"]], [p[1] for p in r["path"]]
+    # le dessin reste sur la palette, à la marge près ; départ et fin aussi
+    xs, ys = [p[0] for p in beton], [p[1] for p in beton]
     assert min(xs) >= 20 and max(xs) <= 1180 and min(ys) >= 20 and max(ys) <= 780
+    for bout in (r["depart"], r["fin"]):
+        assert 0 < bout["point"][0] < 1200 and 0 < bout["point"][1] < 800
     for format_fichier in ("dxf", "svg", "script"):
         e = json.loads(app.exporter(format_fichier))
         assert "erreur" not in e and e["nom"] == "trame_vagues." + format_fichier
@@ -148,10 +151,13 @@ def test_calculer_avec_pause():
     assert {"DEPLACEMENTS", "PAUSES"} <= {c.dxf.name for c in doc.layers}
     # le programme du robot s'arrête au point d'attente et attend « Continuer »
     script = json.loads(app.exporter("script"))["texte"]
-    assert script.count("blocking=True") == 2              # la pause, et l'avertissement de simulation
+    # avertissement de simulation, départ (démarrer la pompe), la pause, fin (couper la pompe)
+    assert script.count("blocking=True") == 4
     assert "Pause 1, apres le calque 'A vagues' (couche 1)" in script
-    # le G-code de la maquette ne sait pas encore : il le dit
-    assert "Pauses" in json.loads(app.exporter("gcode"))["erreur"]
+    assert "Demarrer la pompe" in script and "Couper la pompe" in script
+    # la maquette s'arrête aux mêmes endroits (clic sur l'écran du WASP)
+    maquette = json.loads(app.exporter("gcode", json.dumps({"largeur_essai": 1.5})))["texte"]
+    assert maquette.count("\nM0 ") == 3
     # le robot ne dépose pas de cordon pendant le trajet à vide
     bras = json.loads(app.robot())
     assert -1 in bras["series"] and bras["hors_portee"] == []

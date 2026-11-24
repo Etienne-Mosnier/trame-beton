@@ -26,8 +26,12 @@ def test_une_ligne_par_calque_gardee_telle_quelle():
     A = [[(0, 0), (100, 0), (100, 100)]]
     r = calculer_trace([A], largeur_cordon=10, amp=AMP)
     assert r["liaisons"] == []
-    assert [p[:2] for p in r["path"]] in ([(0, 0), (100, 0), (100, 100)], [(100, 100), (100, 0), (0, 0)])
-    assert all(p[2] == 0 for p in r["path"])
+    ligne = r["lignes"][0][0]
+    assert [p[:2] for p in ligne] in ([(0, 0), (100, 0), (100, 100)], [(100, 100), (100, 0), (0, 0)])
+    assert all(p[2] == 0 for p in ligne)
+    # extrusion continue : le parcours commence et finit à côté du dessin, buse levée
+    assert r["path"][0] == r["depart"]["point"] and r["path"][-1] == r["fin"]["point"]
+    assert r["depart"]["point"][2] == 50 and r["depart"]["libre"] and r["fin"]["libre"]
 
 
 def test_le_calque_suivant_passe_par_dessus():
@@ -54,20 +58,19 @@ def test_une_boucle_passe_par_dessus_son_propre_debut():
     # une seule ligne qui se recroise (boucle) : le second passage monte
     boucle = [(0, 0), (200, 0), (200, 100), (100, 100), (100, -100)]
     r = calculer_trace([[boucle]], largeur_cordon=10, amp=AMP)
-    z = [p[2] for p in r["path"]]
-    assert max(z) == AMP
-    # au croisement (100, 0) : le premier passage reste à plat, le second est à AMP
-    premiers = [p for p in r["path"][:3] if p[2] == 0]
-    assert premiers and hauteur_a(r["path"], 100, 0) == AMP
+    ligne = r["lignes"][0][0]
+    assert max(p[2] for p in ligne) == AMP
+    # au croisement (100, 0) : le second passage est à AMP
+    assert hauteur_a(ligne, 100, 0) == AMP
 
 
 def test_courbe_fermee_arretee_avant_son_depart():
     cercle = [(100 * math.cos(2 * math.pi * k / 72), 100 * math.sin(2 * math.pi * k / 72)) for k in range(73)]
     r = calculer_trace([[cercle]], largeur_cordon=10, amp=AMP)
-    debut, fin = r["path"][0], r["path"][-1]
+    ligne = r["lignes"][0][0]
     # la buse s'arrête une largeur de cordon avant de revenir à son départ
-    assert math.dist(debut[:2], fin[:2]) == pytest.approx(10, abs=1)
-    assert max(p[2] for p in r["path"]) == 0                       # elle ne repasse pas dessus
+    assert math.dist(ligne[0][:2], ligne[-1][:2]) == pytest.approx(10, abs=1)
+    assert max(p[2] for p in ligne) == 0                           # elle ne repasse pas dessus
 
 
 def test_calque_en_plusieurs_morceaux_relie_au_plus_court():
@@ -92,7 +95,7 @@ def test_couches_empilees():
     B = [[(200, 0), (200, 300)]]
     r = calculer_trace([A, B], largeur_cordon=10, amp=AMP, couches=3)
     # au croisement : A1 0, B1 5, A2 10, B2 15, A3 20, B3 25
-    assert max(p[2] for p in r["path"]) == pytest.approx(5 * AMP)
+    assert max(p[2] for serie in r["waves"] for w in serie for p in w) == pytest.approx(5 * AMP)
     # loin du croisement, chaque couche repose sur la précédente
     hauteurs = [hauteur_a(w, 50, 100) for w in r["waves"][0]]
     assert sorted(round(h, 3) for h in hauteurs if h is not None) == [0, AMP, 2 * AMP]

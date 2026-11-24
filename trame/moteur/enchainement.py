@@ -343,7 +343,9 @@ def poser(morceaux, amp, d, exclusion=None):
 def tracer_pauses(morceaux, enveloppe, cadre, rayon):
     """Remplace chaque pause par le trajet de la buse, vu de dessus (deplacements.py) :
     {"nature": "pause", "points": [fin, sortie, …, attente, …, entrée, début], "sortie",
-    "entree", "attente", "libre"}. Le béton qui tombe en chemin compte comme imprimé."""
+    "entree", "attente", "libre"}. Le béton qui tombe en chemin compte comme imprimé.
+    Ajoute aussi un départ et une fin à côté du dessin (le béton coule déjà au départ, et encore
+    à la fin) : {"nature": "pause", "role": "depart" ou "fin", …}."""
     sortie = []
     for k, m in enumerate(morceaux):
         if m["nature"] != "pause":
@@ -353,21 +355,29 @@ def tracer_pauses(morceaux, enveloppe, cadre, rayon):
         imprime = [x["points"] for x in sortie]
         futur = [x["points"] for x in morceaux[k + 1:] if x["nature"] != "pause"]
         trajet = trajet_de_pause(avant[-1], avant[-2], apres[0], apres[1], imprime, futur, enveloppe, cadre, rayon)
-        sortie.append(dict(m, **trajet))
-    return sortie
+        sortie.append(dict(m, role="pause", **trajet))
+    premier, dernier = sortie[0], sortie[-1]
+    tout = [x["points"] for x in sortie]
+    depart = trajet_de_pause(None, None, premier["points"][0], premier["points"][1], [], tout, enveloppe, cadre, rayon)
+    fin = trajet_de_pause(dernier["points"][-1], dernier["points"][-2], None, None, tout, [], enveloppe, cadre, rayon)
+    return ([dict(premier, nature="pause", role="depart", **depart)] + sortie
+            + [dict(dernier, nature="pause", role="fin", **fin)])
 
 
 def lever(morceau, hauteur):
     """Parcours de la buse pendant une pause : à hauteur de cordon jusqu'à la sortie, levée
-    jusqu'à l'entrée, puis de nouveau à hauteur de cordon. Renvoie (points 3D, place de l'attente)."""
+    jusqu'à l'entrée, puis de nouveau à hauteur de cordon (au départ du dessin, levée dès le
+    début ; à la fin, levée jusqu'au bout). Renvoie (points 3D, place de l'attente)."""
     points = morceau["points"]
     proche = lambda q: min(range(len(points)), key=lambda k: math.dist(points[k][:2], q))
-    i_sortie, i_entree = proche(morceau["sortie"]), proche(morceau["entree"])
+    i_sortie = proche(morceau["sortie"]) if morceau["sortie"] is not None else 0
+    i_entree = proche(morceau["entree"]) if morceau["entree"] is not None else len(points) - 1
     i_entree = max(i_entree, i_sortie)
     haut = [(p[0], p[1], hauteur) for p in points[i_sortie:i_entree + 1]]
-    parcours = points[:i_sortie + 1] + haut + points[i_entree:]
+    parcours = (points[:i_sortie + 1] if morceau["sortie"] is not None else []) + haut + \
+        (points[i_entree:] if morceau["entree"] is not None else [])
     attente = min(range(len(haut)), key=lambda k: math.dist(haut[k][:2], morceau["attente"]))
-    return parcours, i_sortie + 1 + attente
+    return parcours, (i_sortie + 1 if morceau["sortie"] is not None else 0) + attente
 
 
 def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pauses=None,
@@ -383,6 +393,8 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
         path         : tout le parcours de la buse (x, y, z), d'un seul tenant
         pauses       : {"point": point d'attente, "indice": sa place dans path, "calque", "couche",
                         "libre"} pour chaque pause
+        depart, fin  : {"point", "indice", "libre", "trajet"} : le parcours commence et finit à
+                       côté du dessin (le béton coule déjà au départ, et encore à la fin)
         deplacements : partie levée du parcours de chaque pause (3D)
         waves        : pour chaque calque, ses morceaux 3D (lignes et liaisons), toutes couches
         lignes       : pour chaque calque, ses lignes 3D seulement
@@ -414,7 +426,7 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
     # le béton tombé pendant les pauses est posé comme le reste : les lignes suivantes montent dessus
     morceaux = poser([dict(m, nature="trajet") if m["nature"] == "pause" else m for m in morceaux], amp, d)
 
-    path, infos_pauses, deplacements = [], [], []
+    path, infos_pauses, deplacements, bouts = [], [], [], {}
     waves, lignes, liaisons = [[] for _ in calques], [[] for _ in calques], []
     plus_haut = 0.0
     for k, m in enumerate(morceaux):
@@ -423,10 +435,15 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
             pts, attente = lever(m, plus_haut + levee)
             debut_haut = next(i for i, p in enumerate(pts) if p[2] == plus_haut + levee)
             fin_haut = max(i for i, p in enumerate(pts) if p[2] == plus_haut + levee)
-            deplacements.append(pts[debut_haut - 1:fin_haut + 2])
+            leve = pts[max(debut_haut - 1, 0):fin_haut + 2]
             decalage = len(path) - (1 if path and math.dist(path[-1], pts[0]) < 1e-6 else 0)
-            infos_pauses.append({"point": pts[attente], "indice": decalage + attente, "calque": m["calque"],
-                                 "couche": m["couche"], "libre": m["libre"]})
+            if m["role"] == "pause":
+                deplacements.append(leve)
+                infos_pauses.append({"point": pts[attente], "indice": decalage + attente, "calque": m["calque"],
+                                     "couche": m["couche"], "libre": m["libre"]})
+            else:
+                bouts[m["role"]] = {"point": pts[attente], "indice": decalage + attente, "libre": m["libre"],
+                                    "trajet": leve}
         else:
             plus_haut = max(plus_haut, max(p[2] for p in pts))
             waves[m["calque"]].append(pts)
@@ -451,6 +468,8 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
         "path": path,
         "pauses": infos_pauses,
         "deplacements": deplacements,
+        "depart": bouts["depart"],
+        "fin": bouts["fin"],
         "waves": waves,
         "lignes": lignes,
         "liaisons": liaisons,

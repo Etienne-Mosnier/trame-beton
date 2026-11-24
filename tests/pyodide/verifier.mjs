@@ -58,11 +58,12 @@ const zone = JSON.parse(app.placement(""));
 console.log(`placement : ${zone.atteignable} % de la palette atteignable`);
 console.log(`robot : ${bras.angles.length} poses, ${bras.hors_portee.length} hors de portée, ${((performance.now() - debutRobot) / 1000).toFixed(2)} s`);
 
-// maquette G-code à l'échelle 1:4
-const rc = JSON.parse(app.calculer(JSON.stringify({ moteur: { largeur_cordon: 20 } }), texte, "spirales.dxf"));
+// maquette G-code (WASP 2040) au 1:6,67, avec une pause
+const rc = JSON.parse(app.calculer(JSON.stringify({ pauses: ["1 spirale"] }), texte, "spirales.dxf"));
 if (rc.erreur) throw new Error(rc.erreur);
-const g = JSON.parse(app.exporter("gcode", JSON.stringify({ largeur_essai: 5 })));
+const g = JSON.parse(app.exporter("gcode", JSON.stringify({ largeur_essai: 1.5 })));
 if (g.erreur) throw new Error(g.erreur);
+if ((g.texte.match(/\nM0 /g) || []).length !== 3) throw new Error("3 arrêts M0 attendus (départ, pause, fin)");
 console.log(`G-code : ${Math.round(g.texte.length / 1024)} Ko`);
 
 console.log("OK");

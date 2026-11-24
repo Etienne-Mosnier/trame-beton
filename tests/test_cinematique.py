@@ -75,7 +75,9 @@ def test_robot_de_l_apercu():
     assert r["hors_portee"] == []
     assert len(r["angles"]) == len(r["points"]) == len(r["temps"]) == len(r["series"])
     assert r["simulation"] is True
-    assert r["series"][1] == 0 and r["series"][-2] == 2          # A au début, C à la fin
+    imprimees = [s for s in r["series"] if s >= 0]                # -1 : buse levée, à côté du dessin
+    assert imprimees[0] == 0 and imprimees[-1] == 2              # A au début, C à la fin
+    assert r["series"][1] == -1 and r["series"][-2] == -1        # départ et fin à côté du dessin
     # la buse est bien au point voulu (hauteur de buse comprise)
     repere, _ = app.calibration()
     hb = app.reglages_impression()["hauteur_buse"]

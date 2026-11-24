@@ -57,27 +57,17 @@ origine = [-197.0, -437.0, 8.7]
 grand_cote = [-197.0, 763.0, 8.7]
 petit_cote = [-997.0, -437.0, 8.7]
 
-[cartesienne]
-# Machine cartésienne (portique) pilotée par Klipper, pour des MAQUETTES à l'échelle du cordon :
+[wasp]
+# Imprimante delta WASP 2040 (Marlin, achetée en 2020), pour des MAQUETTES à l'échelle du cordon :
 # la trame en vraie grandeur est réduite dans le rapport cordon d'essai / cordon final (X, Y et Z).
-# Origine : coin avant gauche, Z = 0 au plateau. La maquette est centrée sur le plateau.
-largeur_cordon_essai = 5.0            # mm, largeur du cordon de la maquette (modifiable dans l'aperçu)
-longueur = 700.0                      # mm, course en X
-largeur = 700.0                       # mm, course en Y
-hauteur = 700.0                       # mm, course en Z
-# Vitesse d'impression automatique, comme dans Orca : vitesse = débit / section du cordon d'essai,
-# plafonnée à vitesse_max. Un cordon plus fin s'imprime donc plus vite, à débit égal.
-debit_volumique_max = 125.0           # mm³/s que l'extrudeur pousse sans décrocher, À MESURER
-vitesse_max = 60.0                    # mm/s, vitesse d'impression maximale de la machine
-vitesse_deplacement = 60.0            # mm/s sans impression (approche, dégagement)
-hauteur_buse = 0.0                    # mm au-dessus du plateau pour la 1re couche (0 = couche d'essai)
-hauteur_approche = 20.0               # mm, la buse arrive et repart à cette hauteur au-dessus du chemin
-# Extrusion céramique : piston Ø 75 mm (NEMA 23, vis) -> tube PTFE Ø 10 mm -> tête malaxeuse sur X
-# (vis sans fin, NEMA 17). Dans Klipper (printer.cfg) : le piston = [extruder] (maître de l'axe E),
-# la tête = [extruder_stepper malaxeur] synchronisée. Voir docs/MAQUETTE.md.
-# Axe E en mode relatif (M83), dans l'unité de Klipper : mm d'un « filament » de filament_diameter.
-# E = volume du cordon (longueur × largeur × hauteur) / section de ce filament.
-diametre_filament = 4.0               # mm, DOIT ÊTRE ÉGAL à filament_diameter de [extruder] (printer.cfg)
-multiplicateur_extrusion = 1.0        # ajustement fin du débit après calibration (1.0 = théorique)
-amorce = 0.0                          # mm de E poussés avant de commencer (0 = aucun), pour remettre
-                                      # la céramique sous pression dans le tube et la tête
+# Origine au centre du plateau rond, Z = 0 au plateau ; le centre de la palette va au centre.
+# Extrusion continue, réglée sur le boîtier externe : le G-code ne commande que les déplacements
+# (pas d'axe E). Voir docs/MAQUETTE.md.
+largeur_cordon_essai = 1.5            # mm, largeur du cordon de la maquette, environ la buse (modifiable dans l'aperçu)
+diametre_plateau = 200.0              # mm
+hauteur = 400.0                       # mm, hauteur d'impression maximale
+marge = 5.0                           # mm, la maquette reste à cette distance du bord du plateau
+vitesse = 20.0                        # mm/s, vitesse d'impression : À ACCORDER avec le débit du boîtier
+vitesse_deplacement = 40.0            # mm/s, arrivée au départ et dégagement final
+hauteur_buse = 0.0                    # mm au-dessus du plateau pour la 1re couche (0 = hauteur de couche d'essai)
+hauteur_approche = 20.0               # mm, la buse arrive au départ et repart à la fin à cette hauteur

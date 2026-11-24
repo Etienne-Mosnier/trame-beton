@@ -306,6 +306,20 @@ def pauses_sans_survol(resultat, noms):
                     "calques." % ou, segments=segments)
 
 
+def depart_et_fin(resultat):
+    """Le béton coule déjà au départ, et encore à la fin : la buse attend à côté du dessin."""
+    titre = "Départ et fin à côté du dessin"
+    bloques = [nom for cle, nom in (("depart", "le départ"), ("fin", "la fin"))
+               if resultat.get(cle) and not resultat[cle]["libre"]]
+    if not bloques:
+        return controle(titre, "ok", "La buse attend à côté du dessin que l'on démarre puis coupe la pompe.")
+    segments = [[a, b] for cle in ("depart", "fin") if resultat.get(cle) and not resultat[cle]["libre"]
+                for a, b in zip(resultat[cle]["trajet"], resultat[cle]["trajet"][1:])]
+    return controle(titre, "erreur",
+                    "Pour %s, aucun passage entre les lignes : la buse passerait au-dessus du béton (trajet "
+                    "en rouge). Changer l'ordre des calques." % " et ".join(bloques), segments=segments)
+
+
 def controler_trace(resultat, calques, noms, reglages):
     """Contrôles d'un dessin importé (sans contour).
 
@@ -319,6 +333,7 @@ def controler_trace(resultat, calques, noms, reglages):
         sur_la_palette(resultat, reglages["palette"], 0.0),
         liaisons_ajoutees(resultat, noms),
         *([pauses_sans_survol(resultat, noms)] if resultat.get("pauses") else []),
+        depart_et_fin(resultat),
         lignes_trop_proches(calques, 2 * reglages["largeur_cordon"]),
         croisements_rasants(calques),
         virages_serres(toutes, reglages["rayon_courbure_min"], "dessin"),

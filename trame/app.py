@@ -232,6 +232,9 @@ def calculer(reglages_json, texte, nom):
             "deplacements": [arrondir(dep) for dep in r["deplacements"]],
             "pauses": [{"point": [round(v, 1) for v in p["point"]], "calque": noms[p["calque"]],
                         "couche": p["couche"], "libre": p["libre"]} for p in r["pauses"]],
+            # extrusion continue : départ et fin à côté du dessin
+            **{bout: {"point": [round(v, 1) for v in r[bout]["point"]], "libre": r[bout]["libre"],
+                      "trajet": arrondir(r[bout]["trajet"])} for bout in ("depart", "fin") if r.get(bout)},
             "jumps": [],
             "controle": r["controle"],
             "controles": [dict(c, points=arrondir(c["points"]), segments=[arrondir(s) for s in c["segments"]])
@@ -523,20 +526,25 @@ def reglages_impression():
     return imp
 
 
-PAUSES_A_VENIR = ("Pauses : le G-code de la maquette ne sait pas encore les faire. Choisir « relié » "
-                  "partout pour l'exporter (prochaine étape).")
 ATTENTE_ANIMATION = 3.0   # s : l'animation du robot marque chaque pause par un arrêt de 3 s
 
 
 def messages_de_pause(d):
-    """(place dans le parcours, message sur la tablette) pour chaque pause du dernier calcul."""
+    """(place dans le parcours, message sur la tablette) : départ, chaque pause, fin."""
     noms = d.get("noms") or []
+    r = d["resultat"]
     sortie = []
+    if r.get("depart"):
+        sortie.append((r["depart"]["indice"], "Depart : la buse est a cote du dessin. Demarrer la pompe ; quand "
+                                              "le beton coule regulierement, appuyer sur Continuer."))
     for numero, p in enumerate(d["resultat"].get("pauses", []), 1):
         calque = noms[p["calque"]] if p["calque"] < len(noms) else str(p["calque"] + 1)
         sortie.append((p["indice"], "Pause %d, apres le calque '%s' (couche %d). Le beton continue de couler : "
                                     "couper la pompe a la main si besoin. Appuyer sur Continuer pour reprendre."
                        % (numero, calque, p["couche"])))
+    if r.get("fin"):
+        sortie.append((r["fin"]["indice"], "Fin de l'impression : la buse est a cote du dessin. Couper la pompe, "
+                                           "puis appuyer sur Continuer."))
     return sortie
 
 
@@ -563,29 +571,45 @@ def programme_robot(d):
                             pauses=messages_de_pause(d))
 
 
+def arrets_maquette(d):
+    """Arrêts de la maquette (clic sur l'écran du WASP) : départ, chaque pause, fin."""
+    noms = d.get("noms") or []
+    r = d["resultat"]
+    arrets = []
+    if r.get("depart"):
+        arrets.append((r["depart"]["indice"], "Lancer extrusion",
+                       "Depart : lancer l'extrusion sur le boitier ; quand l'argile coule, cliquer"))
+    for numero, p in enumerate(r.get("pauses", []), 1):
+        calque = noms[p["calque"]] if p["calque"] < len(noms) else str(p["calque"] + 1)
+        arrets.append((p["indice"], "Pause %d : cliquer" % numero,
+                       "Pause %d apres le calque %s (couche %d) : l'extrusion continue ; cliquer pour reprendre"
+                       % (numero, calque, p["couche"])))
+    if r.get("fin"):
+        arrets.append((r["fin"]["indice"], "Couper extrusion", "Fin : couper l'extrusion sur le boitier, puis cliquer"))
+    return arrets
+
+
 def maquette(largeur_essai):
     """Rapport et taille de la maquette pour un cordon d'essai donné (texte JSON)."""
     if not _dernier:
         return json.dumps({"erreur": "Lance d'abord un calcul."})
     try:
-        k = gcode.echelle(_dernier["largeur"], float(largeur_essai))
+        largeur_essai = float(largeur_essai)
+        k = gcode.echelle(_dernier["largeur"], largeur_essai)
     except (ValueError, TypeError):
         return json.dumps({"erreur": "Largeur d'essai incorrecte."})
-    lx, ly = _dernier["palette"]
-    m = CONFIG["cartesienne"]
+    m = CONFIG["wasp"]
     path = _dernier["resultat"]["path"] or [(0, 0, 0)]
-    # la trame réduite, centrée comme dans le G-code (centre de la palette au centre du plateau)
-    xs = [(p[0] - lx / 2) * k + m["longueur"] / 2 for p in path]
-    ys = [(p[1] - ly / 2) * k + m["largeur"] / 2 for p in path]
-    hauteur = (max(p[2] for p in path) + _dernier["amp"]) * k + m["hauteur_approche"]
-    tient = min(xs) >= 0 and max(xs) <= m["longueur"] and min(ys) >= 0 and max(ys) <= m["largeur"] \
-        and hauteur <= m["hauteur"]
-    largeur_m, hauteur_m = _dernier["largeur"] * k, _dernier["amp"] * k
-    vitesse = gcode.vitesse_impression(m, largeur_m, hauteur_m)
-    longueur = sum(math.dist(a, b) for a, b in zip(path, path[1:])) * k
+    points, k, hb = gcode.reduire(path, m, _dernier["largeur"], _dernier["amp"], largeur_essai, _dernier["palette"])
+    xs, ys = [p[0] for p in points], [p[1] for p in points]
+    tient = max(math.hypot(x, y) for x, y in zip(xs, ys)) <= gcode.rayon_utile(m) \
+        and max(p[2] for p in points) + m["hauteur_approche"] <= m["hauteur"]
+    longueur = sum(math.dist(a, b) for a, b in zip(points, points[1:]))
     return json.dumps({"rapport": round(1 / k, 2), "taille": [round(max(xs) - min(xs)), round(max(ys) - min(ys))],
-                       "hauteur_couche": round(hauteur_m, 2), "tient": tient,
-                       "vitesse": round(vitesse, 1), "duree": round(longueur / vitesse)})
+                       "hauteur_couche": round(_dernier["amp"] * k, 2), "tient": tient,
+                       "essai_max": round(gcode.essai_maximal(path, m, _dernier["largeur"], _dernier["palette"]), 2),
+                       "plateau": m["diametre_plateau"],
+                       "vitesse": m["vitesse"], "duree": round(longueur / m["vitesse"])})
 
 
 def exporter(format_fichier, options_json="{}"):
@@ -596,14 +620,11 @@ def exporter(format_fichier, options_json="{}"):
     d = _dernier
     options = json.loads(options_json or "{}")
     if format_fichier == "gcode":
-        if d["resultat"].get("pauses"):
-            return json.dumps({"erreur": PAUSES_A_VENIR})
         entete = [d["titre"]]
-        entete.append("A CALIBRER : piston, tete malaxeuse et debit (docs/MAQUETTE.md)")
-        essai = float(options.get("largeur_essai", CONFIG["cartesienne"]["largeur_cordon_essai"]))
+        essai = float(options.get("largeur_essai", CONFIG["wasp"]["largeur_cordon_essai"]))
         try:
-            texte = gcode.generer(d["resultat"]["path"] or [], CONFIG["cartesienne"], d["largeur"], d["amp"],
-                                  essai, d["palette"], entete)
+            texte = gcode.generer(d["resultat"]["path"] or [], CONFIG["wasp"], d["largeur"], d["amp"],
+                                  essai, d["palette"], entete, arrets_maquette(d))
         except ValueError as e:
             return json.dumps({"erreur": str(e)})
     elif format_fichier == "script":
@@ -658,8 +679,9 @@ def robot():
 
     # temps de passage (s) : approche, dégagement et montées des pauses à la vitesse d'approche ;
     # l'animation s'arrête un moment à chaque point d'attente
+    bouts = [d["resultat"][b] for b in ("depart", "fin") if d["resultat"].get(b)]
     attentes = {(round(p["point"][0], 2), round(p["point"][1], 2), round(p["point"][2] + hb, 2))
-                for p in d["resultat"].get("pauses", [])}
+                for p in d["resultat"].get("pauses", []) + bouts}
     temps = [0.0]
     for k in range(1, len(tous)):
         vertical = math.dist(tous[k - 1][:2], tous[k][:2]) < 0.01
@@ -674,8 +696,12 @@ def robot():
             for p in poly:
                 serie_de.setdefault((round(p[0], 2), round(p[1], 2)), i)
     # déplacements à vide des pauses : série -1 (aucun cordon déposé)
-    a_vide = {(round(q[0], 2), round(q[1], 2), round(q[2] + hb, 2))
-              for dep in d["resultat"].get("deplacements", []) for q in dep[1:-1]}
+    leves = [dep[1:-1] for dep in d["resultat"].get("deplacements", [])]
+    if d["resultat"].get("depart"):
+        leves.append(d["resultat"]["depart"]["trajet"][:-1])   # levée dès le point d'attente
+    if d["resultat"].get("fin"):
+        leves.append(d["resultat"]["fin"]["trajet"][1:])       # levée jusqu'au point d'attente
+    a_vide = {(round(q[0], 2), round(q[1], 2), round(q[2] + hb, 2)) for leve in leves for q in leve}
     series, courant = [], 0
     for p in tous:
         if (round(p[0], 2), round(p[1], 2), round(p[2], 2)) in a_vide:

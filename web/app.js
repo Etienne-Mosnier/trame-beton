@@ -199,20 +199,22 @@ function dessinerTrame(resultat, exageration) {
       groupeTrame.add(trait(points, COULEURS[i % COULEURS.length], LARGEUR_CORDON));
     }
   });
-  // pauses : trajet à vide de la buse (pointillés gris) et point d'attente
+  // pauses, départ et fin : parcours de la buse levée (pointillés gris) et point d'attente
   vider(groupePauses);
-  (resultat.deplacements || []).forEach((dep, k) => {
-    const points = dep.map((p, j) => [p[0], p[1], j === 0 || j === dep.length - 1 ? p[2] * exageration : p[2]]);
+  const attente = (trajet, point, nom) => {
+    const points = trajet.map((p, j) => [p[0], p[1], j === 0 || j === trajet.length - 1 ? p[2] * exageration : p[2]]);
     groupePauses.add(trait(points, "#737373", 2, true));
-    const pause = resultat.pauses[k];
-    const [x, y, z] = pause.point;
+    const [x, y, z] = point;
     const anneau = new THREE.Mesh(new THREE.RingGeometry(12, 18, 32),
                                   new THREE.MeshBasicMaterial({ color: "#c2410c", side: THREE.DoubleSide }));
     anneau.position.set(x, y, z);
-    const texte = etiquette(`pause ${k + 1}`, "#c2410c", 34);
+    const texte = etiquette(nom, "#c2410c", 34);
     texte.position.set(x, y, z + 40);
     groupePauses.add(anneau, texte);
-  });
+  };
+  (resultat.deplacements || []).forEach((dep, k) => attente(dep, resultat.pauses[k].point, `pause ${k + 1}`));
+  if (resultat.depart) attente(resultat.depart.trajet, resultat.depart.point, "départ");
+  if (resultat.fin) attente(resultat.fin.trajet, resultat.fin.point, "fin");
   for (const saut of resultat.jumps) {
     groupeTrame.add(trait(saut.map((p) => [p[0], p[1], p[2] * exageration + 2]), "#000000", 2, true));
   }
@@ -452,10 +454,11 @@ function majMaquette() {
   const m = JSON.parse(app.maquette(Number($("largeur-essai").value)));
   $("info-maquette").textContent = m.erreur ? m.erreur
     : `Échelle 1:${String(m.rapport).replace(".", ",")} : trame de ${m.taille[0]} × ${m.taille[1]} mm, ` +
-      `couche de ${String(m.hauteur_couche).replace(".", ",")} mm. Vitesse automatique ` +
-      `${String(m.vitesse).replace(".", ",")} mm/s (d'après le débit de l'extrudeur), ` +
+      `couche de ${String(m.hauteur_couche).replace(".", ",")} mm. Vitesse ` +
+      `${String(m.vitesse).replace(".", ",")} mm/s (à accorder avec le débit du boîtier), ` +
       `environ ${Math.max(1, Math.round(m.duree / 60))} min.` +
-      (m.tient ? "" : " ⚠ Trop grand pour le plateau de 700 × 700 : prends un cordon d'essai plus fin.");
+      (m.tient ? "" : ` ⚠ Trop grand pour le plateau rond de ${m.plateau} mm : cordon d'essai de ` +
+                      `${String(Math.floor(m.essai_max * 10) / 10).replace(".", ",")} mm au plus.`);
   $("export-gcode").disabled = !!m.erreur || !m.tient;
 }
 

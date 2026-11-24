@@ -1,5 +1,6 @@
-"""Maquette G-code (machine cartésienne 700 × 700 × 700 mm, Klipper) :
-la trame en vraie grandeur réduite dans le rapport cordon d'essai / cordon final, en X, Y et Z."""
+"""Maquette G-code (WASP 2040, delta, Marlin, plateau rond de 200 mm) : la trame en vraie grandeur
+réduite dans le rapport cordon d'essai / cordon final, en X, Y et Z ; extrusion continue par le
+boîtier externe (pas d'axe E) ; arrêts M0 au départ, aux pauses et à la fin."""
 
 import json
 import math
@@ -12,13 +13,13 @@ from trame import app
 from trame.export import gcode
 
 DESSINS = pathlib.Path(__file__).resolve().parent.parent / "dessins"
-MACHINE = app.CONFIG["cartesienne"]
+MACHINE = app.CONFIG["wasp"]
 
 
-def calculer(largeur=20, hauteur=5, couches=1):
+def calculer(largeur=10, hauteur=5, couches=1, pauses=()):
     texte = (DESSINS / "spirales.dxf").read_text()
     moteur = {"largeur_cordon": largeur, "hauteur_couche": hauteur, "couches": couches}
-    return json.loads(app.calculer(json.dumps({"moteur": moteur}), texte, "spirales.dxf"))
+    return json.loads(app.calculer(json.dumps({"moteur": moteur, "pauses": list(pauses)}), texte, "spirales.dxf"))
 
 
 def mouvements(texte):
@@ -30,63 +31,62 @@ def valeur(ligne, axe):
 
 
 def test_maquette_a_l_echelle_du_cordon():
-    # cordon final 20 × 5 mm, essai 5 mm de large : échelle 1:4 en X, Y et Z
-    r = calculer(largeur=20, hauteur=5, couches=2)
-    g = json.loads(app.exporter("gcode", json.dumps({"largeur_essai": 5})))
+    # cordon final 10 × 5 mm, essai 1,5 mm : échelle 1:6,67 en X, Y et Z, centre de la palette au centre
+    r = calculer(largeur=10, hauteur=5, couches=2)
+    g = json.loads(app.exporter("gcode", json.dumps({"largeur_essai": 1.5})))
     lignes = mouvements(g["texte"])
-    xs = [valeur(l, "X") for l in lignes]
-    ys = [valeur(l, "Y") for l in lignes]
-    zs = [valeur(l, "Z") for l in lignes]
-    vrais_x = [p[0] for p in r["path"]]
-    vrais_y = [p[1] for p in r["path"]]
-    # largeur du dessin divisée par 4, maquette centrée sur le plateau (palette 300 × 200 mm)
-    assert max(xs) - min(xs) == pytest.approx((max(vrais_x) - min(vrais_x)) / 4, abs=0.1)
-    assert max(ys) - min(ys) == pytest.approx((max(vrais_y) - min(vrais_y)) / 4, abs=0.1)
-    assert (min(xs) + max(xs)) / 2 == pytest.approx(350 + ((min(vrais_x) + max(vrais_x)) / 2 - 600) / 4, abs=0.1)
-    # hauteurs : couche d'essai 1,25 mm, bosses divisées par 4
-    assert min(zs) == pytest.approx(1.25)
-    assert max(zs) == pytest.approx(1.25 + max(p[2] for p in r["path"]) / 4, abs=0.05)
-    assert "1:4" in g["texte"] and "5 x 1.25 mm" in g["texte"]
+    k = 1.5 / 10
+    attendus = [((p[0] - 600) * k, (p[1] - 400) * k, p[2] * k + 5 * k) for p in r["path"]]
+    for ligne in lignes[::50]:
+        x, y, z = valeur(ligne, "X"), valeur(ligne, "Y"), valeur(ligne, "Z")
+        assert min(math.dist((x, y, z), a) for a in attendus) < 0.02
+    # tout tient sur le plateau rond, marge comprise
+    assert all(math.hypot(valeur(l, "X"), valeur(l, "Y")) <= 95 for l in lignes)
+    # la première couche est à la hauteur du cordon d'essai (0,75 mm)
+    assert min(valeur(l, "Z") for l in lignes) == pytest.approx(0.75)
+    assert "1:6.67" in g["texte"]
 
 
-def test_extrusion_du_cordon_d_essai():
-    r = calculer(largeur=20, hauteur=5)
-    g = json.loads(app.exporter("gcode", json.dumps({"largeur_essai": 5})))
-    e_total = sum(valeur(l, "E") for l in mouvements(g["texte"]))
-    section = math.pi * MACHINE["diametre_filament"] ** 2 / 4
-    # volume de la maquette : longueur / 4 × 5 × 1,25 mm
-    assert e_total == pytest.approx(r["longueur"] / 4 * 5 * 1.25 / section, rel=0.01)
-    lignes = g["texte"].splitlines()
-    for commande in ("G21", "G90", "M83", "G28"):
+def test_deplacements_seulement():
+    calculer()
+    texte = json.loads(app.exporter("gcode", json.dumps({"largeur_essai": 1.5})))["texte"]
+    lignes = texte.splitlines()
+    # extrusion par le boîtier externe : aucun axe E
+    assert not any(re.search(r"\bE-?[\d.]", l.split(";")[0]) for l in lignes)
+    for commande in ("G21", "G90", "M84 S0", "G28"):
         assert any(l.startswith(commande) for l in lignes)
+    assert "G1 F%d" % (MACHINE["vitesse"] * 60) in texte
+
+
+def test_arrets_au_depart_aux_pauses_et_a_la_fin():
+    r = calculer(pauses=["1 spirale"])
+    texte = json.loads(app.exporter("gcode", json.dumps({"largeur_essai": 1.5})))["texte"]
+    lignes = texte.splitlines()
+    arrets = [l for l in lignes if l.startswith("M0 ")]
+    assert arrets == ["M0 Lancer extrusion", "M0 Pause 1 : cliquer", "M0 Couper extrusion"]
+    # chaque arrêt attend la fin des mouvements, au point d'attente (à côté du dessin)
+    k = 1.5 / 10
+    for arret, attente in zip(arrets, [r["depart"], r["pauses"][0], r["fin"]]):
+        i = lignes.index(arret)
+        assert lignes[i - 3].startswith("M400")
+        position = next(l for l in reversed(lignes[:i]) if re.match(r"G[01] X", l))
+        x, y = (attente["point"][0] - 600) * k, (attente["point"][1] - 400) * k
+        assert math.dist((valeur(position, "X"), valeur(position, "Y")), (x, y)) < 0.05
 
 
 def test_rapport_affiche_dans_l_apercu():
-    calculer(largeur=20)
-    m = json.loads(app.maquette(5))
-    r = calculer(largeur=20)
-    xs = [p[0] for p in r["path"]]
-    assert m["rapport"] == 4 and m["tient"]
-    assert m["taille"][0] == pytest.approx((max(xs) - min(xs)) / 4, abs=1)
-    assert not json.loads(app.maquette(19))["tient"]           # presque 1:1 : trop grand
+    calculer(largeur=10)
+    m = json.loads(app.maquette(1.5))
+    assert m["rapport"] == pytest.approx(6.67) and m["tient"] and m["plateau"] == 200
+    assert m["vitesse"] == MACHINE["vitesse"]
+    trop = json.loads(app.maquette(5))
+    assert not trop["tient"] and 1.5 < trop["essai_max"] < 5
+    assert json.loads(app.maquette(trop["essai_max"] - 0.01))["tient"]
 
 
 def test_maquette_trop_grande():
-    calculer(largeur=20)
-    assert "ne tient pas" in json.loads(app.exporter("gcode", json.dumps({"largeur_essai": 19})))["erreur"]
+    calculer(largeur=10)
+    erreur = json.loads(app.exporter("gcode", json.dumps({"largeur_essai": 5})))["erreur"]
+    assert "ne tient pas sur le plateau rond" in erreur and "au plus" in erreur
     with pytest.raises(ValueError):
         gcode.echelle(20, 0)
-
-
-def test_vitesse_automatique_selon_le_debit():
-    # comme Orca : vitesse = débit / section, plafonnée à vitesse_max
-    m = dict(MACHINE, debit_volumique_max=100.0, vitesse_max=60.0)
-    assert gcode.vitesse_impression(m, 5, 2) == pytest.approx(10)       # 100 / 10 mm²
-    assert gcode.vitesse_impression(m, 1, 1) == pytest.approx(60)       # plafond
-    calculer(largeur=20, hauteur=5)
-    g = json.loads(app.exporter("gcode", json.dumps({"largeur_essai": 5})))
-    attendu = gcode.vitesse_impression(MACHINE, 5, 1.25)
-    assert "G1 F%d" % (attendu * 60) in g["texte"]
-    assert json.loads(app.maquette(5))["vitesse"] == pytest.approx(attendu, abs=0.1)
-    # un cordon d'essai plus fin s'imprime plus vite (tant qu'on reste sous le plafond)
-    assert json.loads(app.maquette(4))["vitesse"] >= json.loads(app.maquette(5))["vitesse"]
