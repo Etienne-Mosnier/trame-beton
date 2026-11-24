@@ -1,11 +1,17 @@
-"""Déplacements à vide pendant une pause : sortir du dessin sans passer au-dessus du béton.
+"""Trajet de la buse pendant une pause : sortir du dessin sans passer au-dessus du béton.
 
-Pendant une pause, la pompe s'arrête et la buse monte. Puis, vue de dessus, elle sort du dessin
-en passant entre les lignes déjà imprimées (comme dans un labyrinthe), jusqu'à un point
-d'attente juste à côté du dessin. Après la pause, elle revient de la même façon au début du
-calque suivant, redescend, et la pompe repart.
+L'extrusion est continue : le programme ne peut pas arrêter la pompe, le béton coule pendant
+toute la pause (sauf si quelqu'un coupe la pompe à la main). Donc :
+1. au bout du calque, la buse continue un peu dans le prolongement de la ligne, à hauteur de
+   cordon, jusqu'à être sortie du béton ; elle monte seulement là (pas de tas sur la pièce) ;
+2. buse levée, elle va jusqu'à un point d'attente à côté du dessin en passant entre les lignes
+   déjà imprimées (vu de dessus, comme dans un labyrinthe) et, si possible, en évitant aussi les
+   lignes à imprimer ensuite : le béton qui tombe ne doit pas se retrouver sous elles ;
+3. elle attend « Continuer » (le béton fait un tas, loin de la pièce) ;
+4. elle revient de la même façon, redescend juste avant le début du calque suivant et y entre
+   à hauteur de cordon.
 
-« Au-dessus du béton » : à moins de 'rayon' mm (vu de dessus) de l'axe d'un cordon imprimé.
+« Au-dessus du béton » : à moins de 'rayon' mm (vu de dessus) de l'axe d'un cordon.
 Le chemin le plus simple est essayé d'abord (ligne droite) ; sinon on cherche un passage sur
 une grille de 'pas' mm.
 """
@@ -18,7 +24,8 @@ import shapely
 from shapely.geometry import LineString, MultiLineString, Point, box
 from shapely.ops import nearest_points, unary_union
 
-ECART_ATTENTE = 20.0   # mm : le point d'attente est à cette distance du dessin, en plus du rayon
+ECART_ATTENTE = 60.0   # mm : le point d'attente est à cette distance du dessin, en plus du rayon
+                       # (le béton qui coule pendant la pause y fait un tas)
 
 
 def obstacles(polylignes, rayon, cadre=None):
@@ -146,35 +153,39 @@ def direction(a, b):
     return ((b[0] - a[0]) / n, (b[1] - a[1]) / n) if n > 0 else (1.0, 0.0)
 
 
-def trajet_de_pause(fin, avant_fin, debut, apres_debut, deja_imprime, enveloppe, cadre,
-                    hauteur, rayon, pas=5.0):
-    """Trajet complet d'une pause, en 3D.
+def trajet_de_pause(fin, avant_fin, debut, apres_debut, imprime, futur, enveloppe, cadre, rayon, pas=5.0):
+    """Trajet d'une pause, vu de dessus : [fin, sortie, …, attente, …, entrée, début].
 
-    fin, avant_fin       : dernier et avant-dernier points imprimés (x, y, z)
-    debut, apres_debut   : premier et deuxième points du calque suivant
-    deja_imprime         : polylignes imprimées avant la pause
-    enveloppe            : forme du dessin entier (vu de dessus), pour placer le point d'attente
-    cadre                : là où la buse peut aller (polygone : palette et portée du robot)
-    hauteur              : hauteur des déplacements (au-dessus de tout le béton imprimé)
-    Renvoie {"points": trajet 3D de fin à debut, "attente": (x, y, z), "libre": bool}.
+    fin, avant_fin     : dernier et avant-dernier points imprimés
+    debut, apres_debut : premier et deuxième points du calque suivant
+    imprime, futur     : polylignes déjà imprimées, et celles à imprimer ensuite
+    enveloppe          : forme du dessin entier (vu de dessus), pour placer le point d'attente
+    cadre              : là où la buse peut aller (polygone : palette dans la portée du robot)
+    Renvoie {"points", "sortie", "entree", "attente", "libre"} : entre 'fin' et 'sortie', et entre
+    'entree' et 'debut', la buse est à hauteur de cordon ; entre les deux, elle est levée.
+    'libre' est faux s'il a fallu passer au-dessus du béton déjà imprimé.
     """
-    zone = obstacles(deja_imprime, rayon, cadre)
-    marge = rayon + 2.0
-    # on quitte le bout du cordon dans son prolongement, et l'on arrive au début du suivant
-    # dans le sens où il part
-    sortie = degager(fin, direction(avant_fin, fin), zone, marge)
-    entree = degager(debut, direction(apres_debut, debut), zone, marge)
-    ok = sortie is not None and entree is not None
-    sortie = sortie or tuple(fin[:2])
-    entree = entree or tuple(debut[:2])
-    attente = point_d_attente(sortie, enveloppe, cadre, zone, rayon)
-    ok = ok and attente is not None
-    attente = attente or sortie
-    aller = chemin_libre(sortie, attente, zone, cadre.bounds, pas)
-    retour = chemin_libre(attente, entree, zone, cadre.bounds, pas)
-    ok = ok and aller is not None and retour is not None
-    aller = aller or [sortie, attente]
-    retour = retour or [attente, entree]
-    plan = [tuple(fin[:2])] + aller + retour[1:] + [tuple(debut[:2])]
-    points = [tuple(fin)] + [(x, y, hauteur) for x, y in plan] + [tuple(debut)]
-    return {"points": points, "attente": (attente[0], attente[1], hauteur), "libre": ok}
+    essai = None
+    for lignes in (list(imprime) + list(futur), list(imprime)):
+        zone = obstacles(lignes, rayon, cadre)
+        marge = rayon + 2.0
+        # on quitte le bout du cordon dans son prolongement, et l'on arrive au début du suivant
+        # dans le sens où il part
+        sortie = degager(fin, direction(avant_fin, fin), zone, marge)
+        entree = degager(debut, direction(apres_debut, debut), zone, marge)
+        ok = sortie is not None and entree is not None
+        sortie = sortie or tuple(fin[:2])
+        entree = entree or tuple(debut[:2])
+        attente = point_d_attente(sortie, enveloppe, cadre, zone, rayon)
+        ok = ok and attente is not None
+        attente = attente or sortie
+        aller = chemin_libre(sortie, attente, zone, cadre.bounds, pas)
+        retour = chemin_libre(attente, entree, zone, cadre.bounds, pas)
+        ok = ok and aller is not None and retour is not None
+        aller = aller or [sortie, attente]
+        retour = retour or [attente, entree]
+        essai = {"points": [tuple(fin[:2])] + aller + retour[1:] + [tuple(debut[:2])],
+                 "sortie": sortie, "entree": entree, "attente": attente, "libre": ok}
+        if ok:
+            break
+    return essai

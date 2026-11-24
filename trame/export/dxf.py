@@ -57,13 +57,10 @@ def exporter_dxf(resultat, contour, palette, lane):
     for x, y, z in sommets_des_bosses(waves):
         msp.add_point((x, y, z), dxfattribs=attributs)
 
-    # ce qui est imprimé, dans l'ordre d'impression : d'un seul tenant, ou un tronçon entre deux pauses
-    troncons = resultat.get("troncons") or ([resultat["path"]] if resultat["path"] else [])
-    if troncons:
-        attributs = calque("CHEMIN", 7)
-        for troncon in troncons:
-            msp.add_polyline3d(troncon, dxfattribs=attributs)
-    # pauses : trajet à vide de la buse (levée), et point d'attente
+    # le parcours complet de la buse, d'un seul tenant, dans l'ordre d'impression
+    if resultat["path"]:
+        msp.add_polyline3d(resultat["path"], dxfattribs=calque("CHEMIN", 7))
+    # pauses : partie levée du parcours de la buse, et point d'attente
     if resultat.get("deplacements"):
         attributs = calque("DEPLACEMENTS", 8, "DASHED")
         for deplacement in resultat["deplacements"]:

@@ -218,7 +218,7 @@ def calculer(reglages_json, texte, nom):
         q = quantites(r, largeur, moteur["amp"], vitesse)
         nom_court = pathlib.Path(nom).stem
         _dernier.clear()
-        _dernier.update(resultat=r, contour=None, titre="Dessin : %s" % nom, nom_export=nom_court,
+        _dernier.update(resultat=r, contour=None, titre="Dessin : %s" % nom, nom_export=nom_court, noms=noms,
                         lane=0.0, largeur=largeur, amp=moteur["amp"], palette=plateau, vitesse=vitesse)
         return json.dumps({
             "vitesse": vitesse,
@@ -523,14 +523,25 @@ def reglages_impression():
     return imp
 
 
-PAUSES_A_VENIR = ("Pauses : le programme du robot et le G-code de la maquette ne savent pas encore "
-                  "les faire. Choisir « relié » partout pour exporter (prochaine étape).")
+PAUSES_A_VENIR = ("Pauses : le G-code de la maquette ne sait pas encore les faire. Choisir « relié » "
+                  "partout pour l'exporter (prochaine étape).")
+ATTENTE_ANIMATION = 3.0   # s : l'animation du robot marque chaque pause par un arrêt de 3 s
+
+
+def messages_de_pause(d):
+    """(place dans le parcours, message sur la tablette) pour chaque pause du dernier calcul."""
+    noms = d.get("noms") or []
+    sortie = []
+    for numero, p in enumerate(d["resultat"].get("pauses", []), 1):
+        calque = noms[p["calque"]] if p["calque"] < len(noms) else str(p["calque"] + 1)
+        sortie.append((p["indice"], "Pause %d, apres le calque '%s' (couche %d). Le beton continue de couler : "
+                                    "couper la pompe a la main si besoin. Appuyer sur Continuer pour reprendre."
+                       % (numero, calque, p["couche"])))
+    return sortie
 
 
 def programme_robot(d):
     """Texte URScript du dernier calcul."""
-    if d["resultat"].get("pauses"):
-        raise ValueError(PAUSES_A_VENIR)
     repere, simulation = calibration()
     imp = reglages_impression()
     entete = [d["titre"]]
@@ -548,7 +559,8 @@ def programme_robot(d):
     if not CONFIG["extrusion"]["active"]:
         entete.append("Extrusion desactivee : la buse suit le chemin sans pomper")
     reglages = {"outil": CONFIG["outil"], "impression": imp, "extrusion": CONFIG["extrusion"]}
-    return urscript.generer(d["resultat"]["path"] or [], repere, reglages, entete, simulation)
+    return urscript.generer(d["resultat"]["path"] or [], repere, reglages, entete, simulation,
+                            pauses=messages_de_pause(d))
 
 
 def maquette(largeur_essai):
@@ -644,12 +656,16 @@ def robot():
     liste_alertes = alertes.analyser(angles, hors_portee, tous, tcp, vers_palette,
                                      (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]))
 
-    # temps de passage (s) : approche, dégagement et montées des pauses à la vitesse d'approche
+    # temps de passage (s) : approche, dégagement et montées des pauses à la vitesse d'approche ;
+    # l'animation s'arrête un moment à chaque point d'attente
+    attentes = {(round(p["point"][0], 2), round(p["point"][1], 2), round(p["point"][2] + hb, 2))
+                for p in d["resultat"].get("pauses", [])}
     temps = [0.0]
     for k in range(1, len(tous)):
         vertical = math.dist(tous[k - 1][:2], tous[k][:2]) < 0.01
         v = imp["vitesse_approche"] if k in (1, len(tous) - 1) or vertical else imp["vitesse"]
-        temps.append(temps[-1] + math.dist(tous[k - 1], tous[k]) / v)
+        arret = ATTENTE_ANIMATION if tuple(round(c, 2) for c in tous[k]) in attentes else 0.0
+        temps.append(temps[-1] + math.dist(tous[k - 1], tous[k]) / v + arret)
 
     # série de chaque point (pour déposer le cordon avec la bonne couleur)
     serie_de = {}

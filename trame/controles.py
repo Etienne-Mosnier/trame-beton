@@ -327,14 +327,11 @@ def controler_trace(resultat, calques, noms, reglages):
 
 def quantites(resultat, largeur_cordon, hauteur_couche, vitesse):
     """Longueur de cordon (mm), durée (s) et volume de béton (litres), estimés."""
-    longueur_de = lambda poly: sum(math.dist(a, b) for a, b in zip(poly, poly[1:]))
-    if "troncons" in resultat:
-        longueur = sum(longueur_de(t) for t in resultat["troncons"])
-        a_vide = sum(longueur_de(dep) for dep in resultat["deplacements"])
-    else:
-        longueur, a_vide = longueur_de(resultat["path"] or []), 0.0
+    # extrusion continue : le béton coule tout le long du parcours, pauses comprises (hors attente)
+    path = resultat["path"] or []
+    longueur = sum(math.dist(a, b) for a, b in zip(path, path[1:]))
     return {
         "longueur": round(longueur),
-        "duree": round((longueur + a_vide) / vitesse) if vitesse > 0 else None,
+        "duree": round(longueur / vitesse) if vitesse > 0 else None,
         "volume": round(longueur * largeur_cordon * hauteur_couche / 1e6, 1),
     }

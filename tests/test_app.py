@@ -146,8 +146,12 @@ def test_calculer_avec_pause():
     assert "Pauses : 1, sans passer au-dessus du béton" in titres
     doc = ezdxf.read(io.StringIO(json.loads(app.exporter("dxf"))["texte"]))
     assert {"DEPLACEMENTS", "PAUSES"} <= {c.dxf.name for c in doc.layers}
-    # le programme du robot ne sait pas encore faire les pauses : il le dit
-    assert "Pauses" in json.loads(app.exporter("script"))["erreur"]
+    # le programme du robot s'arrête au point d'attente et attend « Continuer »
+    script = json.loads(app.exporter("script"))["texte"]
+    assert script.count("blocking=True") == 2              # la pause, et l'avertissement de simulation
+    assert "Pause 1, apres le calque 'A vagues' (couche 1)" in script
+    # le G-code de la maquette ne sait pas encore : il le dit
+    assert "Pauses" in json.loads(app.exporter("gcode"))["erreur"]
     # le robot ne dépose pas de cordon pendant le trajet à vide
     bras = json.loads(app.robot())
     assert -1 in bras["series"] and bras["hors_portee"] == []

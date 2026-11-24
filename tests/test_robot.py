@@ -147,3 +147,18 @@ def test_vitesse_du_robot_reglable():
     # l'animation du robot suit la vitesse choisie
     temps = json.loads(app.robot())["temps"]
     assert temps[-2] - temps[1] == pytest.approx(rapide["longueur"] / 72, rel=0.05)
+
+
+def test_programme_avec_pauses():
+    # parcours : ligne, sortie, montée, attente, retour, descente, ligne
+    path = [(0, 0, 0), (100, 0, 0), (120, 0, 0), (120, 0, 50), (300, 0, 50), (120, 40, 50), (120, 40, 0),
+            (0, 40, 0)]
+    texte = urscript.generer(path, repere_palette(*SIMU), REGLAGES, pauses=[(4, "Pause 1 : Continuer")])
+    lignes = [l.strip() for l in texte.splitlines()]
+    i = lignes.index('popup("Pause 1 : Continuer", title="trame-beton : pause 1", blocking=True)')
+    # le robot s'arrête exactement au point d'attente (movel, sans arrondi) avant le message
+    assert lignes[i - 2].startswith("movel(pt(300.00, 0.00,")
+    # montée et descente à la vitesse d'approche
+    assert any(l.startswith("movep(pt(120.00, 0.00,") and "v=VA" in l for l in lignes)
+    assert any(l.startswith("movep(pt(120.00, 40.00,") and "v=VA" in l for l in lignes[i:])
+    assert "# 1 pause(s)" in texte

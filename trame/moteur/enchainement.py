@@ -1,23 +1,25 @@
-"""Un dessin en calques -> le chemin d'impression, avec ses bosses et ses pauses.
+"""Un dessin en calques -> le parcours de la buse, avec ses bosses et ses pauses.
 
-Le dessin est imprimé tel qu'il est tracé. Le moteur :
+Le dessin est imprimé tel qu'il est tracé. L'extrusion est continue : le béton coule tout le
+temps, le programme ne peut pas arrêter la pompe. Le moteur :
 1. enchaîne les calques dans l'ordre d'impression (enchainer). Entre deux calques :
    - « relié » : une liaison droite, imprimée, de la fin d'un calque au début du suivant ;
-   - « pause » : la pompe s'arrête, la buse sort du dessin et attend (voir deplacements.py).
+   - « pause » : la buse sort du dessin sans passer au-dessus du béton, attend « Continuer »
+     à côté du dessin, puis revient (voir deplacements.py).
    Départ et sens sont choisis tout seuls : liaisons courtes qui évitent de passer sur une ligne
    déjà imprimée et, autour d'une pause, des bouts de calque faciles à atteindre de l'extérieur ;
 2. répète le tout pour les couches 2, 3… (la trame réimprimée par-dessus elle-même) ;
-3. pose chaque point imprimé sur le béton déjà imprimé dessous (poser) : à chaque croisement,
-   le passage le plus récent monte au-dessus des plus anciens, y compris dans un même calque
-   (une boucle passe par-dessus son propre début). Les montées ont la pente des bosses :
-   une hauteur de couche (amp) sur une largeur de cordon (d) ;
-4. calcule le trajet à vide de chaque pause, sans passer au-dessus du béton.
+3. trace le trajet de chaque pause (tracer_pauses) ;
+4. pose chaque point sur le béton déjà imprimé dessous (poser) : à chaque croisement, le passage
+   le plus récent monte au-dessus des plus anciens, y compris dans un même calque (une boucle
+   passe par-dessus son propre début), et par-dessus le béton tombé pendant une pause.
+   Les montées ont la pente des bosses : une hauteur de couche (amp) sur une largeur de cordon (d).
 
 Utilisation :
     r = calculer_trace([courbes_du_calque_1, courbes_du_calque_2, …], largeur_cordon=10, amp=5,
-                       pauses=[False, True])       # une pause après le calque 2 (entre deux couches)
-    r["troncons"]     -> les morceaux imprimés d'un seul trait, séparés par les pauses
-    r["deplacements"] -> les trajets à vide des pauses ; r["path"] -> tout le parcours de la buse
+                       pauses=[True, False])       # une pause après le calque 1
+    r["path"]   -> tout le parcours de la buse, d'un seul tenant
+    r["pauses"] -> les points d'attente, et leur place dans r["path"]
 """
 
 import math
@@ -34,7 +36,7 @@ PAS = 1.0      # mm : pas du calcul des hauteurs le long du chemin
 RAYON = 1.0    # mm : un cordon plus proche que ça (vu de dessus) est « dessous »
 PENALITE = 200.0         # mm : passer sur une ligne déjà imprimée « coûte » 200 mm de liaison en plus
 LARGEUR_RECHERCHE = 16   # nombre de débuts de chemin gardés pendant la recherche du meilleur départ
-MARGE_PAUSE = 5.0        # mm : pendant une pause, la buse reste à un demi-cordon + 5 mm du béton
+MARGE_PAUSE = 5.0        # mm : pendant une pause, le béton qui tombe de la buse reste à 5 mm des cordons
 
 
 # --- 1. enchaîner les courbes -----------------------------------------------------------
@@ -338,6 +340,36 @@ def poser(morceaux, amp, d, exclusion=None):
 # --- tout en un ---------------------------------------------------------------------------
 
 
+def tracer_pauses(morceaux, enveloppe, cadre, rayon):
+    """Remplace chaque pause par le trajet de la buse, vu de dessus (deplacements.py) :
+    {"nature": "pause", "points": [fin, sortie, …, attente, …, entrée, début], "sortie",
+    "entree", "attente", "libre"}. Le béton qui tombe en chemin compte comme imprimé."""
+    sortie = []
+    for k, m in enumerate(morceaux):
+        if m["nature"] != "pause":
+            sortie.append(m)
+            continue
+        avant, apres = sortie[-1]["points"], morceaux[k + 1]["points"]
+        imprime = [x["points"] for x in sortie]
+        futur = [x["points"] for x in morceaux[k + 1:] if x["nature"] != "pause"]
+        trajet = trajet_de_pause(avant[-1], avant[-2], apres[0], apres[1], imprime, futur, enveloppe, cadre, rayon)
+        sortie.append(dict(m, **trajet))
+    return sortie
+
+
+def lever(morceau, hauteur):
+    """Parcours de la buse pendant une pause : à hauteur de cordon jusqu'à la sortie, levée
+    jusqu'à l'entrée, puis de nouveau à hauteur de cordon. Renvoie (points 3D, place de l'attente)."""
+    points = morceau["points"]
+    proche = lambda q: min(range(len(points)), key=lambda k: math.dist(points[k][:2], q))
+    i_sortie, i_entree = proche(morceau["sortie"]), proche(morceau["entree"])
+    i_entree = max(i_entree, i_sortie)
+    haut = [(p[0], p[1], hauteur) for p in points[i_sortie:i_entree + 1]]
+    parcours = points[:i_sortie + 1] + haut + points[i_entree:]
+    attente = min(range(len(haut)), key=lambda k: math.dist(haut[k][:2], morceau["attente"]))
+    return parcours, i_sortie + 1 + attente
+
+
 def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pauses=None,
                    levee=50.0, cadre=None):
     """Des calques à plat (dans l'ordre d'impression) au parcours 3D de la buse.
@@ -348,10 +380,10 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
              robot) ou (xmin, ymin, xmax, ymax) ; par défaut, le dessin et 150 mm autour.
 
     Renvoie un dictionnaire proche de celui de chemin.calculer_chemin :
-        troncons     : morceaux imprimés d'un seul trait (3D), séparés par les pauses
-        deplacements : trajet à vide de chaque pause (3D), de la fin d'un tronçon au début du suivant
-        pauses       : {"point": point d'attente, "calque", "couche", "libre"} pour chaque pause
-        path         : tout le parcours de la buse (tronçons et déplacements, à la suite)
+        path         : tout le parcours de la buse (x, y, z), d'un seul tenant
+        pauses       : {"point": point d'attente, "indice": sa place dans path, "calque", "couche",
+                        "libre"} pour chaque pause
+        deplacements : partie levée du parcours de chaque pause (3D)
         waves        : pour chaque calque, ses morceaux 3D (lignes et liaisons), toutes couches
         lignes       : pour chaque calque, ses lignes 3D seulement
         liaisons     : liaisons droites ajoutées, 3D, avec "dans_calque" (calque en plusieurs morceaux)
@@ -363,13 +395,12 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
     dernier = max((i for i, c in enumerate(calques) if c), default=0)
     pause_entre_couches = couches > 1 and pauses[dernier]
     morceaux = enchainer(calques, largeur_cordon, pauses, pause_entre_couches)
-    vide = {"path": None, "troncons": [], "deplacements": [], "pauses": [], "waves": [[] for _ in calques],
-            "lignes": [[] for _ in calques], "liaisons": [], "jumps": [], "hits": [],
-            "controle": {"sauts": 0, "liaisons": 0, "liaisons_dans_calque": 0, "pauses": 0, "pauses_bloquees": 0},
-            "info": "rien à imprimer"}
     if not morceaux:
-        return vide
-    morceaux = poser(repeter(morceaux, couches, pause_entre_couches), amp, d)
+        return {"path": None, "pauses": [], "deplacements": [], "waves": [[] for _ in calques],
+                "lignes": [[] for _ in calques], "liaisons": [], "jumps": [], "hits": [],
+                "controle": {"sauts": 0, "liaisons": 0, "liaisons_dans_calque": 0, "pauses": 0,
+                             "pauses_bloquees": 0},
+                "info": "rien à imprimer"}
 
     enveloppe = enveloppe_du_dessin(calques)
     if cadre is None:
@@ -377,39 +408,36 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
         cadre = (xmin - 150, ymin - 150, xmax + 150, ymax + 150)
     if isinstance(cadre, (tuple, list)):
         cadre = box(*cadre)
-    rayon = largeur_cordon / 2 + MARGE_PAUSE
+    # le béton qui tombe pendant une pause ne doit pas toucher les cordons : un cordon d'écart, + 5 mm
+    rayon = largeur_cordon + MARGE_PAUSE
+    morceaux = tracer_pauses(repeter(morceaux, couches, pause_entre_couches), enveloppe, cadre, rayon)
+    # le béton tombé pendant les pauses est posé comme le reste : les lignes suivantes montent dessus
+    morceaux = poser([dict(m, nature="trajet") if m["nature"] == "pause" else m for m in morceaux], amp, d)
 
-    troncons, deplacements, infos_pauses, imprime = [[]], [], [], []
+    path, infos_pauses, deplacements = [], [], []
     waves, lignes, liaisons = [[] for _ in calques], [[] for _ in calques], []
+    plus_haut = 0.0
     for k, m in enumerate(morceaux):
-        if m["nature"] == "pause":
-            avant, suivant = troncons[-1], morceaux[k + 1]["points"]
-            hauteur = max(p[2] for poly in imprime for p in poly) + levee
-            t = trajet_de_pause(avant[-1], avant[-2], suivant[0], suivant[1], imprime, enveloppe, cadre,
-                                hauteur, rayon)
-            deplacements.append(t["points"])
-            infos_pauses.append({"point": t["attente"], "calque": m["calque"], "couche": m["couche"],
-                                 "libre": t["libre"]})
-            troncons.append([])
-            continue
         pts = m["points"]
-        troncon = troncons[-1]
-        troncon += pts[1:] if troncon and math.dist(troncon[-1], pts[0]) < 1e-6 else pts
-        imprime.append(pts)
-        waves[m["calque"]].append(pts)
-        if m["nature"] == "ligne":
-            lignes[m["calque"]].append(pts)
+        if m["nature"] == "trajet":
+            pts, attente = lever(m, plus_haut + levee)
+            debut_haut = next(i for i, p in enumerate(pts) if p[2] == plus_haut + levee)
+            fin_haut = max(i for i, p in enumerate(pts) if p[2] == plus_haut + levee)
+            deplacements.append(pts[debut_haut - 1:fin_haut + 2])
+            decalage = len(path) - (1 if path and math.dist(path[-1], pts[0]) < 1e-6 else 0)
+            infos_pauses.append({"point": pts[attente], "indice": decalage + attente, "calque": m["calque"],
+                                 "couche": m["couche"], "libre": m["libre"]})
         else:
-            # liaison dans un calque : le morceau d'avant est du même calque et de la même couche
-            avant = morceaux[k - 1] if k > 0 else None
-            dans_calque = bool(avant and avant["nature"] != "pause" and avant["calque"] == m["calque"]
-                               and avant["couche"] == m["couche"])
-            liaisons.append({"points": pts, "calque": m["calque"], "dans_calque": dans_calque})
-
-    # tout le parcours de la buse : tronçon, déplacement, tronçon…
-    path = list(troncons[0])
-    for deplacement, troncon in zip(deplacements, troncons[1:]):
-        path += deplacement[1:] + troncon[1:]
+            plus_haut = max(plus_haut, max(p[2] for p in pts))
+            waves[m["calque"]].append(pts)
+            if m["nature"] == "ligne":
+                lignes[m["calque"]].append(pts)
+            else:
+                avant = morceaux[k - 1] if k > 0 else None
+                dans_calque = bool(avant and avant["nature"] != "trajet" and avant["calque"] == m["calque"]
+                                   and avant["couche"] == m["couche"])
+                liaisons.append({"points": pts, "calque": m["calque"], "dans_calque": dans_calque})
+        path += pts[1:] if path and math.dist(path[-1], pts[0]) < 1e-6 else pts
 
     n_dans = sum(1 for l in liaisons if l["dans_calque"])
     n_bloquees = sum(1 for p in infos_pauses if not p["libre"])
@@ -417,13 +445,12 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
             "courbes par calque : %s" % [len(c) for c in calques],
             "liaisons ajoutées : %d (dont %d dans un calque en plusieurs morceaux)" % (len(liaisons), n_dans),
             "pauses : %d (dont %d sans passage libre)" % (len(infos_pauses), n_bloquees),
-            "hauteur max : %.1f mm" % max(p[2] for t in troncons for p in t),
-            "tronçons imprimés : %d, %d points en tout" % (len(troncons), len(path))]
+            "hauteur max du béton : %.1f mm" % plus_haut,
+            "parcours : 1 polyligne, %d points" % len(path)]
     return {
         "path": path,
-        "troncons": troncons,
-        "deplacements": deplacements,
         "pauses": infos_pauses,
+        "deplacements": deplacements,
         "waves": waves,
         "lignes": lignes,
         "liaisons": liaisons,

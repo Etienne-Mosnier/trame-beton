@@ -39,6 +39,8 @@ const rp = JSON.parse(app.calculer(JSON.stringify({ pauses: ["1 spirale", "2 bou
 if (rp.erreur) throw new Error(rp.erreur);
 console.log(`pauses : ${rp.pauses.length}, ${((performance.now() - debutPause) / 1000).toFixed(2)} s`);
 if (rp.pauses.length !== 4) throw new Error("4 pauses attendues (2 par couche)");
+const sp = JSON.parse(app.exporter("script"));
+if (sp.erreur || !sp.texte.includes("trame-beton : pause 4")) throw new Error(`Programme avec pauses raté : ${sp.erreur}`);
 
 // exports DXF, SVG et programme du robot du dernier calcul (sans pause)
 JSON.parse(app.calculer(JSON.stringify({ calques: ["3 vagues", "1 spirale", "2 boucles"] }), texte, "spirales.dxf"));
