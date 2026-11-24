@@ -20,4 +20,5 @@ def test_liste_complete():
         assert p.relative_to(RACINE).as_posix() in fichiers
     assert "config/cellule.toml" in fichiers
     assert "dessins/vagues.svg" in fichiers and "dessins/spirales.dxf" in fichiers
+    assert "gabarits/gabarit_palette.dxf" in fichiers and "gabarits/gabarit_palette.svg" in fichiers
     assert not any("__pycache__" in f for f in fichiers)

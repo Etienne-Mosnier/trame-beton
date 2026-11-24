@@ -8,45 +8,13 @@ import pathlib
 from trame import app
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
-CONTOURS = RACINE / "contours"
 DESSINS = RACINE / "dessins"
-
-
-def test_liste_motifs():
-    motifs = json.loads(app.liste_motifs())
-    exemple = next(m for m in motifs if m["id"] == "exemple")
-    assert exemple["nom"].startswith("Exemple")
-    assert exemple["parametres"]["series"]["valeur"][0] == {"angle": 160, "espacement": 50}
-    assert set(exemple["parametres"]["series"]["champs"]) == {"angle", "espacement"}
-    assert "série" in exemple["aide"]
-    assert motifs[-1]["id"] == "exemple"       # les motifs des groupes d'abord
-    assert exemple["groupe"] == ""                  # l'exemple n'appartient à aucun groupe
 
 
 def test_reglages_moteur_en_francais():
     reglages = json.loads(app.reglages_moteur())
     assert set(reglages) == {"largeur_cordon", "hauteur_couche", "couches"}
     assert all(r["aide"] for r in reglages.values())
-
-
-def test_calculer():
-    texte = (CONTOURS / "haricot.dxf").read_text()
-    reglages = {"motif": {"series": [{"angle": 160, "espacement": 80}, {"angle": 29, "espacement": 80},
-                                     {"angle": 135, "espacement": 80}]}, "moteur": {"hauteur_couche": 4}}
-    r = json.loads(app.calculer_motif("exemple", json.dumps(reglages), texte, "haricot.dxf"))
-    assert "erreur" not in r
-    assert r["palette"] == [1200.0, 800.0]
-    assert len(r["waves"]) == 3
-    assert r["controle"]["sauts"] == 0
-    assert r["amp"] == 4
-    assert max(p[2] for p in r["path"]) == 8   # deux couches de 4 mm
-    assert r["longueur"] > 0 and r["duree"] > 0
-
-
-def test_calculer_erreur_en_francais():
-    svg = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L 10 0"/></svg>'
-    r = json.loads(app.calculer_motif("exemple", "{}", svg, "trait.svg"))
-    assert r["erreur"].startswith("Aucun contour fermé")
 
 
 def test_bilan_texte():
@@ -58,26 +26,25 @@ def test_bilan_texte():
 
 def test_moteur_deduit_du_cordon():
     assert app.reglages_du_moteur({"largeur_cordon": 12, "hauteur_couche": 6, "couches": 2}) == \
-        {"amp": 6, "d": 12, "lane": 12, "couches": 2}
-    texte = (CONTOURS / "rectangle.svg").read_text()
-    r = json.loads(app.calculer_motif("exemple", json.dumps({"moteur": {"largeur_cordon": 12, "hauteur_couche": 6}}),
-                                      texte, "rectangle.svg"))
+        {"amp": 6, "d": 12, "couches": 2}
+    texte = (DESSINS / "vagues.svg").read_text()
+    r = json.loads(app.calculer(json.dumps({"moteur": {"largeur_cordon": 12, "hauteur_couche": 6}}),
+                                texte, "vagues.svg"))
     assert r["beton"]["largeur_cordon"] == 12 and r["amp"] == 6
-    assert max(p[2] for p in r["path"]) == 12                  # deux cordons de 6 mm
+    assert max(p[2] for serie in r["waves"] for w in serie for p in w) == 6     # un cordon de 6 mm croisé
     assert "hauteur de couche (6 mm)" in json.loads(app.exporter("script"))["texte"]
 
 
 @pytest.mark.parametrize("largeur", [10, 25, 40])
-def test_couloirs_toujours_sur_la_palette(largeur):
-    # plus le cordon est large, plus les couloirs s'écartent : la forme est réduite pour que
-    # le bord du cordon reste à la marge de la palette (20 mm) ou plus
-    texte = (CONTOURS / "grand.svg").read_text()
-    r = json.loads(app.calculer_motif("exemple", json.dumps({"moteur": {"largeur_cordon": largeur}}), texte, "grand.svg"))
-    xs = [p[0] for p in r["path"]]
-    ys = [p[1] for p in r["path"]]
+def test_cordon_toujours_sur_la_palette(largeur):
+    # plus le cordon est large, plus la marge grandit : le bord du cordon reste à 20 mm du bord
+    # de la palette ou plus (le dessin est réduit s'il le faut)
+    texte = (DESSINS / "spirales.dxf").read_text()
+    r = json.loads(app.calculer(json.dumps({"moteur": {"largeur_cordon": largeur}}), texte, "spirales.dxf"))
+    beton = [p for serie in r["waves"] for w in serie for p in w]
     demi = largeur / 2
-    assert min(xs) - demi >= 20 - 0.5 and max(xs) + demi <= 1180 + 0.5
-    assert min(ys) - demi >= 20 - 0.5 and max(ys) + demi <= 780 + 0.5
+    assert min(p[0] for p in beton) - demi >= 20 - 0.5 and max(p[0] for p in beton) + demi <= 1180 + 0.5
+    assert min(p[1] for p in beton) - demi >= 20 - 0.5 and max(p[1] for p in beton) + demi <= 780 + 0.5
 
 
 # --- dessin importé, en calques ------------------------------------------------------

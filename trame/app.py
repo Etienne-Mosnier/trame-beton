@@ -6,11 +6,8 @@ La page appelle :
     calculer(reglages, texte, nom)    -> tout ce qu'il faut pour dessiner l'aperçu
 Toutes les fonctions renvoient un texte JSON. En cas d'erreur, elles renvoient
 {"erreur": "message en français"} au lieu de planter.
-
-(liste_motifs et calculer_motif : ancien fonctionnement par motifs, retiré bientôt.)
 """
 
-import importlib
 import json
 import math
 import pathlib
@@ -20,8 +17,7 @@ import traceback
 
 from shapely.geometry import LineString
 
-from trame.contour import lire_forme, placer
-from trame.controles import controler, controler_trace, quantites
+from trame.controles import controler, quantites
 from trame.dessin import lire_dessin, placer_dessin
 from trame.export.dxf import exporter_dxf
 from trame.export import gcode
@@ -30,9 +26,8 @@ import numpy as np
 
 from trame.robot import alertes, cinematique, urscript
 from trame.robot.calibration import repere_palette, vers_robot
-from trame.moteur.chemin import calculer_chemin
 from trame.moteur.enchainement import calculer_trace
-from trame.parametres import Parametre, Point, Points, valeurs
+from trame.parametres import Parametre, valeurs
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 
@@ -68,67 +63,23 @@ def reglages_du_moteur(beton):
     """Réglages du moteur déduits du cordon :
     - hauteur d'une bosse (amp) = hauteur de couche : on monte d'un cordon par cordon croisé ;
     - longueur de la montée (d) = largeur du cordon : la montée commence une largeur de cordon
-      avant le croisement, pour franchir le cordon du dessous ;
-    - écart des couloirs (lane) = largeur du cordon : les liaisons de deux séries côte à côte,
-      sans se chevaucher."""
+      avant le croisement, pour franchir le cordon du dessous."""
     largeur, hauteur = beton["largeur_cordon"], beton["hauteur_couche"]
-    return {"amp": hauteur, "d": largeur, "lane": largeur, "couches": beton["couches"]}
+    return {"amp": hauteur, "d": largeur, "couches": beton["couches"]}
 
 
-def module_motif(motif_id):
-    """Module Python d'un motif : « groupe_1/vagues » -> motifs.groupe_1.vagues.motif."""
-    return importlib.import_module("motifs.%s.motif" % motif_id.replace("/", "."))
 
 
-def liste_motifs():
-    """Motifs trouvés dans motifs/ : un dossier par motif, directement (motifs/exemple/) ou
-    dans le dossier d'un groupe (motifs/groupe_1/vagues/). Nom, groupe, réglages et aide."""
-    sortie = []
-    for fichier in sorted((RACINE / "motifs").rglob("motif.py")):
-        dossier = fichier.parent
-        motif_id = dossier.relative_to(RACINE / "motifs").as_posix()
-        groupe = motif_id.split("/")[0] if "/" in motif_id else ""
-        entree = {"id": motif_id, "groupe": groupe, "nom": dossier.name, "parametres": {}, "aide": ""}
-        try:
-            motif = module_motif(motif_id)
-            entree["nom"] = motif.NOM
-            entree["parametres"] = {k: p.vers_dict() for k, p in motif.PARAMETRES.items()}
-        except Exception as e:
-            entree["erreur"] = "Le motif ne se charge pas : %s" % e
-        aide = dossier / "aide.md"
-        if aide.is_file():
-            entree["aide"] = aide.read_text(encoding="utf-8")
-        sortie.append(entree)
-    # les motifs des groupes d'abord (groupe par groupe), l'exemple en dernier
-    sortie.sort(key=lambda m: (m["groupe"] == "", m["groupe"], m["id"]))
-    return json.dumps(sortie)
 
 
 def reglages_moteur():
     return json.dumps({k: p.vers_dict() for k, p in MOTEUR.items()})
 
 
-_contours = {}
 _dernier = {}   # dernier calcul, pour les exports
 
-def lire_contour(texte, nom, marge=None, plateau=None, taille=None):
-    """Contour placé sur le plateau (la palette par défaut) avec la marge donnée.
-    taille : part de la plus grande taille possible (None = taille réelle si elle tient).
-    Le fichier n'est lu qu'une fois (gardé en mémoire)."""
-    palette = CONFIG["palette"]
-    marge = palette["marge"] if marge is None else marge
-    plateau = plateau or (palette["longueur"], palette["largeur"])
-    cle = (nom, len(texte), hash(texte))
-    if cle not in _contours:
-        _contours[cle] = lire_forme(texte, nom)
-    return placer(_contours[cle], marge, plateau, taille=taille)
 
 
-def marge_couloirs(largeur, nb_series, marge_plateau=None):
-    """Marge autour de la forme pour que les couloirs des liaisons restent sur le plateau :
-    marge du plateau + demi-cordon + un couloir (une largeur de cordon) par série après A."""
-    marge_plateau = CONFIG["palette"]["marge"] if marge_plateau is None else marge_plateau
-    return marge_plateau + largeur / 2 + largeur * max(nb_series - 1, 0)
 
 
 def arrondir(points, chiffres=2):
@@ -210,7 +161,7 @@ def calculer(reglages_json, texte, nom):
                            cadre=zone_de_travail())
 
         lignes = [[LineString(c) for c in courbes] for courbes in place["courbes"]]
-        controles = controler_trace(r, lignes, noms, {
+        controles = controler(r, lignes, noms, {
             "largeur_cordon": largeur,
             "rayon_courbure_min": BETON["rayon_courbure_min"],
             "palette": plateau,
@@ -218,8 +169,8 @@ def calculer(reglages_json, texte, nom):
         q = quantites(r, largeur, moteur["amp"], vitesse)
         nom_court = pathlib.Path(nom).stem
         _dernier.clear()
-        _dernier.update(resultat=r, contour=None, titre="Dessin : %s" % nom, nom_export=nom_court, noms=noms,
-                        lane=0.0, largeur=largeur, amp=moteur["amp"], palette=plateau, vitesse=vitesse)
+        _dernier.update(resultat=r, titre="Dessin : %s" % nom, nom_export=nom_court, noms=noms, largeur=largeur,
+                        amp=moteur["amp"], palette=plateau, vitesse=vitesse)
         return json.dumps({
             "vitesse": vitesse,
             "palette": list(plateau),
@@ -249,89 +200,6 @@ def calculer(reglages_json, texte, nom):
         return en_erreur(e)
 
 
-# --- ancien fonctionnement : motif + contour (retiré bientôt) ----------------------------
-
-
-def calculer_motif(motif_id, reglages_json, contour_texte, contour_nom):
-    """Calcul complet pour l'aperçu.
-
-    reglages_json : {"motif": {nom: valeur}, "moteur": {nom: valeur}}
-    """
-    try:
-        reglages = json.loads(reglages_json or "{}")
-        plateau = (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"])
-        # vitesse d'impression du robot : champ de l'aperçu, sinon celle de la config
-        vitesse = min(max(float(reglages.get("vitesse") or CONFIG["impression"]["vitesse"]), 1.0), 250.0)
-        beton = valeurs(MOTEUR, reglages.get("moteur"))
-        moteur = reglages_du_moteur(beton)
-        motif = module_motif(motif_id)
-        p = valeurs(motif.PARAMETRES, reglages.get("motif"))
-        # les points du motif restent sur le plateau de la machine choisie
-        dans = lambda xy: (min(max(xy[0], 0.0), plateau[0]), min(max(xy[1], 0.0), plateau[1]))
-        points_motif = {}
-        for nom, parametre in motif.PARAMETRES.items():
-            if isinstance(parametre, Point):
-                p[nom] = dans(p[nom])
-                points_motif[nom] = list(p[nom])
-            elif isinstance(parametre, Points):
-                p[nom] = [dans(xy) for xy in p[nom]]
-                points_motif[nom] = [list(xy) for xy in p[nom]]
-
-        # placement de la forme : on laisse la place des couloirs (qui dépend du nombre de
-        # séries, connu seulement après un premier calcul du motif)
-        largeur = beton["largeur_cordon"]
-        marge = marge_couloirs(largeur, 3)
-        taille = reglages.get("taille")        # curseur Taille (part du maximum), ou None
-        place = lire_contour(contour_texte, contour_nom, marge, plateau, taille)
-        series = motif.series(place["contour"], p)
-        if len(series) != 3:
-            marge = marge_couloirs(largeur, len(series))
-            place = lire_contour(contour_texte, contour_nom, marge, plateau, taille)
-            series = motif.series(place["contour"], p)
-        forme = place["contour"]
-
-        r = calculer_chemin([[list(c.coords) for c in serie] for serie in series], forme, **moteur)
-
-        controles = controler(r, forme, series, {
-            "largeur_cordon": beton["largeur_cordon"],
-            "rayon_courbure_min": BETON["rayon_courbure_min"],
-            "lane": moteur["lane"],
-            "palette": plateau,
-            "marge": 0.0,     # le contour est déjà placé avec sa marge ; ici : rester sur la palette
-        })
-        q = quantites(r, beton["largeur_cordon"], moteur["amp"], vitesse)
-        path = r["path"] or []
-        _dernier.clear()
-        _dernier.update(resultat=r, contour=forme, titre="Motif : %s, contour : %s" % (motif_id, contour_nom),
-                        nom_export=motif_id.replace("/", "_"),
-                        lane=moteur["lane"], largeur=beton["largeur_cordon"],
-                        amp=moteur["amp"], palette=plateau, vitesse=vitesse)
-        return json.dumps({
-            "vitesse": vitesse,
-            "points_motif": points_motif,
-            "palette": list(plateau),
-            "contour": arrondir(forme.exterior.coords),
-            "message_contour": place["message"],
-            "taille": round(place["taille"], 3),
-            "dimensions": place["dimensions"],
-            "waves": [[arrondir(v) for v in serie] for serie in r["waves"]],
-            "path": arrondir(path),
-            "jumps": [arrondir(j) for j in r["jumps"]],
-            "controle": r["controle"],
-            "controles": [dict(c, points=arrondir(c["points"]), segments=[arrondir(s) for s in c["segments"]])
-                          for c in controles],
-            "info": r["info"],
-            **q,
-            "beton": dict(BETON, largeur_cordon=beton["largeur_cordon"], hauteur_couche=beton["hauteur_couche"]),
-            "provisoires": PROVISOIRES,
-            "amp": moteur["amp"],
-        })
-    except ValueError as e:
-        # erreurs prévues (contour ouvert, format inconnu…) : le message suffit
-        return json.dumps({"erreur": str(e), "details": traceback.format_exc()})
-    except Exception as e:
-        return json.dumps({"erreur": "%s : %s" % (type(e).__name__, e),
-                           "details": traceback.format_exc()})
 
 
 _placement = {}   # placement de la palette choisi dans le mode enseignant (remplace la simulation)
@@ -633,9 +501,9 @@ def exporter(format_fichier, options_json="{}"):
         except ValueError as e:
             return json.dumps({"erreur": str(e)})
     elif format_fichier == "dxf":
-        texte = exporter_dxf(d["resultat"], d["contour"], d["palette"], d["lane"], d.get("noms"))
+        texte = exporter_dxf(d["resultat"], d["palette"], d.get("noms"))
     elif format_fichier == "svg":
-        texte = exporter_svg(d["resultat"], d["contour"], d["palette"], d["lane"], d["amp"], d.get("noms"))
+        texte = exporter_svg(d["resultat"], d["palette"], d["amp"], d.get("noms"))
     else:
         return json.dumps({"erreur": "Format inconnu : %s" % format_fichier})
     return json.dumps({"nom": "trame_%s.%s" % (d["nom_export"], format_fichier), "texte": texte})

@@ -16,7 +16,8 @@ import sys
 import time
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
-FICHIERS = ["trame/**/*.py", "dessins/*.svg", "dessins/*.dxf", "config/cellule.toml"]
+FICHIERS = ["trame/**/*.py", "dessins/*.svg", "dessins/*.dxf", "gabarits/*.svg", "gabarits/*.dxf",
+            "config/cellule.toml"]
 
 # page d'accueil du site : renvoie vers l'aperçu
 ACCUEIL = """<!doctype html>
@@ -29,8 +30,8 @@ ACCUEIL = """<!doctype html>
 
 def lister():
     fichiers = set()
-    for motif in FICHIERS:
-        fichiers.update(p.relative_to(RACINE).as_posix() for p in RACINE.glob(motif))
+    for modele in FICHIERS:
+        fichiers.update(p.relative_to(RACINE).as_posix() for p in RACINE.glob(modele))
     return sorted(f for f in fichiers if "__pycache__" not in f)
 
 

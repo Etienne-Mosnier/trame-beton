@@ -1,71 +1,12 @@
-"""Ce qui sert aux deux exports (DXF et SVG) : calques, liaisons, sommets des bosses."""
-
-from shapely.geometry import LineString, Point
-
-from trame.moteur.chemin import decaler_vers_exterieur
+"""Ce qui sert aux deux exports (DXF et SVG) : noms des calques, liaisons, attentes, bosses."""
 
 LETTRES = "ABCDE"
-# Distance au couloir sous laquelle un segment est une liaison le long du bord (mm).
-TOLERANCE_LIAISON = 0.2
 
 
-def couloirs(contour, lane, nb_series):
-    """Le contour et ses décalages vers l'extérieur : un par série (liaisons)."""
-    anneau = list(contour.exterior.coords)
-    if lane <= 0:
-        return [contour.exterior]
-    return [LineString(decaler_vers_exterieur(anneau, lane * i)) for i in range(max(nb_series, 1))]
-
-
-def lignes_et_liaisons(resultat, contour, lane):
-    """(lignes, liaisons) : lignes[i] = polylignes 3D de la série i hors liaisons,
-    liaisons = polylignes 3D ajoutées par le moteur pour relier les lignes.
-    Dessin importé : le moteur les donne déjà ; motif + contour : on les retrouve le long du bord."""
-    if "lignes" in resultat:
-        return resultat["lignes"], [l["points"] for l in resultat["liaisons"]]
-    return separer_liaisons(resultat["waves"], contour, lane)
-
-
-def separer_liaisons(waves, contour, lane):
-    """Coupe chaque série en morceaux « lignes du motif » et morceaux « liaisons ».
-
-    Renvoie (lignes, liaisons) : lignes[i] = polylignes 3D de la série i hors liaisons,
-    liaisons = polylignes 3D qui longent un couloir du bord.
-    """
-    anneaux = couloirs(contour, lane, len(waves))
-
-    def sur_le_bord(a, b):
-        milieu = Point((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
-        return min(c.distance(milieu) for c in anneaux) < TOLERANCE_LIAISON
-
-    lignes, liaisons = [], []
-    for serie in waves:
-        morceaux = []
-        for poly in serie:
-            courant, type_courant = [], None
-            for a, b in zip(poly, poly[1:]):
-                t = "liaison" if sur_le_bord(a, b) else "ligne"
-                if t != type_courant:
-                    if len(courant) > 1:
-                        (liaisons if type_courant == "liaison" else morceaux).append(courant)
-                    courant, type_courant = [a], t
-                courant.append(b)
-            if len(courant) > 1:
-                (liaisons if type_courant == "liaison" else morceaux).append(courant)
-        lignes.append(morceaux)
-    return lignes, liaisons
-
-
-def sommets_des_bosses(waves):
-    """Sommets des bosses : (x, y, z) là où la hauteur monte puis ne monte plus (un sommet pointu,
-    ou le début d'un sommet plat)."""
-    sommets = []
-    for serie in waves:
-        for poly in serie:
-            for k in range(1, len(poly) - 1):
-                if poly[k][2] > 0 and poly[k][2] > poly[k - 1][2] and poly[k][2] >= poly[k + 1][2]:
-                    sommets.append(tuple(poly[k]))
-    return sommets
+def lignes_et_liaisons(resultat):
+    """(lignes, liaisons) : lignes[i] = polylignes 3D du calque i hors liaisons,
+    liaisons = polylignes 3D ajoutées par le moteur pour relier les lignes."""
+    return resultat["lignes"], [l["points"] for l in resultat["liaisons"]]
 
 
 def noms_des_calques(nb, noms=None):
@@ -89,6 +30,18 @@ def attentes(resultat):
     if resultat.get("fin"):
         sortie.append(("FIN", resultat["fin"]["trajet"], resultat["fin"]["point"]))
     return sortie
+
+
+def sommets_des_bosses(waves):
+    """Sommets des bosses : (x, y, z) là où la hauteur monte puis ne monte plus (un sommet pointu,
+    ou le début d'un sommet plat)."""
+    sommets = []
+    for serie in waves:
+        for poly in serie:
+            for k in range(1, len(poly) - 1):
+                if poly[k][2] > 0 and poly[k][2] > poly[k - 1][2] and poly[k][2] >= poly[k + 1][2]:
+                    sommets.append(tuple(poly[k]))
+    return sommets
 
 
 def reperes_palette(palette):

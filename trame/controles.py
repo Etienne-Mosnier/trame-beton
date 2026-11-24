@@ -1,20 +1,19 @@
-"""Contrôles d'imprimabilité, affichés dans l'aperçu.
+"""Contrôles d'imprimabilité d'un dessin, affichés dans l'aperçu.
 
 Chaque contrôle renvoie un dictionnaire :
     titre    : ce qui est vérifié, en une phrase courte
-    statut   : "ok", "alerte" (à discuter avec les ingénieurs) ou "erreur" (impossible à imprimer)
+    statut   : "ok", "alerte" (à discuter dans le groupe) ou "erreur" (impossible à imprimer)
     message  : explication en français
     points   : endroits à montrer en rouge [[x, y], …]
     segments : morceaux à montrer en rouge [[[x, y, z], [x, y, z]], …]
 
-Un avertissement n'est pas un bug à masquer : il se discute avec les étudiants ingénieurs.
+Un avertissement n'est pas un bug à masquer : il se discute dans le groupe.
 """
 
 import math
 
-from shapely.geometry import LineString, Point
-
-from trame.moteur.chemin import decaler_vers_exterieur
+import numpy as np
+import shapely
 
 # Un croisement plus rasant que ça fait des bosses qui se chevauchent (degrés).
 ANGLE_MIN = 20.0
@@ -23,116 +22,11 @@ ANGLE_VIF = 45.0
 # Nombre maximal de points ou segments renvoyés par contrôle (pour garder l'aperçu fluide).
 MAX_MARQUES = 300
 
-LETTRES = "ABCDE"
-
 
 def controle(titre, statut, message, points=(), segments=()):
     return {"titre": titre, "statut": statut, "message": message,
             "points": [list(p) for p in points][:MAX_MARQUES],
             "segments": [list(s) for s in segments][:MAX_MARQUES]}
-
-
-def decouper(series, forme):
-    """Les courbes de chaque série, découpées par la forme (ce qui sera vraiment imprimé)."""
-    sortie = []
-    for serie in series:
-        morceaux = []
-        for courbe in serie:
-            partie = courbe.intersection(forme)
-            for g in getattr(partie, "geoms", [partie]):
-                if g.geom_type == "LineString" and g.length > 0:
-                    morceaux.append(g)
-        sortie.append(morceaux)
-    return sortie
-
-
-def direction(courbe, point):
-    """Direction de la courbe au point donné (degrés, de 0 à 180)."""
-    L = courbe.project(point)
-    a = courbe.interpolate(max(L - 1.0, 0.0))
-    b = courbe.interpolate(min(L + 1.0, courbe.length))
-    return math.degrees(math.atan2(b.y - a.y, b.x - a.x)) % 180
-
-
-# --- contrôles sur les lignes du motif ----------------------------------------------
-
-
-def lignes_trop_proches(series, ecart_min):
-    """Deux lignes d'une même série à moins de ecart_min (2 × la largeur du cordon)."""
-    titre = "Lignes assez espacées"
-    segments, plus_petit = [], None
-    for serie in series:
-        for a in range(len(serie)):
-            for b in range(a + 1, len(serie)):
-                d = serie[a].distance(serie[b])
-                if d >= ecart_min:
-                    continue
-                plus_petit = d if plus_petit is None else min(plus_petit, d)
-                # la partie de la ligne a trop près de la ligne b
-                trop_pres = serie[a].intersection(serie[b].buffer(ecart_min))
-                for g in getattr(trop_pres, "geoms", [trop_pres]):
-                    if g.geom_type == "LineString":
-                        segments.extend([[p[0], p[1], 0], [q[0], q[1], 0]]
-                                        for p, q in zip(g.coords, list(g.coords)[1:]))
-    if plus_petit is None:
-        return controle(titre, "ok", "Les lignes d'une même série sont à plus de %g mm." % ecart_min)
-    return controle(titre, "alerte",
-                    "Des lignes d'une même série sont à moins de %g mm (2 × la largeur du cordon) : "
-                    "les cordons vont se toucher. Écart le plus petit : %.0f mm." % (ecart_min, plus_petit),
-                    segments=segments)
-
-
-def lignes_qui_se_recoupent(series, forme=None):
-    """Une courbe d'une série qui se croise elle-même (dans la forme) : le cordon repasse au
-    même endroit. À appliquer aux courbes entières, avant découpage."""
-    from collections import Counter
-
-    from shapely.ops import unary_union
-
-    titre = "Aucune ligne ne se recoupe"
-    points = []
-    for serie in series:
-        for courbe in serie:
-            if courbe.is_simple:
-                continue
-            # les nœuds où plus de deux morceaux se rejoignent sont les croisements
-            decoupe = unary_union(courbe)
-            bouts = Counter()
-            for g in getattr(decoupe, "geoms", [decoupe]):
-                bouts[g.coords[0]] += 1
-                bouts[g.coords[-1]] += 1
-            points += [p for p, n in bouts.items()
-                       if n > 2 and (forme is None or forme.contains(Point(p)))]
-    if not points:
-        return controle(titre, "ok", "Aucune ligne ne se croise elle-même.")
-    return controle(titre, "alerte",
-                    "%d endroit(s) où une ligne se replie et se croise elle-même : le cordon passerait "
-                    "deux fois au même endroit, à plat." % len(points), points=points)
-
-
-def croisements_rasants(series, angle_min=ANGLE_MIN):
-    """Croisements entre deux séries avec un angle plus petit que angle_min."""
-    titre = "Croisements assez ouverts"
-    points, plus_petit = [], None
-    for i in range(len(series)):
-        for j in range(i + 1, len(series)):
-            for a in series[i]:
-                for b in series[j]:
-                    x = a.intersection(b)
-                    for p in getattr(x, "geoms", [x]):
-                        if p.geom_type != "Point":
-                            continue
-                        ecart = abs(direction(a, p) - direction(b, p))
-                        angle = min(ecart, 180 - ecart)
-                        if angle < angle_min:
-                            points.append((p.x, p.y))
-                            plus_petit = angle if plus_petit is None else min(plus_petit, angle)
-    if plus_petit is None:
-        return controle(titre, "ok", "Toutes les séries se croisent à plus de %g°." % angle_min)
-    return controle(titre, "alerte",
-                    "%d croisement(s) à moins de %g° : les bosses vont se chevaucher. "
-                    "Angle le plus petit : %.0f°." % (len(points), angle_min, plus_petit),
-                    points=points)
 
 
 def virages_serres(courbes, rayon_min, nom, anneau=False):
@@ -169,66 +63,6 @@ def virages_serres(courbes, rayon_min, nom, anneau=False):
                     points=points)
 
 
-# --- contrôles sur le chemin --------------------------------------------------------
-
-
-def une_seule_ligne(resultat):
-    """Toutes les courbes sont reliées en zigzag (le long du bord) ou en spirale."""
-    titre = "Une seule ligne : zigzag ou spirale"
-    n = resultat.get("raccords_droits", 0)
-    if not n:
-        return controle(titre, "ok", "Les courbes s'enchaînent en zigzag le long du bord ou en spirale.")
-    return controle(titre, "alerte",
-                    "%d courbe(s) ne touchent pas le bord et ne forment pas une spirale : elles sont "
-                    "raccordées en ligne droite à travers la forme. Fais traverser les courbes ouvertes "
-                    "d'un bord à l'autre, ou emboîte les courbes fermées les unes dans les autres." % n)
-
-
-def sauts(resultat):
-    titre = "Chemin continu"
-    jumps = resultat["jumps"]
-    if not jumps:
-        return controle(titre, "ok", "Le chemin est d'un seul tenant, sans saut.")
-    segments = [[p, q] for j in jumps for p, q in zip(j, j[1:])]
-    return controle(titre, "erreur",
-                    "%d saut(s) : le chemin est coupé et la buse devrait traverser sans imprimer."
-                    % len(jumps), segments=segments)
-
-
-def hors_forme(resultat):
-    titre = "Tout est dans la forme"
-    segments = resultat["hors_forme"]
-    if not segments:
-        return controle(titre, "ok", "Aucun morceau du chemin ne sort de la forme.")
-    return controle(titre, "erreur", "%d morceau(x) du chemin sortent de la forme." % len(segments),
-                    segments=segments)
-
-
-def passages_en_double(resultat, contour, lane, nb_series):
-    """Segments imprimés deux fois. Sur un couloir (le long du bord) ou dans la forme."""
-    titre = "Pas de passage en double"
-    segments = resultat["superposes"]
-    if not segments:
-        return controle(titre, "ok", "Aucun endroit n'est imprimé deux fois.")
-    # couloirs : le contour et ses décalages vers l'extérieur (un par série)
-    anneau = list(contour.exterior.coords)
-    couloirs = [LineString(decaler_vers_exterieur(anneau, lane * i)) if lane > 0 else contour.exterior
-                for i in range(max(nb_series, 1))]
-    sur_le_bord = 0
-    for a, b in segments:
-        milieu = Point((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
-        if min(c.distance(milieu) for c in couloirs) < 0.1:
-            sur_le_bord += 1
-    longueur = sum(math.dist(a, b) for a, b in segments)
-    dans_la_forme = len(segments) - sur_le_bord
-    message = "%.0f mm de cordon imprimés deux fois" % longueur
-    if dans_la_forme == 0:
-        message += ", tous le long du bord (liaisons entre deux lignes)."
-    else:
-        message += " : %d segment(s) le long du bord, %d dans la forme." % (sur_le_bord, dans_la_forme)
-    return controle(titre, "alerte", message, segments=segments)
-
-
 def sur_la_palette(resultat, palette, marge):
     titre = "Sur la palette"
     lx, ly = palette
@@ -241,34 +75,6 @@ def sur_la_palette(resultat, palette, marge):
     return controle(titre, "erreur",
                     "%d point(s) du chemin sont à moins de %g mm du bord de la palette, ou en dehors."
                     % (len(points), marge), points=points)
-
-
-# --- tout ---------------------------------------------------------------------------
-
-
-def controler(resultat, contour, series, reglages):
-    """Tous les contrôles.
-
-    resultat : sortie de calculer_chemin
-    contour  : Polygon de la forme sur la palette
-    series   : séries du motif (listes de LineString)
-    reglages : largeur_cordon, rayon_courbure_min, lane, palette, marge
-    """
-    lignes = decouper(series, contour)
-    toutes = [c for serie in lignes for c in serie]
-    rayon_min = reglages["rayon_courbure_min"]
-    return [
-        sauts(resultat),
-        une_seule_ligne(resultat),
-        hors_forme(resultat),
-        sur_la_palette(resultat, reglages["palette"], reglages["marge"]),
-        lignes_trop_proches(lignes, 2 * reglages["largeur_cordon"]),
-        lignes_qui_se_recoupent(series, contour),
-        croisements_rasants(lignes),
-        virages_serres(toutes, rayon_min, "motif"),
-        virages_serres([contour.exterior], rayon_min, "contour", anneau=True),
-        passages_en_double(resultat, contour, reglages["lane"], len(series)),
-    ]
 
 
 def liaisons_ajoutees(resultat, noms):
@@ -320,16 +126,13 @@ def depart_et_fin(resultat):
                     "en rouge). Changer l'ordre des calques." % " et ".join(bloques), segments=segments)
 
 
-def lignes_trop_proches_trace(calques, ecart_min, pas=2.0):
+def lignes_trop_proches(calques, ecart_min, pas=2.0):
     """Dans un même calque, deux passages à moins de ecart_min (2 × la largeur du cordon) : deux
     lignes différentes, ou deux passages d'une même ligne (deux tours d'une spirale, les deux
     jambes d'une épingle). Le long d'une même ligne, on ne compare que des points éloignés de plus
     de 2 × ecart_min (sinon deux points voisins seraient toujours « trop proches »).
     Deux passages qui se croisent sont forcément proches près du croisement : on ne compte que
     les passages à peu près parallèles (moins de 30° d'écart, dans un sens ou dans l'autre)."""
-    import numpy as np
-    import shapely
-
     titre = "Lignes assez espacées"
     segments, plus_petit = [], None
     for calque in calques:
@@ -368,12 +171,9 @@ def lignes_trop_proches_trace(calques, ecart_min, pas=2.0):
                     segments=segments)
 
 
-def croisements_rasants_trace(calques, angle_min=ANGLE_MIN):
+def croisements_rasants(calques, angle_min=ANGLE_MIN):
     """Croisements plus rasants que angle_min : entre deux calques, et aussi quand une ligne se
     recroise elle-même (une boucle), puisque le second passage monte sur le premier."""
-    import numpy as np
-    import shapely
-
     titre = "Croisements assez ouverts"
     A, B, ligne, rang, fermee, longueur_ligne = [], [], [], [], [], []
     numero = 0
@@ -417,8 +217,8 @@ def croisements_rasants_trace(calques, angle_min=ANGLE_MIN):
                     points=points)
 
 
-def controler_trace(resultat, calques, noms, reglages):
-    """Contrôles d'un dessin importé (sans contour).
+def controler(resultat, calques, noms, reglages):
+    """Tous les contrôles d'un dessin.
 
     resultat : sortie de enchainement.calculer_trace
     calques  : courbes placées de chaque calque imprimé (listes de LineString), dans l'ordre
@@ -431,8 +231,8 @@ def controler_trace(resultat, calques, noms, reglages):
         liaisons_ajoutees(resultat, noms),
         *([pauses_sans_survol(resultat, noms)] if resultat.get("pauses") else []),
         depart_et_fin(resultat),
-        lignes_trop_proches_trace(calques, 2 * reglages["largeur_cordon"]),
-        croisements_rasants_trace(calques),
+        lignes_trop_proches(calques, 2 * reglages["largeur_cordon"]),
+        croisements_rasants(calques),
         virages_serres(toutes, reglages["rayon_courbure_min"], "dessin"),
     ]
 

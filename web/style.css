@@ -205,6 +205,8 @@ p.erreur, span.erreur { color: var(--erreur); white-space: pre-wrap; }
   #panneau { top: auto; bottom: 8px; left: 8px; width: calc(100vw - 16px); height: 50vh; }
 }
 
+#panneau a { color: var(--orange-fonce); font-weight: 600; }
+
 /* liste des calques : une ligne par calque, que l'on glisse pour changer l'ordre */
 #calques { list-style: none; margin: 10px 0 4px; padding: 0; }
 #calques:empty { display: none; }

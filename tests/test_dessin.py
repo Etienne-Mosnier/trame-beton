@@ -206,3 +206,13 @@ def test_placement_tourne_ou_reduit():
     assert grand["echelle"] == pytest.approx(1160 / 3000) and "réduit" in grand["message"]
     choisi = placer_dessin([[[(0, 0), (300, 0)], [(0, 0), (0, 200)]]], marge=20, taille=0.5)
     assert choisi["taille"] == pytest.approx(0.5)
+
+
+def test_gabarits():
+    # le gabarit de la palette : seul son cadre a des lignes, et il n'est pas imprimé
+    import pathlib
+    dossier = pathlib.Path(__file__).resolve().parent.parent / "gabarits"
+    for nom in ("gabarit_palette.svg", "gabarit_palette.dxf"):
+        d = lire_dessin((dossier / nom).read_text(encoding="utf-8"), nom)
+        assert [(c["nom"], c["imprime"]) for c in d["calques"]] == [("palette", False)]
+        assert taille(d["calques"][0]["courbes"]) == pytest.approx((1200, 800))

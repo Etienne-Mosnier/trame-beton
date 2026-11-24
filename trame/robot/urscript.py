@@ -129,7 +129,7 @@ def generer(path, repere, reglages, entete=(), simulation=False, pauses=()):
     repere   : repère de la palette (calibration.repere_palette)
     reglages : {"outil": …, "impression": …, "extrusion": …} de config/cellule.toml
                (impression.hauteur_buse déjà remplacée si elle était provisoire)
-    entete   : lignes de commentaire à mettre en tête (motif, contour, valeurs provisoires…)
+    entete   : lignes de commentaire à mettre en tête (dessin, valeurs provisoires…)
     simulation : True = calibration de simulation ; le programme prévient au démarrage
     pauses   : [(indice dans path, message), …] : le robot s'arrête au point path[indice] et
                attend « Continuer » avec ce message
