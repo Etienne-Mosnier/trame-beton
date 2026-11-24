@@ -26,25 +26,25 @@
     </div>
 
     <section>
-      <h2>Tracé de base</h2>
-      <select id="choix-contour"></select>
-      <label class="bouton-fichier">Importer un SVG ou un DXF…
-        <input id="fichier-contour" type="file" accept=".svg,.dxf">
+      <h2>Tracé</h2>
+      <select id="choix-dessin"></select>
+      <label class="bouton-fichier" id="bouton-import">Importer un DXF ou un SVG…
+        <input id="fichier-dessin" type="file" accept=".svg,.dxf">
       </label>
+      <p class="aide">Ou glisser le fichier sur la vue. Un calque = une ligne d'un seul trait.
+        Glisser les calques pour changer l'ordre : chacun passe par-dessus ceux du dessus.
+        L'œil retire un calque de l'impression.</p>
+      <p class="petit">Gabarit de la palette, calques prêts :
+        <a href="../gabarits/gabarit_palette.dxf" download>DXF</a> ·
+        <a href="../gabarits/gabarit_palette.svg" download>SVG</a></p>
+      <ol id="calques"></ol>
+      <p id="suivi-fichier" class="petit"></p>
       <div class="reglage">
         <div class="ligne"><span>taille</span><output id="valeur-taille"></output></div>
         <input id="taille" type="range" min="5" max="100" step="1" value="100">
-        <p class="aide">100 % : la plus grande taille qui tient sur la palette, liaisons comprises.
-          Impossible de dépasser.</p>
+        <p class="aide">100 % : la plus grande taille qui tient sur la palette. Impossible de dépasser.</p>
       </div>
-      <p id="message-contour" class="petit"></p>
-    </section>
-
-    <section>
-      <h2>Motif</h2>
-      <select id="choix-motif"></select>
-      <div id="reglages-motif"></div>
-      <details id="aide-motif"><summary>Aide du motif</summary><div></div></details>
+      <p id="message-dessin" class="petit"></p>
     </section>
 
     <section>
@@ -102,15 +102,17 @@
         <button id="export-script" type="button">Programme du robot (URScript)</button>
       </div>
       <div class="maquette">
-        <label>Cordon d'essai <input id="largeur-essai" type="number" min="1" max="40" step="0.5" value="5"> mm</label>
+        <label>Cordon d'essai <input id="largeur-essai" type="number" min="0.5" max="40" step="0.1" value="1.5"> mm</label>
         <button id="export-gcode" type="button">Maquette G-code</button>
       </div>
       <p id="info-maquette" class="petit"></p>
-      <p class="petit">DXF et SVG pour les ingénieurs : une série par calque, les liaisons, le
-        chemin complet et les repères du plateau. Hauteurs réelles, en mm.<br>
-        Programme du robot : à valider dans URSim avant tout passage sur le robot.<br>
-        Maquette G-code (machine cartésienne 700 × 700, Klipper) : toute la trame réduite à l'échelle
-        du cordon d'essai. À essayer d'abord à vide ; débit de l'axe E à calibrer.</p>
+      <p class="petit">DXF et SVG pour les ingénieurs : un calque par calque imprimé, les liaisons,
+        le chemin complet, les pauses et les repères du plateau. Hauteurs réelles, en mm.<br>
+        Programme du robot : à valider dans URSim avant tout passage sur le robot. Il s'arrête au
+        départ (démarrer la pompe), à chaque pause et à la fin (couper la pompe), buse à côté du dessin.<br>
+        Maquette G-code (WASP 2040, plateau rond de 200 mm) : toute la trame réduite à l'échelle du
+        cordon d'essai. Extrusion par le boîtier : le G-code ne commande que les déplacements et attend
+        un clic sur l'écran aux mêmes arrêts que le robot. À essayer d'abord à vide.</p>
     </section>
 
     <section>

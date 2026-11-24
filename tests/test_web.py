@@ -14,12 +14,11 @@ def charger_construire():
 
 
 def test_liste_complete():
-    # tous les modules de trame/, tous les motifs, les contours exemples et la config
+    # tous les modules de trame/, les dessins d'exemple et la config
     fichiers = charger_construire().lister()
     for p in (RACINE / "trame").rglob("*.py"):
         assert p.relative_to(RACINE).as_posix() in fichiers
-    for p in (RACINE / "motifs").rglob("motif.py"):
-        assert p.relative_to(RACINE).as_posix() in fichiers
     assert "config/cellule.toml" in fichiers
-    assert "contours/haricot.dxf" in fichiers
+    assert "dessins/vagues.svg" in fichiers and "dessins/spirales.dxf" in fichiers
+    assert "gabarits/gabarit_palette.dxf" in fichiers and "gabarits/gabarit_palette.svg" in fichiers
     assert not any("__pycache__" in f for f in fichiers)

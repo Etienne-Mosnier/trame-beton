@@ -12,7 +12,7 @@ from trame.robot import urscript
 from trame.robot.calibration import matrice, pose_ur, repere_palette, vecteur_rotation, vers_robot
 
 SIMU = ([-197.0, -437.0, 8.7], [-197.0, 763.0, 8.7], [-997.0, -437.0, 8.7])
-CONTOURS = pathlib.Path(__file__).resolve().parent.parent / "contours"
+DESSINS = pathlib.Path(__file__).resolve().parent.parent / "dessins"
 
 
 def pose_trans(pose, point_mm):
@@ -128,22 +128,37 @@ def test_extrusion_sans_sortie():
 
 
 def test_export_depuis_l_apercu():
-    app.calculer("exemple", "{}", (CONTOURS / "rectangle.svg").read_text(), "rectangle.svg")
+    app.calculer("{}", (DESSINS / "vagues.svg").read_text(), "vagues.svg")
     r = json.loads(app.exporter("script"))
-    assert r["nom"] == "trame_exemple.script"
+    assert r["nom"] == "trame_vagues.script"
     assert "SIMULATION" in r["texte"] and "popup(" in r["texte"]
     assert "PROVISOIRE : hauteur de la buse" in r["texte"]
     assert "Extrusion desactivee" in r["texte"]
 
 
 def test_vitesse_du_robot_reglable():
-    texte = (CONTOURS / "rectangle.svg").read_text()
-    lent = json.loads(app.calculer("exemple", json.dumps({"vitesse": 36}), texte, "rectangle.svg"))
+    texte = (DESSINS / "vagues.svg").read_text()
+    lent = json.loads(app.calculer(json.dumps({"vitesse": 36}), texte, "vagues.svg"))
     assert lent["vitesse"] == 36
     script = json.loads(app.exporter("script"))["texte"]
     assert "  V = 0.0360  # vitesse d'impression (m/s)" in script.splitlines()
-    rapide = json.loads(app.calculer("exemple", json.dumps({"vitesse": 72}), texte, "rectangle.svg"))
+    rapide = json.loads(app.calculer(json.dumps({"vitesse": 72}), texte, "vagues.svg"))
     assert lent["duree"] == pytest.approx(2 * rapide["duree"], abs=1)
     # l'animation du robot suit la vitesse choisie
     temps = json.loads(app.robot())["temps"]
     assert temps[-2] - temps[1] == pytest.approx(rapide["longueur"] / 72, rel=0.05)
+
+
+def test_programme_avec_pauses():
+    # parcours : ligne, sortie, montée, attente, retour, descente, ligne
+    path = [(0, 0, 0), (100, 0, 0), (120, 0, 0), (120, 0, 50), (300, 0, 50), (120, 40, 50), (120, 40, 0),
+            (0, 40, 0)]
+    texte = urscript.generer(path, repere_palette(*SIMU), REGLAGES, pauses=[(4, "Pause 1 : Continuer")])
+    lignes = [l.strip() for l in texte.splitlines()]
+    i = lignes.index('popup("Pause 1 : Continuer", title="trame-beton : pause 1", blocking=True)')
+    # le robot s'arrête exactement au point d'attente (movel, sans arrondi) avant le message
+    assert lignes[i - 2].startswith("movel(pt(300.00, 0.00,")
+    # montée et descente à la vitesse d'approche
+    assert any(l.startswith("movep(pt(120.00, 0.00,") and "v=VA" in l for l in lignes)
+    assert any(l.startswith("movep(pt(120.00, 40.00,") and "v=VA" in l for l in lignes[i:])
+    assert "# 1 pause(s)" in texte

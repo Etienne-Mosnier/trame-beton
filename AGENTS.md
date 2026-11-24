@@ -1,167 +1,82 @@
-# Règles pour les agents (Claude Code, GitHub Copilot)
+# Règles pour les agents (Claude Code)
 
-Ce fichier est lu par tous les agents qui travaillent sur ce dépôt. `CLAUDE.md` et
-`.github/copilot-instructions.md` renvoient ici : **les règles ne s'écrivent qu'ici.**
+Ce fichier est lu par tous les agents qui travaillent sur ce dépôt. `CLAUDE.md` renvoie ici :
+**les règles ne s'écrivent qu'ici.**
 
 ## Le projet
 
-Application web de création de **trames imprimées en béton** par un bras UR10e.
-La trame est imprimée à plat sur une bâche posée sur une palette EPAL (1200 × 800 mm).
-La bâche est ensuite soulevée en certains points pour donner du volume à la trame.
+Application web (aperçu dans le navigateur, Python via Pyodide) qui prépare l'impression de
+**trames en béton** par un bras UR10e, sur un support posé sur une palette EPAL (1200 × 800 mm).
+Après l'impression, une action manuelle sur le support met la trame en mouvement ; chaque groupe
+d'étudiants choisit son support et son action.
 
-Les utilisateurs sont des **étudiants designers qui ne savent pas coder**. Ils décrivent
-ce qu'ils veulent en français, dans des issues GitHub, et jugent le résultat dans l'aperçu
-web. Ils ne lisent pas le code. Tout ce que tu écris doit donc être **simple, court, commenté
-en français et facile à copier**.
+Les étudiants **dessinent leur trame dans leur logiciel** (Rhino, AutoCAD, Illustrator, Inkscape)
+et l'**importent en DXF ou SVG** dans l'aperçu. Ils ne codent pas et ne passent pas par GitHub.
+L'enseignant est designer, pas développeur : explications courtes, pas à pas, avec les gestes
+des logiciels qu'il connaît.
 
 ## Comment l'application fonctionne
 
 ```
-contour (SVG/DXF, mis à l'échelle de la palette)
-   └─> MOTIF d'un groupe  ──> séries de courbes à plat (A, B, C…)
-          └─> MOTEUR de croisements ──> un seul chemin continu, avec bosses d'empilement
-                 └─> CONTRÔLES (imprimabilité) ──> APERÇU web
-                 └─> EXPORTS : DXF/SVG (ingénieurs), URScript (robot)
+dessin DXF / SVG ──> CALQUES (trame/dessin.py) : un calque = une ligne d'un seul trait
+   └─> ORDRE et PAUSES choisis dans l'aperçu (liste des calques, « relié » ou « pause »)
+         └─> MOTEUR (trame/moteur/enchainement.py, deplacements.py) : un seul parcours de buse,
+             bosses aux croisements, départ, pauses et fin à côté du dessin
+               └─> CONTRÔLES (trame/controles.py) ──> APERÇU (web/)
+               └─> EXPORTS : DXF/SVG (trame/export/), URScript robot (trame/robot/urscript.py),
+                   G-code de la maquette WASP 2040 (trame/export/gcode.py)
 ```
 
-- Un **motif** ne fait qu'une chose : renvoyer des **séries de courbes 2D** (en mm, dans le
-  repère de la palette). Il ne s'occupe ni des croisements, ni des bosses, ni du robot.
-- L'**ordre des séries est l'ordre d'impression** : la série B passe par-dessus A, la série C
-  par-dessus A et B, etc. Aux croisements, le moteur fait monter la série d'une bosse au-dessus
-  de ce qu'elle recouvre (empilement). 2 à 5 séries = 2 à 5 niveaux de cordon.
+## Règles physiques (à respecter dans tout changement)
+
+- **Le dessin est imprimé tel qu'il est tracé** : pas de découpe, pas de contour, pas de spirale
+  automatique. Chaque calque est une ligne d'un seul trait ; un calque en plusieurs morceaux est
+  relié au plus court, avec un avertissement. 5 calques imprimés au plus.
+- **Ordre d'impression** = ordre de la liste dans l'aperçu (alphabétique au départ, glisser pour
+  le changer). Départ et sens de chaque calque sont choisis par le moteur.
+- **Bosses** : à chaque croisement, le passage le plus récent monte au-dessus des plus anciens,
+  y compris quand une ligne se recroise elle-même. Pente : une hauteur de couche sur une largeur
+  de cordon.
+- **Extrusion continue** (robot et WASP) : le programme ne coupe jamais la pompe. Le parcours
+  commence et finit **à côté du dessin**, buse levée, avec un arrêt (« démarrer la pompe »,
+  « couper la pompe »). Une **pause** sort la buse du dessin **sans jamais passer au-dessus du
+  béton** (écart d'un cordon + 5 mm), attend « Continuer », puis revient. Le béton qui tombe
+  pendant le trajet compte comme posé.
+- Le **robot** ne va que dans sa zone de portée (`zone_de_travail` dans `trame/app.py`).
+- **Maquette WASP 2040** : delta, Marlin, plateau rond de 200 mm, extrusion par un boîtier
+  externe (aucun axe E dans le G-code), arrêts `M0`. Voir `docs/MAQUETTE.md`.
+
+Les valeurs du béton (cordon, couche, rayon de courbure) sont dans `config/cellule.toml` ; celles
+qui valent 0 sont provisoires et signalées dans l'aperçu. Les contrôles signalent les problèmes :
+**un avertissement n'est pas un bug à masquer**, il se discute dans le groupe.
 
 ## Ce que tu as le droit de modifier
 
-| Dossier | Qui | Règle |
-|---|---|---|
-| `motifs/<groupe>/<motif>/` | étudiants + agent | **seule zone de travail des étudiants** |
-| `motifs/exemple/` | enseignant | exemple de référence (la forme d'un motif, pas une base), ne pas modifier |
-| `trame/moteur/`, `trame/robot/`, `trame/contour.py`, `trame/export/` | enseignant | **ne jamais modifier** dans une issue d'étudiant |
-| `web/` | enseignant | ne pas modifier, sauf demande explicite de l'enseignant |
-| `config/cellule.toml` | enseignant | **ne jamais modifier** (réglages physiques du robot) |
-| `tests/` | enseignant | ne pas supprimer ni affaiblir un test pour le faire passer |
+| Dossier | Règle |
+|---|---|
+| `trame/`, `web/`, `tests/`, `dessins/`, `gabarits/`, `docs/` | à la demande de l'enseignant |
+| `config/cellule.toml` | **seulement sur demande explicite** (réglages physiques du robot et du WASP) |
+| `tests/` | ne jamais supprimer ni affaiblir un test pour le faire passer |
+| `reference/` | ne pas modifier : programme Grasshopper et script d'origine, pour mémoire |
 
-Si une demande d'étudiant ne peut être satisfaite qu'en modifiant une zone interdite :
-**ne la modifie pas**. Explique dans la pull request ce qu'il faudrait changer, en français
-simple, et mentionne l'enseignant.
+## Écrire du code ici
 
-## Écrire un motif
+- Noms de variables, fonctions et commentaires **en français** ; fonctions courtes, boucles
+  simples, pas de classes ni d'astuces. Unités : **millimètres** et **degrés**.
+- Python : seulement `math`, `numpy`, `shapely`, `ezdxf`, `svgelements` et la bibliothèque
+  standard (tout doit tourner dans Pyodide).
+- Textes affichés aux étudiants (aperçu, messages, contrôles) : tournures impersonnelles
+  (« Glisser le fichier… », « Choisir « relié »… »), jamais de tutoiement ; pas de distinction
+  designers / ingénieurs.
+- Robot : tout programme URScript se valide dans URSim avant le vrai robot (`docs/URSIM.md`).
 
-Un motif = un dossier. Chaque groupe peut en avoir plusieurs : `motifs/groupe_1/spirale/`,
-`motifs/groupe_1/vagues/`… Nom de dossier court, en minuscules, sans accents ni espaces
-(lettres, chiffres, `_`).
+## Vérifier avant de livrer
 
-`motifs/exemple/` (trois séries de lignes droites qui se croisent) montre **la forme** d'un fichier
-de motif. **Ce n'est pas une base** : un nouveau générateur ne reprend pas ses lignes droites,
-il construit la géométrie que l'étudiant décrit. Seule la forme du fichier est imposée :
-
-```python
-NOM = "Nom lisible du motif"
-PARAMETRES = {
-    "espacement": Parametre(50, mini=20, maxi=150, unite="mm", aide="Écart entre deux lignes"),
-    "forme": Choix("vagues", ["vagues", "zigzag"], aide="Forme des lignes de la série B"),
-    "inverser": Case(False, aide="Inverser le sens des vagues"),
-    "centre": Point(600, 400, aide="Centre des cercles"),
-    "attractions": Points([(400, 400)], mini=0, maxi=8, aide="Points qui attirent les lignes"),
-    "series": Liste([{"angle": 160, "espacement": 50}, {"angle": 29, "espacement": 50}],
-                    mini=2, maxi=5, element="Série",
-                    champs={"angle": Parametre(90, mini=0, maxi=180, unite="°", aide="Direction"),
-                            "espacement": Parametre(50, mini=20, maxi=150, unite="mm", aide="Écart")},
-                    aide="Une ligne par série"),
-    ...
-}
-
-def series(contour, p):
-    """Renvoie une liste de séries ; chaque série est une liste de courbes (LineString shapely)."""
+```sh
+pytest                                         # tous les tests
+python -m trame.bilan dessins/vagues.svg       # bilan des contrôles d'un dessin
+python3 web/construire.py && node tests/pyodide/verifier.mjs   # tout marche dans Pyodide
+python3 web/construire.py && python3 -m http.server 8000      # aperçu : http://localhost:8000/web/
 ```
 
-Règles :
-- **Un motif = un dossier avec un fichier `motif.py`**, plus un `aide.md` qui explique le motif.
-- `NOM` : le nom affiché dans l'aperçu, court et parlant (ex. « Vagues serrées au centre »).
-- Seulement `math`, `shapely`, les types de `trame/parametres.py` et les fonctions de
-  `trame/outils.py`. Aucune autre dépendance. Tu peux écrire tes propres fonctions dans `motif.py`.
-- Pas de classes, pas de métaprogrammation, pas d'astuce : des fonctions courtes et des boucles.
-- Noms de variables et commentaires **en français**. Chaque paramètre a une `aide` compréhensible
-  par un designer.
-- Tout paramètre qu'un étudiant voudrait régler dans l'aperçu doit être dans `PARAMETRES`,
-  jamais écrit en dur dans le code.
-- **Tout ce que l'étudiant veut régler passe par ces 6 types** (`from trame.parametres import …`) ;
-  l'aperçu sait tous les afficher. **Tu n'as jamais besoin de modifier `web/` pour un motif.**
-
-  | Type | Dans l'aperçu | Valeur dans `p["nom"]` |
-  |---|---|---|
-  | `Parametre(valeur, mini, maxi, unite, aide)` | un curseur | un nombre |
-  | `Choix(valeur, [options], aide)` | une liste déroulante | le texte choisi |
-  | `Case(valeur, aide)` | une case oui / non | `True` / `False` |
-  | `Point(x, y, aide)` | une poignée (boule noire) à déplacer sur la palette | `(x, y)` en mm |
-  | `Points([(x, y), …], mini, maxi, aide)` | des poignées que l'on **ajoute** (double-clic sur la palette), **déplace** (clic) et **supprime** (double-clic sur le point) | liste de `(x, y)` en mm |
-  | `Liste([v, …], mini, maxi, bornes, unite, element, aide)` | un curseur par élément, **+ Ajouter** / **×** pour retirer | liste de nombres |
-  | `Liste([{…}, …], mini, maxi, element, champs={nom: Parametre(…)}, aide)` | une ligne par élément, ses curseurs côte à côte, **+ Ajouter** / **×** | liste de dictionnaires |
-
-  Pour des séries que l'on ajoute ou retire, chacune avec ses propres réglages, utilise une
-  `Liste` avec `element="Série"` et des `champs` (ex. angle et espacement) : voir `motifs/exemple/`.
-
-  Points en mm, repère palette (origine au coin, x le long du grand côté). Pour des points
-  d'attraction, centres, départs… utilise `Point` ou `Points`, jamais deux curseurs x et y.
-  Avec `Points` et `mini=0`, le motif doit marcher aussi sans aucun point.
-- Unités : **millimètres** et **degrés**, partout.
-- Place la géométrie **par rapport au contour** (`outils.centre(contour)`, `contour.bounds`…),
-  pas avec des coordonnées fixes : la forme peut être réduite ou tournée pour tenir sur la palette.
-- Les courbes peuvent dépasser du contour : le moteur les découpe.
-
-## Traiter une issue « Idée de motif »
-
-1. Le groupe et le motif sont indiqués dans l'issue : modifie **uniquement** le dossier
-   `motifs/<groupe>/<motif>/` (le créer si c'est un nouveau motif). Ne touche jamais aux autres
-   motifs, même du même groupe.
-2. Selon « Que veux-tu faire ? » :
-   - **Nouveau générateur (page blanche)** : écris `motif.py` à partir de zéro, avec la forme
-     ci-dessus. Invente la géométrie décrite (spirale, cellules, rayons, courbes attirées,
-     tracés récursifs…) avec `math`, `shapely`, `trame/outils.py` ou tes propres fonctions.
-     Ne copie pas les lignes de l'exemple. Décide avec l'étudiant ce que sont les séries
-     (l'ordre d'impression, 2 à 5) : c'est ce qui crée les croisements et les bosses.
-   - **Variante** : copie le motif indiqué comme départ, puis modifie la copie.
-   - **Modifier** : pars de la version **actuelle** du motif et garde ce qui marche déjà.
-3. Tout ce que l'étudiant veut pouvoir régler devient un `Parametre` avec une `aide`.
-4. Mets à jour `aide.md` : ce que l'on voit, ce que fait chaque réglage, ce qu'il faut éviter.
-5. Lance `pytest` et `python -m trame.bilan <groupe>/<motif>` ; colle le bilan dans la pull request.
-6. L'aperçu de la pull request est publié automatiquement : un lien apparaît en commentaire.
-   Rappelle à l'étudiant de l'ouvrir pour juger le résultat.
-
-## Une seule ligne continue (règle du projet)
-
-Quoi qu'il arrive, la buse imprime **une seule polyligne continue**. Le moteur enchaîne les
-courbes de chaque série selon leur nature :
-- **courbes ouvertes qui traversent la forme** (lignes, vagues, rayons…) : reliées en
-  **zigzag**, une fois d'un côté, une fois de l'autre, le long du bord ;
-- **courbes fermées emboîtées** (cercles concentriques, `outils.contours_decales`…) : fondues
-  en **une spirale**, du centre vers l'extérieur.
-
-Donc, dans une série : fais traverser les courbes ouvertes d'un bord à l'autre (elles peuvent
-dépasser, le moteur les coupe), ou emboîte les courbes fermées les unes dans les autres. Une
-courbe ouverte qui s'arrête au milieu de la forme, ou des courbes fermées côte à côte, sont
-raccordées en ligne droite : le contrôle « Une seule ligne : zigzag ou spirale » le signale.
-Le test de chaque motif exige un chemin sans aucun saut.
-
-## Contraintes du béton (à respecter dans les motifs)
-
-Les valeurs exactes sont dans `config/cellule.toml` et seront ajustées pendant les essais.
-- Deux lignes d'une même série ne doivent pas être plus proches que **2 × la largeur du cordon**.
-- Éviter les virages plus serrés que le **rayon de courbure minimal**.
-- Éviter les croisements très rasants (angle < 20° entre deux séries) : les bosses se chevauchent.
-- Le chemin doit rester **continu** : pas de sauts. Le moteur relie les courbes le long du contour.
-
-Les contrôles automatiques (`trame/controles.py`) signalent ces problèmes dans l'aperçu et dans
-les tests. **Un avertissement n'est pas un bug à masquer** : il se discute avec les étudiants
-ingénieurs du groupe.
-
-## Pull requests
-
-- Une pull request = une idée. Titre en français.
-- Décris le résultat **visuellement** (« les lignes forment maintenant des losanges plus serrés
-  au centre »), pas le code.
-- Les tests doivent passer (`pytest`). Si un contrôle d'imprimabilité échoue, dis-le clairement.
-- Colle dans la pull request le bilan des contrôles du motif :
-  `python -m trame.bilan <groupe>/<motif>` (contour haricot) ou
-  `python -m trame.bilan <groupe>/<motif> rectangle.svg`.
-- Ne touche jamais aux fichiers d'un autre groupe.
+Vérifier aussi le rendu de l'aperçu (capture d'écran) quand l'interface change.

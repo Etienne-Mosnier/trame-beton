@@ -20,7 +20,7 @@ export async function preparer(pyodide, lireTexte, annoncer = () => {}) {
   const micropip = pyodide.pyimport("micropip");
   await micropip.install(PAQUETS_PYPI);
 
-  annoncer("Copie de trame/, des motifs et des contours…");
+  annoncer("Copie de trame/ et des dessins d'exemple…");
   const fichiers = JSON.parse(await lireTexte("web/fichiers.json"));
   for (const chemin of fichiers) {
     const dossier = chemin.split("/").slice(0, -1).join("/");

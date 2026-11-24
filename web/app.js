@@ -1,4 +1,4 @@
-// Aperçu de la trame : curseurs générés depuis PARAMETRES, calcul en Python (Pyodide),
+// Aperçu de la trame : dessin importé en calques (SVG ou DXF), calcul en Python (Pyodide),
 // dessin avec three.js. Unités : mm, z vers le haut.
 // Repère de la scène : celui du robot. La palette (avec tout ce qu'elle porte) est un objet
 // que l'on sélectionne d'un clic et que l'on déplace ou tourne avec un gizmo.
@@ -15,7 +15,6 @@ import { creerBuse, creerRobot } from "./robot.js";
 // une couleur par série, dans l'ordre d'impression
 // noir, orange, orange brûlé, orange clair, gris : le rouge est gardé pour les problèmes
 const COULEURS = ["#111111", "#f97316", "#9a3412", "#fdba74", "#737373"];
-const NOMS_SERIES = ["A", "B", "C", "D", "E"];
 const LARGEUR_CORDON = 4; // mm, pour le dessin seulement
 
 const $ = (id) => document.getElementById(id);
@@ -52,8 +51,8 @@ const groupeTrame = new THREE.Group();
 const groupeAlertes = new THREE.Group(); // endroits à problème, en rouge
 const groupeCordon = new THREE.Group();  // cordon déposé pendant l'animation du robot
 const groupeAlertesRobot = new THREE.Group(); // alertes robot, en rouge
-const groupePoints = new THREE.Group();  // poignées des paramètres « Point » du motif
-contenuPalette.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon, groupeAlertesRobot, groupePoints);
+const groupePauses = new THREE.Group();  // pauses : trajets à vide et points d'attente (toujours visibles)
+contenuPalette.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon, groupeAlertesRobot, groupePauses);
 // groupes fixes par rapport au robot
 const groupeZone = new THREE.Group();    // partie de la palette hors de portée (mode placement)
 const groupePortee = new THREE.Group();  // portée du robot, ses axes et la boussole
@@ -173,7 +172,7 @@ function trait(points, couleur, epaisseur, pointilles = false) {
   return ligne;
 }
 
-function dessinerPalette(contour) {
+function dessinerPalette() {
   vider(groupePalette);
   const [lx, ly] = palette;
   // plateau de la palette (bois) et bâche
@@ -188,7 +187,6 @@ function dessinerPalette(contour) {
   );
   bache.position.set(lx / 2, ly / 2, -0.4);
   groupePalette.add(plateau, bache);
-  groupePalette.add(trait(contour.map((p) => [p[0], p[1], 0.2]), "#111111", 1.5, true));
 }
 
 function dessinerTrame(resultat, exageration) {
@@ -201,6 +199,22 @@ function dessinerTrame(resultat, exageration) {
       groupeTrame.add(trait(points, COULEURS[i % COULEURS.length], LARGEUR_CORDON));
     }
   });
+  // pauses, départ et fin : parcours de la buse levée (pointillés gris) et point d'attente
+  vider(groupePauses);
+  const attente = (trajet, point, nom) => {
+    const points = trajet.map((p, j) => [p[0], p[1], j === 0 || j === trajet.length - 1 ? p[2] * exageration : p[2]]);
+    groupePauses.add(trait(points, "#737373", 2, true));
+    const [x, y, z] = point;
+    const anneau = new THREE.Mesh(new THREE.RingGeometry(12, 18, 32),
+                                  new THREE.MeshBasicMaterial({ color: "#c2410c", side: THREE.DoubleSide }));
+    anneau.position.set(x, y, z);
+    const texte = etiquette(nom, "#c2410c", 34);
+    texte.position.set(x, y, z + 40);
+    groupePauses.add(anneau, texte);
+  };
+  (resultat.deplacements || []).forEach((dep, k) => attente(dep, resultat.pauses[k].point, `pause ${k + 1}`));
+  if (resultat.depart) attente(resultat.depart.trajet, resultat.depart.point, "départ");
+  if (resultat.fin) attente(resultat.fin.trajet, resultat.fin.point, "fin");
   for (const saut of resultat.jumps) {
     groupeTrame.add(trait(saut.map((p) => [p[0], p[1], p[2] * exageration + 2]), "#000000", 2, true));
   }
@@ -283,7 +297,7 @@ function calculerRobot() {
   for (let k = 2; k <= d.points.length - 1; k++) {
     if (k === d.points.length - 1 || d.series[k] !== serie) {
       const points = d.points.slice(debut, k).map((q) => [q[0], q[1], q[2] * exageration + LARGEUR_CORDON / 4]);
-      if (points.length > 1) {
+      if (points.length > 1 && serie >= 0) {
         const ligne = trait(points, COULEURS[serie % COULEURS.length], LARGEUR_CORDON);
         groupeCordon.add(ligne);
         robot.lignes.push({ ligne, debut, fin: k - 1 });
@@ -440,10 +454,11 @@ function majMaquette() {
   const m = JSON.parse(app.maquette(Number($("largeur-essai").value)));
   $("info-maquette").textContent = m.erreur ? m.erreur
     : `Échelle 1:${String(m.rapport).replace(".", ",")} : trame de ${m.taille[0]} × ${m.taille[1]} mm, ` +
-      `couche de ${String(m.hauteur_couche).replace(".", ",")} mm. Vitesse automatique ` +
-      `${String(m.vitesse).replace(".", ",")} mm/s (d'après le débit de l'extrudeur), ` +
+      `couche de ${String(m.hauteur_couche).replace(".", ",")} mm. Vitesse ` +
+      `${String(m.vitesse).replace(".", ",")} mm/s (à accorder avec le débit du boîtier), ` +
       `environ ${Math.max(1, Math.round(m.duree / 60))} min.` +
-      (m.tient ? "" : " ⚠ Trop grand pour le plateau de 700 × 700 : prends un cordon d'essai plus fin.");
+      (m.tient ? "" : ` ⚠ Trop grand pour le plateau rond de ${m.plateau} mm : cordon d'essai de ` +
+                      `${String(Math.floor(m.essai_max * 10) / 10).replace(".", ",")} mm au plus.`);
   $("export-gcode").disabled = !!m.erreur || !m.tient;
 }
 
@@ -465,147 +480,29 @@ function selectionner(e) {
   const souris = new THREE.Vector2(((e.clientX - cadre.left) / cadre.width) * 2 - 1,
                                    -((e.clientY - cadre.top) / cadre.height) * 2 + 1);
   rayon.setFromCamera(souris, camera);
-  // une poignée de point : seulement les flèches (un point ne se tourne pas)
-  const poignee = poigneeSous(e);
-  if (poignee) {
-    gizmoTourner.detach();
-    gizmoDeplacer.attach(poignee);
-    pointSelectionne = { nom: poignee.userData.nomParametre, index: poignee.userData.index };
-    return;
-  }
-  pointSelectionne = null;
   const surPalette = avecRobot() && rayon.intersectObjects(groupePalette.children, true).length > 0;
   for (const g of gizmos) {
     if (surPalette) g.attach(paletteMobile); else g.detach();
   }
 }
 
-// Points des motifs (paramètres « Point » et « Points ») : des poignées orange sur la palette.
-// Clic : déplacer (flèches) ; double-clic sur la palette : ajouter ; double-clic sur un point
-// ou touche Suppr : supprimer.
-let pointSelectionne = null;   // { nom, index } de la poignée sélectionnée
-
-// rayon souris -> scène, pour un événement de la souris
-function viser(e) {
-  const cadre = rendu.domElement.getBoundingClientRect();
-  rayon.setFromCamera(new THREE.Vector2(((e.clientX - cadre.left) / cadre.width) * 2 - 1,
-                                        -((e.clientY - cadre.top) / cadre.height) * 2 + 1), camera);
-}
-
-// la poignée sous la souris, s'il y en a une
-function poigneeSous(e) {
-  viser(e);
-  const touche = rayon.intersectObjects(groupePoints.children, true)[0];
-  if (!touche) return null;
-  let poignee = touche.object;
-  while (!poignee.userData.nomParametre) poignee = poignee.parent;
-  return poignee;
-}
-
-function creerPoignee(nom, index, [x, y]) {
-  const poignee = new THREE.Group();
-  poignee.position.set(x, y, 0);
-  poignee.userData = { nomParametre: nom, index };
-  // toujours au premier plan : visible même sous le bras du robot
-  const boule = new THREE.Mesh(new THREE.SphereGeometry(26, 24, 16),
-                               new THREE.MeshBasicMaterial({ color: "#111111", depthTest: false }));
-  boule.position.z = 26;
-  boule.renderOrder = 10;
-  const cerne = new THREE.Mesh(new THREE.RingGeometry(26, 32, 32),
-                               new THREE.MeshBasicMaterial({ color: "#f97316", depthTest: false }));
-  cerne.position.z = 26;
-  cerne.renderOrder = 9;
-  poignee.add(cerne);
-  const texte = nom.replaceAll("_", " ") + (index === null ? "" : " " + (index + 1));
-  const nomAffiche = etiquette(texte, "#111111", 24);
-  nomAffiche.position.z = 70;
-  poignee.add(boule, nomAffiche);
-  return poignee;
-}
-
-// (re)dessine toutes les poignées à partir des réglages ; garde la sélection
-function dessinerPoints() {
-  vider(groupePoints);
-  if (gizmoDeplacer.object?.userData.nomParametre) gizmoDeplacer.detach();
-  for (const [nom, p] of Object.entries(motifCourant?.parametres || {})) {
-    if (p.type === "point") groupePoints.add(creerPoignee(nom, null, reglages.motif[nom]));
-    if (p.type === "points") reglages.motif[nom].forEach((xy, i) => groupePoints.add(creerPoignee(nom, i, xy)));
-    majTextePoints(nom);
-  }
-  const choisie = pointSelectionne && groupePoints.children.find((g) =>
-    g.userData.nomParametre === pointSelectionne.nom && g.userData.index === pointSelectionne.index);
-  if (choisie) { gizmoTourner.detach(); gizmoDeplacer.attach(choisie); }
-}
-
-function majTextePoints(nom) {
-  const sortie = document.querySelector(`[data-point="${nom}"] output`);
-  const v = reglages.motif[nom];
-  if (!sortie) return;
-  sortie.textContent = motifCourant.parametres[nom].type === "point"
-    ? `${Math.round(v[0])}, ${Math.round(v[1])} mm` : `${v.length} point${v.length > 1 ? "s" : ""}`;
-}
-
-// fin du déplacement d'une poignée : nouvelle position (sur la palette), puis recalcul
-function deplacerPoint(poignee) {
-  const [lx, ly] = palette;
-  const x = Math.round(Math.min(Math.max(poignee.position.x, 0), lx));
-  const y = Math.round(Math.min(Math.max(poignee.position.y, 0), ly));
-  poignee.position.set(x, y, 0);
-  const { nomParametre: nom, index } = poignee.userData;
-  if (index === null) reglages.motif[nom] = [x, y];
-  else reglages.motif[nom][index] = [x, y];
-  majTextePoints(nom);
-  calculer();
-}
-
-// double-clic : sur un point de liste -> le supprimer ; sur la palette -> ajouter un point
-function doubleClic(e) {
-  const poignee = poigneeSous(e);
-  if (poignee) { supprimerPoint(poignee); return; }
-  const nom = Object.keys(motifCourant?.parametres || {}).find((n) => motifCourant.parametres[n].type === "points");
-  if (!nom) return;
-  viser(e);
-  const touche = rayon.intersectObjects(groupePalette.children, true)[0];
-  if (!touche) return;
-  const p = motifCourant.parametres[nom];
-  if (reglages.motif[nom].length >= p.maxi) {
-    etat.textContent = `Pas plus de ${p.maxi} points pour ce motif.`;
-    setTimeout(() => (etat.textContent = ""), 2500);
-    return;
-  }
-  const local = contenuPalette.worldToLocal(touche.point.clone());
-  reglages.motif[nom].push([Math.round(local.x), Math.round(local.y)]);
-  pointSelectionne = { nom, index: reglages.motif[nom].length - 1 };
-  dessinerPoints();
-  calculer();
-}
-
-function supprimerPoint(poignee) {
-  const { nomParametre: nom, index } = poignee.userData;
-  const p = motifCourant.parametres[nom];
-  if (index === null) return;                          // un « Point » seul ne se supprime pas
-  if (reglages.motif[nom].length <= p.mini) {
-    etat.textContent = `Il faut garder au moins ${p.mini} point${p.mini > 1 ? "s" : ""}.`;
-    setTimeout(() => (etat.textContent = ""), 2500);
-    return;
-  }
-  reglages.motif[nom].splice(index, 1);
-  pointSelectionne = null;
-  dessinerPoints();
-  calculer();
-}
-
 // ---------------------------------------------------------------------------
-// Panneau : curseurs, choix du motif et du contour
+// Panneau : dessin importé, liste des calques, curseurs
 // ---------------------------------------------------------------------------
 
 let app = null;
 const avecRobot = () => true;   // l'aperçu est toujours en vraie grandeur, avec le bras
-let motifs = [];
-let contour = null; // { nom, texte }
+// dessin en cours : { nom, texte, calques: [{nom, couleur, imprime, lignes, longueur}],
+//                    ordre: [noms, dans l'ordre d'impression], eteints: Set(noms non imprimés),
+//                    pauses: Set(noms des calques après lesquels on fait une pause) }
+let dessin = null;
 let dernierResultat = null;
 let dejaCadre = false; // la vue 3D est cadrée au premier calcul seulement
-const reglages = { motif: {}, moteur: {} };
+const reglages = { moteur: {} };
+const MAX_CALQUES = 5;
+
+// texte venu du fichier (noms de calques) : jamais interprété comme du HTML
+const echapper = (texte) => String(texte).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 function curseur(conteneur, nom, p, cible) {
   const bloc = document.createElement("div");
@@ -629,177 +526,142 @@ function curseur(conteneur, nom, p, cible) {
   conteneur.appendChild(bloc);
 }
 
-// paramètres « Point » et « Points » : une ligne dans le panneau, des poignées sur la palette
-function point(conteneur, nom, p) {
-  reglages.motif[nom] = p.type === "point" ? [...p.valeur] : p.valeur.map((xy) => [...xy]);
-  const bloc = document.createElement("div");
-  bloc.className = "reglage";
-  bloc.dataset.point = nom;
-  const geste = p.type === "point"
-    ? "Clique sur la boule noire pour la déplacer."
-    : `Double-clic sur la palette : ajouter un point (${p.maxi} au plus). Clic sur un point : le déplacer. ` +
-      `Double-clic sur un point : le supprimer.`;
-  bloc.innerHTML = `
-    <div class="ligne"><span><span class="pastille-point"></span>${nom.replaceAll("_", " ")}</span><output></output></div>
-    <p class="aide">${p.aide} ${geste}</p>`;
-  conteneur.appendChild(bloc);
+// --- ordre des calques : retenu par le navigateur, fichier par fichier ---------------------
+
+function lireMemoire(nom) {
+  try { return JSON.parse(localStorage.getItem("trame-calques:" + nom)); } catch { return null; }
 }
 
-// paramètre « Liste » : des éléments que l'on ajoute (« + Ajouter ») ou retire (« × ») ;
-// chaque élément a un curseur, ou plusieurs côte à côte s'il a des « champs »
-const LETTRES = "ABCDEFGHIJ";
+function memoriser() {
+  if (!dessin) return;
+  try {
+    localStorage.setItem("trame-calques:" + dessin.nom,
+                         JSON.stringify({ ordre: dessin.ordre, eteints: [...dessin.eteints], pauses: [...dessin.pauses] }));
+  } catch { /* navigation privée : l'ordre n'est simplement pas retenu */ }
+}
 
-// valeur la plus éloignée de celles qui existent (angles : circulaires sur 180° ou 360°)
-function plusEloignee(existantes, bas, haut, pas) {
-  const circulaire = haut - bas === 180 || haut - bas === 360;
-  const ecart = (a, b) => circulaire ? Math.min(Math.abs(a - b), haut - bas - Math.abs(a - b)) : Math.abs(a - b);
-  let meilleur = bas, plusLoin = -1;
-  for (let x = bas; x <= haut; x += pas) {
-    const d = existantes.length ? Math.min(...existantes.map((y) => ecart(x, y))) : 0;
-    if (d > plusLoin) { plusLoin = d; meilleur = x; }
+const imprimes = () => dessin ? dessin.ordre.filter((n) => !dessin.eteints.has(n)) : [];
+
+// Ouvre un fichier (exemple, import, dépôt sur la vue, fichier réenregistré).
+// garder = true : même fichier modifié, on garde l'ordre et la taille choisis.
+function ouvrirDessin(nom, texte, garder = false) {
+  if (!app) return;
+  const r = JSON.parse(app.lire_calques(texte, nom));
+  if (r.erreur) {
+    $("message-dessin").innerHTML = `<span class="erreur">${echapper(r.erreur)}</span>`;
+    $("bilan").innerHTML = `<p class="erreur">${echapper(r.erreur)}</p>`;
+    $("info").textContent = r.details || "";
+    return;
   }
-  return Math.round(meilleur / pas) * pas;
+  const memoire = garder && dessin?.nom === nom
+    ? { ordre: dessin.ordre, eteints: [...dessin.eteints], pauses: [...dessin.pauses] } : lireMemoire(nom);
+  const noms = r.calques.map((c) => c.nom);
+  const connus = (memoire?.ordre || []).filter((n) => noms.includes(n));
+  dessin = { nom, texte, calques: r.calques, ordre: [...connus, ...noms.filter((n) => !connus.includes(n))] };
+  dessin.eteints = new Set((memoire?.eteints || []).filter((n) => noms.includes(n)));
+  dessin.pauses = new Set((memoire?.pauses || []).filter((n) => noms.includes(n)));
+  // nouveaux calques : imprimés sauf s'ils sont masqués dans le fichier (cadre, palette…)
+  for (const c of r.calques) if (!connus.includes(c.nom) && !c.imprime) dessin.eteints.add(c.nom);
+  // au plus 5 calques imprimés : les suivants sont éteints
+  imprimes().slice(MAX_CALQUES).forEach((n) => dessin.eteints.add(n));
+  if (!garder) delete reglages.taille;    // nouvelle forme : sa taille réelle si elle tient
+  dessinerCalques();
+  calculer();
 }
 
-function liste(conteneur, nom, p) {
-  reglages.motif[nom] = p.valeur.map((x) => (typeof x === "object" ? { ...x } : x));
-  const bloc = document.createElement("div");
-  bloc.className = "reglage liste";
-  conteneur.appendChild(bloc);
+// la liste des calques : glisser une ligne pour changer l'ordre, l'œil pour (ne pas) imprimer
+const OEIL = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`;
+const OEIL_FERME = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 20 20 4" stroke="currentColor" stroke-width="2"/></svg>`;
+let glisse = null;   // nom du calque que l'on est en train de glisser
 
-  // un curseur compact : libellé, valeur, glissière
-  const petitCurseur = (libelle, valeur, q, changer) => {
-    const unite = q.unite ? " " + q.unite : "";
-    const zone = document.createElement("label");
-    zone.className = "champ";
-    zone.title = q.aide || "";
-    zone.innerHTML = `<span class="ligne"><span>${libelle}</span><output>${valeur}${unite}</output></span>
-      <input type="range" min="${q.mini}" max="${q.maxi}" step="${q.pas}" value="${valeur}">`;
-    const entree = zone.querySelector("input");
-    entree.addEventListener("input", () => (zone.querySelector("output").textContent = entree.value + unite));
-    entree.addEventListener("change", () => changer(Number(entree.value)));
-    return zone;
-  };
-
-  const dessiner = () => {
-    const v = reglages.motif[nom];
-    const titre = p.element ? p.element + "s" : nom.replaceAll("_", " ");   // « Série » -> « Séries »
-    bloc.innerHTML = `<div class="ligne"><span>${titre}</span><output>${v.length}</output></div>
-      <p class="aide">${p.aide}</p>`;
-    v.forEach((x, i) => {
-      const titre = p.element ? `${p.element} ${LETTRES[i] ?? i + 1}` : `${i + 1}`;
-      const ligne = document.createElement("div");
-      ligne.className = "element";
-      ligne.innerHTML = `<div class="titre-element"><span>${titre}</span>
-        ${v.length > p.mini ? `<button type="button" class="retirer" title="Retirer">×</button>` : ""}</div>
-        <div class="champs"></div>`;
-      const champs = ligne.querySelector(".champs");
-      if (p.champs) {
-        for (const [cle, q] of Object.entries(p.champs)) {
-          champs.appendChild(petitCurseur(cle.replaceAll("_", " "), x[cle], q, (val) => { x[cle] = val; calculer(); }));
-        }
-      } else {
-        const q = { mini: p.bornes[0], maxi: p.bornes[1], pas: p.pas, unite: p.unite };
-        champs.appendChild(petitCurseur("valeur", x, q, (val) => { v[i] = val; calculer(); }));
-      }
-      ligne.querySelector(".retirer")?.addEventListener("click", () => { v.splice(i, 1); dessiner(); calculer(); });
-      bloc.appendChild(ligne);
+function dessinerCalques() {
+  const liste = $("calques");
+  liste.innerHTML = "";
+  if (!dessin) return;
+  const ordreImpression = imprimes();
+  for (const nom of dessin.ordre) {
+    const calque = dessin.calques.find((c) => c.nom === nom);
+    const rang = ordreImpression.indexOf(nom);
+    const eteint = rang < 0;
+    const li = document.createElement("li");
+    li.className = "calque" + (eteint ? " eteint" : "");
+    li.draggable = true;
+    li.title = "Glisser pour changer l'ordre d'impression";
+    const metres = (calque.longueur / 1000).toFixed(1).replace(".", ",");
+    li.innerHTML = `
+      <span class="poignee" aria-hidden="true">⋮⋮</span>
+      <span class="rang">${eteint ? "" : rang + 1}</span>
+      <span class="pastille" style="background:${eteint ? "transparent" : COULEURS[rang % COULEURS.length]}"></span>
+      <span class="nom">${echapper(nom)}</span>
+      <span class="info">${calque.lignes > 1 ? calque.lignes + " morceaux · " : ""}${metres} m</span>
+      <button type="button" class="oeil" title="${eteint ? "Imprimer ce calque" : "Ne pas imprimer ce calque"}"
+        aria-label="${eteint ? "Imprimer" : "Ne pas imprimer"} le calque ${echapper(nom)}">${eteint ? OEIL_FERME : OEIL}</button>`;
+    li.querySelector(".oeil").addEventListener("click", () => basculer(nom));
+    // après un calque imprimé : relié ou pause avant le suivant (après le dernier : entre deux couches)
+    const dernier = rang === ordreImpression.length - 1;
+    li.addEventListener("dragstart", (e) => {
+      glisse = nom;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", nom);
+      li.classList.add("glisse");
     });
-    if (v.length < p.maxi) {
-      const ajouter = document.createElement("button");
-      ajouter.type = "button";
-      ajouter.className = "ajouter";
-      ajouter.textContent = `+ Ajouter ${p.element ? "une " + p.element.toLowerCase() : "un élément"}`;
-      ajouter.addEventListener("click", () => {
-        // un angle prend la direction la plus ouverte ; les autres réglages copient le dernier élément
-        if (p.champs) {
-          const nouveau = {};
-          for (const [cle, q] of Object.entries(p.champs)) {
-            const circulaire = q.maxi - q.mini === 180 || q.maxi - q.mini === 360;
-            nouveau[cle] = circulaire ? plusEloignee(v.map((e) => e[cle]), q.mini, q.maxi, q.pas)
-                                      : (v.at(-1)?.[cle] ?? q.valeur);
-          }
-          v.push(nouveau);
-        } else {
-          v.push(plusEloignee(v, p.bornes[0], p.bornes[1], p.pas));
-        }
-        dessiner();
-        calculer();
-      });
-      bloc.appendChild(ajouter);
+    li.addEventListener("dragend", () => { glisse = null; dessinerCalques(); });
+    li.addEventListener("dragover", (e) => {
+      if (glisse === null || glisse === nom) return;
+      e.preventDefault();
+      const haut = e.offsetY < li.clientHeight / 2;
+      li.classList.toggle("avant", haut);
+      li.classList.toggle("apres", !haut);
+    });
+    li.addEventListener("dragleave", () => li.classList.remove("avant", "apres"));
+    li.addEventListener("drop", (e) => {
+      e.preventDefault();
+      if (glisse === null || glisse === nom) return;
+      const apres = li.classList.contains("apres");
+      const ordre = dessin.ordre.filter((n) => n !== glisse);
+      ordre.splice(ordre.indexOf(nom) + (apres ? 1 : 0), 0, glisse);
+      dessin.ordre = ordre;
+      glisse = null;
+      memoriser();
+      dessinerCalques();
+      calculer();
+    });
+    liste.appendChild(li);
+    if (!eteint && (!dernier || (reglages.moteur.couches || 1) > 1)) liste.appendChild(jonction(nom, dernier));
+  }
+}
+
+// entre deux calques : « relié » (le cordon continue) ou « pause » (la buse sort du dessin et attend)
+function jonction(nom, entreCouches) {
+  const pause = dessin.pauses.has(nom);
+  const li = document.createElement("li");
+  li.className = "jonction" + (pause ? " pause" : "");
+  const ou = entreCouches ? "entre deux couches" : "";
+  li.innerHTML = `<button type="button" title="${pause ? "Relier sans pause" : "Faire une pause ici : la buse sort du dessin et attend « Continuer »"}">
+    ${pause ? "⏸ pause" : "↓ relié"}${ou ? ` <span>${ou}</span>` : ""}</button>`;
+  li.querySelector("button").addEventListener("click", () => {
+    if (pause) dessin.pauses.delete(nom); else dessin.pauses.add(nom);
+    memoriser();
+    dessinerCalques();
+    calculer();
+  });
+  return li;
+}
+
+function basculer(nom) {
+  if (dessin.eteints.has(nom)) {
+    if (imprimes().length >= MAX_CALQUES) {
+      etat.textContent = `${MAX_CALQUES} calques imprimés au plus : en éteindre un d'abord.`;
+      setTimeout(() => (etat.textContent = ""), 3000);
+      return;
     }
-  };
-  dessiner();
-}
-
-// paramètre « Choix » : une liste déroulante
-function choix(conteneur, nom, p) {
-  reglages.motif[nom] = p.valeur;
-  const bloc = document.createElement("div");
-  bloc.className = "reglage";
-  bloc.innerHTML = `
-    <div class="ligne"><span>${nom.replaceAll("_", " ")}</span></div>
-    <select>${p.options.map((o) => `<option${o === p.valeur ? " selected" : ""}>${o}</option>`).join("")}</select>
-    <p class="aide">${p.aide}</p>`;
-  bloc.querySelector("select").addEventListener("change", (e) => { reglages.motif[nom] = e.target.value; calculer(); });
-  conteneur.appendChild(bloc);
-}
-
-// paramètre « Case » : oui / non
-function caseACocher(conteneur, nom, p) {
-  reglages.motif[nom] = p.valeur;
-  const bloc = document.createElement("div");
-  bloc.className = "reglage";
-  bloc.innerHTML = `
-    <label class="case"><input type="checkbox"${p.valeur ? " checked" : ""}> ${nom.replaceAll("_", " ")}</label>
-    <p class="aide">${p.aide}</p>`;
-  bloc.querySelector("input").addEventListener("change", (e) => { reglages.motif[nom] = e.target.checked; calculer(); });
-  conteneur.appendChild(bloc);
-}
-
-// petit convertisseur Markdown -> HTML (titres, listes, gras, code)
-function markdown(texte) {
-  const enLigne = (t) => t
-    .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/`(.+?)`/g, "<code>$1</code>");
-  let html = "", liste = null;
-  const fermer = () => { if (liste) { html += `</${liste}>`; liste = null; } };
-  for (const ligne of texte.split("\n")) {
-    let m;
-    if ((m = ligne.match(/^(#{1,3}) (.*)/))) { fermer(); html += `<h${m[1].length + 2}>${enLigne(m[2])}</h${m[1].length + 2}>`; }
-    else if ((m = ligne.match(/^\s*(-|\d+\.) (.*)/))) {
-      const type = m[1] === "-" ? "ul" : "ol";
-      if (liste !== type) { fermer(); html += `<${type}>`; liste = type; }
-      html += `<li>${enLigne(m[2])}</li>`;
-    } else if (ligne.trim() === "") { fermer(); }
-    else if (liste) { html = html.replace(/<\/li>$/, " " + enLigne(ligne.trim()) + "</li>"); }
-    else { html += `<p>${enLigne(ligne)}</p>`; }
+    dessin.eteints.delete(nom);
+  } else {
+    dessin.eteints.add(nom);
   }
-  fermer();
-  return html;
-}
-
-let motifCourant = null;
-
-function choisirMotif(id) {
-  const motif = motifs.find((m) => m.id === id);
-  motifCourant = motif;
-  pointSelectionne = null;
-  const conteneur = $("reglages-motif");
-  conteneur.innerHTML = "";
-  reglages.motif = {};
-  if (motif.erreur) conteneur.innerHTML = `<p class="erreur">${motif.erreur}</p>`;
-  for (const [nom, p] of Object.entries(motif.parametres)) {
-    if (p.type === "point" || p.type === "points") point(conteneur, nom, p);
-    else if (p.type === "choix") choix(conteneur, nom, p);
-    else if (p.type === "case") caseACocher(conteneur, nom, p);
-    else if (p.type === "liste") liste(conteneur, nom, p);
-    else curseur(conteneur, nom, p, reglages.motif);
-  }
-  dessinerPoints();
-  $("aide-motif").hidden = !motif.aide;
-  $("aide-motif").querySelector("div").innerHTML = markdown(motif.aide);
+  memoriser();
+  dessinerCalques();
+  calculer();
 }
 
 function afficherBilan(r) {
@@ -812,44 +674,43 @@ function afficherBilan(r) {
     <p>Béton : environ <strong>${r.volume} L</strong></p>
     ${r.controles.map((c) => `
       <div class="controle ${c.statut}">
-        <p><span class="symbole">${symbole[c.statut]}</span> ${c.titre}</p>
-        ${c.statut === "ok" ? "" : `<p class="petit">${c.message}</p>`}
+        <p><span class="symbole">${symbole[c.statut]}</span> ${echapper(c.titre)}</p>
+        ${c.statut === "ok" ? "" : `<p class="petit">${echapper(c.message)}</p>`}
       </div>`).join("")}
     <p class="petit">Cordon de ${r.beton.largeur_cordon} mm${provisoire("largeur_cordon")},
       virage le plus serré ${r.beton.rayon_courbure_min} mm${provisoire("rayon_courbure_min")}.
       Les valeurs provisoires seront fixées pendant les essais.</p>`;
   $("info").textContent = r.info;
-  $("message-contour").textContent = r.message_contour;
-  $("legende").innerHTML = r.waves.map((_, i) => {
-    const role = i === 0 ? "imprimée en premier" : `passe par-dessus ${NOMS_SERIES.slice(0, i).join(", ")}`;
-    return `<div><span class="pastille" style="background:${COULEURS[i % COULEURS.length]}"></span>Série ${NOMS_SERIES[i]} : ${role}</div>`;
+  $("message-dessin").textContent = r.message_dessin;
+  // légende : les calques dans l'ordre d'impression, chacun par-dessus les précédents
+  $("legende").innerHTML = r.calques.map((nom, i) => {
+    const role = i === 0 ? "imprimé en premier" : i === 1 ? "passe par-dessus 1"
+      : i === 2 ? "passe par-dessus 1 et 2" : `passe par-dessus 1 à ${i}`;
+    const pause = r.pauses.some((p) => p.calque === nom && p.couche === 1) && i < r.calques.length - 1
+      ? `<div class="pause-legende">⏸ pause</div>` : "";
+    return `<div><span class="pastille" style="background:${COULEURS[i % COULEURS.length]}"></span>${i + 1}. ${echapper(nom)} : ${role}</div>${pause}`;
   }).join("");
 }
 
 function calculer() {
-  if (!app || !contour) return;
+  if (!app || !dessin) return;
+  dessinerCalques();      // le nombre de couches change la liste (pause entre deux couches)
   etat.textContent = "Calcul…";
   // on laisse le navigateur afficher « Calcul… » avant de bloquer pendant le calcul
   setTimeout(() => {
     const debut = performance.now();
-    const r = JSON.parse(app.calculer($("choix-motif").value, JSON.stringify(reglages),
-                                      contour.texte, contour.nom));
+    const r = JSON.parse(app.calculer(JSON.stringify({ ...reglages, calques: imprimes(), pauses: [...dessin.pauses] }),
+                                      dessin.texte, dessin.nom));
     if (r.erreur) {
       etat.textContent = "";
-      $("bilan").innerHTML = `<p class="erreur">${r.erreur}</p>`;
+      $("bilan").innerHTML = `<p class="erreur">${echapper(r.erreur)}</p>`;
       $("info").textContent = r.details || "";
       return;
     }
     dernierResultat = r;
     palette = r.palette;
-    // points du motif ramenés sur le plateau par le calcul : les poignées suivent
-    let pointsBouges = false;
-    for (const [nom, v] of Object.entries(r.points_motif || {})) {
-      if (JSON.stringify(v) !== JSON.stringify(reglages.motif[nom])) { reglages.motif[nom] = v; pointsBouges = true; }
-    }
-    if (pointsBouges) dessinerPoints();
     positionnerPalette();
-    dessinerPalette(r.contour);
+    dessinerPalette();
     dessinerTrame(r, Number($("exageration").value));
     afficherBilan(r);
     majMaquette();
@@ -865,6 +726,43 @@ function calculer() {
     if (avecRobot()) setTimeout(calculerRobot, 30);
     console.log(`calcul : ${((performance.now() - debut) / 1000).toFixed(2)} s`);
   }, 20);
+}
+
+// --- import : bouton, dépôt sur la vue, suivi du fichier ----------------------------------
+
+// Chrome et Edge savent relire un fichier choisi : l'aperçu se met à jour dès qu'il est
+// réenregistré (dans Rhino, Illustrator…). Ailleurs, on le glisse à nouveau sur la vue.
+let suivi = null;   // { poignee, date }
+
+function suivre(poignee, fichier) {
+  suivi = poignee ? { poignee, date: fichier.lastModified } : null;
+  $("suivi-fichier").textContent = suivi
+    ? `« ${fichier.name} » : l'aperçu se met à jour à chaque enregistrement du fichier.` : "";
+}
+
+setInterval(async () => {
+  if (!suivi) return;
+  try {
+    const fichier = await suivi.poignee.getFile();
+    if (fichier.lastModified === suivi.date) return;
+    suivi.date = fichier.lastModified;
+    ouvrirDessin(fichier.name, await fichier.text(), true);
+  } catch {
+    suivre(null);     // fichier déplacé ou supprimé : on arrête de le suivre
+  }
+}, 1500);
+
+const DESSIN_ACCEPTE = /\.(svg|dxf)$/i;
+
+async function importer(fichier, poignee = null) {
+  if (!DESSIN_ACCEPTE.test(fichier.name)) {
+    $("message-dessin").innerHTML = `<span class="erreur">« ${echapper(fichier.name)} » : importer un fichier .svg ou .dxf.</span>`;
+    return;
+  }
+  suivre(poignee, fichier);
+  $("choix-dessin").querySelector('option[value="importe"]')?.remove();
+  $("choix-dessin").add(new Option("importé : " + fichier.name, "importe", true, true));
+  ouvrirDessin(fichier.name, await fichier.text());
 }
 
 // télécharge le fichier DXF ou SVG du dernier calcul
@@ -929,11 +827,6 @@ async function demarrer() {
   for (const g of gizmos) {
     g.addEventListener("dragging-changed", (e) => {
       controles.enabled = !e.value;
-      const objet = g.object;
-      if (objet?.userData.nomParametre) {       // une poignée de point
-        if (!e.value) deplacerPoint(objet);
-        return;
-      }
       if (e.value) groupeZone.visible = false;
       else placerDepuisGizmo();
     });
@@ -947,12 +840,38 @@ async function demarrer() {
   window.addEventListener("pointerup", () => setTimeout(() => { for (const g of gizmos) g.enabled = true; }, 0));
   rendu.domElement.addEventListener("pointerdown", (e) => (appui = [e.clientX, e.clientY]));
   rendu.domElement.addEventListener("pointerup", selectionner);
-  rendu.domElement.addEventListener("dblclick", doubleClic);
-  window.addEventListener("keydown", (e) => {
-    if ((e.key === "Delete" || e.key === "Backspace") && !e.target.closest?.("input, select, textarea")) {
-      const poignee = gizmoDeplacer.object;
-      if (poignee?.userData.nomParametre) supprimerPoint(poignee);
-    }
+  // un fichier glissé sur la vue est importé
+  $("scene").addEventListener("dragover", (e) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    $("scene").classList.add("depot");
+  });
+  $("scene").addEventListener("dragleave", () => $("scene").classList.remove("depot"));
+  $("scene").addEventListener("drop", async (e) => {
+    $("scene").classList.remove("depot");
+    const element = [...e.dataTransfer.items].find((i) => i.kind === "file");
+    if (!element) return;
+    e.preventDefault();
+    // les deux demandes partent tout de suite : après un « await », l'élément n'est plus lisible
+    const demandePoignee = element.getAsFileSystemHandle?.();
+    const fichier = element.getAsFile();
+    const poignee = await demandePoignee?.catch(() => null);
+    importer(fichier, poignee?.kind === "file" ? poignee : null);
+  });
+  // bouton Importer : dans Chrome et Edge, on garde une poignée vers le fichier pour le suivre
+  $("bouton-import").addEventListener("click", async (e) => {
+    if (!window.showOpenFilePicker) return;         // autres navigateurs : sélecteur habituel
+    e.preventDefault();
+    try {
+      const [poignee] = await window.showOpenFilePicker({
+        types: [{ description: "Dessin DXF ou SVG", accept: { "application/octet-stream": [".dxf", ".svg"] } }],
+      });
+      importer(await poignee.getFile(), poignee);
+    } catch { /* sélection annulée */ }
+  });
+  $("fichier-dessin").addEventListener("change", (e) => {
+    if (e.target.files[0]) importer(e.target.files[0]);
+    e.target.value = "";
   });
   $("export-dxf").onclick = () => telecharger("dxf");
   $("export-svg").onclick = () => telecharger("svg");
@@ -982,49 +901,23 @@ async function demarrer() {
     const pret = await preparer(pyodide, lireTexte, (m) => (etat.textContent = m));
     app = pret.app;
 
-    // motifs
-    motifs = JSON.parse(app.liste_motifs());
-    // un groupe d'options par groupe d'étudiants, l'exemple à part
-    // les 4 groupes toujours présents, même sans motif ; l'exemple à la fin
-    const GROUPES = ["groupe_1", "groupe_2", "groupe_3", "groupe_4"];
-    const groupes = [...new Set([...GROUPES, ...motifs.map((m) => m.groupe).filter((g) => g), ""])];
-    $("choix-motif").innerHTML = groupes.map((g) => {
-      const titre = g ? g.replace("groupe_", "Groupe ") : "Exemple (référence)";
-      let options = motifs.filter((m) => m.groupe === g).map((m) => `<option value="${m.id}">${m.nom}</option>`);
-      if (!options.length) options = ["<option disabled>aucun motif pour l'instant (à créer par une issue)</option>"];
-      return `<optgroup label="${titre}">${options.join("")}</optgroup>`;
-    }).join("");
-    $("choix-motif").onchange = (e) => { choisirMotif(e.target.value); calculer(); };
-    choisirMotif(motifs[0].id);
-
     // réglages du moteur
     for (const [nom, p] of Object.entries(JSON.parse(app.reglages_moteur()))) {
       curseur($("reglages-moteur"), nom, p, reglages.moteur);
     }
 
-    // contours exemples
-    const exemples = pret.fichiers.filter((f) => f.startsWith("contours/"));
-    $("choix-contour").innerHTML = exemples
-      .map((f) => `<option value="${f}">${f.replace("contours/", "")}</option>`).join("");
-    const parDefaut = exemples.find((f) => f.includes("haricot")) || exemples[0];
-    $("choix-contour").value = parDefaut;
+    // dessins d'exemple
+    const exemples = pret.fichiers.filter((f) => f.startsWith("dessins/"));
+    $("choix-dessin").innerHTML = exemples
+      .map((f) => `<option value="${f}">exemple : ${f.replace("dessins/", "")}</option>`).join("");
+    const parDefaut = exemples.find((f) => f.includes("vagues")) || exemples[0];
+    $("choix-dessin").value = parDefaut;
     const choisirExemple = async (chemin) => {
-      contour = { nom: chemin.split("/").pop(), texte: await lireTexte(chemin) };
-      delete reglages.taille;      // nouvelle forme : sa taille réelle si elle tient
-      calculer();
+      suivre(null);
+      ouvrirDessin(chemin.split("/").pop(), await lireTexte(chemin));
     };
-    $("choix-contour").onchange = (e) => {
+    $("choix-dessin").onchange = (e) => {
       if (e.target.value !== "importe") choisirExemple(e.target.value);
-    };
-    $("fichier-contour").onchange = async (e) => {
-      const fichier = e.target.files[0];
-      if (!fichier) return;
-      contour = { nom: fichier.name, texte: await fichier.text() };
-      delete reglages.taille;
-      $("choix-contour").querySelector('option[value="importe"]')?.remove();
-      const option = new Option("importé : " + fichier.name, "importe", true, true);
-      $("choix-contour").add(option);
-      calculer();
     };
     await choisirExemple(parDefaut);
     chargerRobot();

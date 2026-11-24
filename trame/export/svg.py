@@ -1,19 +1,21 @@
-"""Export SVG (vue de dessus) : un calque par série, calque des liaisons, palette.
+"""Export SVG (vue de dessus) : un calque par calque imprimé, liaisons, pauses, palette.
 
 Le dessin est à l'échelle 1 (unités en mm). Les calques s'ouvrent comme calques dans
 Inkscape et comme groupes dans Illustrator. Les sommets des bosses sont des petits
 cercles, d'autant plus grands que la bosse est haute.
 """
 
-from trame.export.commun import LETTRES, reperes_palette, separer_liaisons, sommets_des_bosses
+from xml.sax.saxutils import escape as echapper
+
+from trame.export.commun import LETTRES, attentes, lignes_et_liaisons, noms_des_calques, reperes_palette, sommets_des_bosses
 
 COULEURS = ["#6b7280", "#2563eb", "#16a34a", "#9333ea", "#d97706"]
 
 
-def exporter_svg(resultat, contour, palette, lane, amp):
+def exporter_svg(resultat, palette, amp, noms=None):
     lx, ly = palette
     waves = resultat["waves"]
-    lignes, liaisons = separer_liaisons(waves, contour, lane)
+    lignes, liaisons = lignes_et_liaisons(resultat)
 
     def pts(poly):
         # y de la palette vers le haut, y du SVG vers le bas
@@ -34,13 +36,10 @@ def exporter_svg(resultat, contour, palette, lane, amp):
         palette_svg.append('<text x="%g" y="%g" font-size="12">%s</text>' % (x + 12, ly - y - 12, nom))
     morceaux.append(calque("palette", "Palette", palette_svg))
 
-    morceaux.append(calque("contour", "Contour", [
-        '<polygon points="%s" fill="none" stroke="#000" stroke-width="1" stroke-dasharray="6 4"/>'
-        % pts(contour.exterior.coords)]))
-
     for i, serie in enumerate(lignes):
         couleur = COULEURS[i % len(COULEURS)]
-        morceaux.append(calque("serie_%s" % LETTRES[i], "Série %s" % LETTRES[i], [
+        nom = noms_des_calques(len(lignes), noms)[i]
+        morceaux.append(calque("serie_%s" % LETTRES[i], echapper(nom), [
             '<polyline points="%s" fill="none" stroke="%s" stroke-width="2"/>' % (pts(p), couleur)
             for p in serie]))
 
@@ -52,6 +51,15 @@ def exporter_svg(resultat, contour, palette, lane, amp):
         '<circle cx="%.2f" cy="%.2f" r="%.1f" fill="#000"><title>%.1f mm</title></circle>'
         % (x, ly - y, 1.5 * max(z / amp, 1) if amp > 0 else 1.5, z)
         for x, y, z in sommets_des_bosses(waves)]))
+
+    if attentes(resultat):
+        morceaux.append(calque("deplacements", "Déplacements", [
+            '<polyline points="%s" fill="none" stroke="#6b7280" stroke-width="1" stroke-dasharray="6 4"/>' % pts(trajet)
+            for _, trajet, _ in attentes(resultat)]))
+        morceaux.append(calque("pauses", "Pauses", [
+            '<circle cx="%.2f" cy="%.2f" r="15" fill="none" stroke="#e11d48" stroke-width="2"/>'
+            '<text x="%.2f" y="%.2f" font-size="14">%s</text>'
+            % (x, ly - y, x + 20, ly - y - 20, nom.lower()) for nom, _, (x, y, _) in attentes(resultat)]))
 
     if resultat["jumps"]:
         morceaux.append(calque("sauts", "Sauts", [

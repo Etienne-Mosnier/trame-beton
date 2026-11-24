@@ -6,7 +6,10 @@ Principes (CDC §9) :
 - mouvements linéaires raccordés (movep) à vitesse constante ; on ne redécoupe PAS le chemin
   à pas constant (les sommets des bosses sont gardés), on ajoute seulement des points dans
   les segments trop longs ;
-- approche au-dessus du premier point, descente, extrusion, impression, arrêt, dégagement.
+- approche au-dessus du premier point, descente, extrusion, impression, arrêt, dégagement ;
+- pauses : le robot s'arrête au point d'attente (à côté du dessin) et attend que quelqu'un
+  appuie sur « Continuer » sur la tablette. L'extrusion est continue : le programme ne coupe pas
+  la pompe, le béton coule pendant la pause (le message le rappelle).
 
 Le texte généré est en ASCII (sans accents) par prudence pour le contrôleur.
 VALIDER DANS URSIM AVANT TOUT PASSAGE SUR LE ROBOT.
@@ -119,21 +122,28 @@ def fonctions_extrusion(extrusion):
     ]
 
 
-def generer(path, repere, reglages, entete=(), simulation=False):
+def generer(path, repere, reglages, entete=(), simulation=False, pauses=()):
     """Texte du programme URScript.
 
-    path     : chemin d'impression, points (x, y, z) en mm dans le repère de la palette
+    path     : parcours de la buse, points (x, y, z) en mm dans le repère de la palette
     repere   : repère de la palette (calibration.repere_palette)
     reglages : {"outil": …, "impression": …, "extrusion": …} de config/cellule.toml
                (impression.hauteur_buse déjà remplacée si elle était provisoire)
-    entete   : lignes de commentaire à mettre en tête (motif, contour, valeurs provisoires…)
+    entete   : lignes de commentaire à mettre en tête (dessin, valeurs provisoires…)
     simulation : True = calibration de simulation ; le programme prévient au démarrage
+    pauses   : [(indice dans path, message), …] : le robot s'arrête au point path[indice] et
+               attend « Continuer » avec ce message
     """
     outil, imp, extrusion = reglages["outil"], reglages["impression"], reglages["extrusion"]
-    points = preparer_points(path, imp["hauteur_buse"], imp["longueur_max_segment"])
+    # le parcours coupé aux points d'attente : un morceau entre deux pauses
+    coupes = sorted(i for i, _ in pauses)
+    bornes = [0] + coupes + [len(path) - 1]
+    morceaux = [preparer_points(path[a:b + 1], imp["hauteur_buse"], imp["longueur_max_segment"])
+                for a, b in zip(bornes, bornes[1:])]
+    messages = [m for _, m in sorted(pauses)]
+    points = [p for m in morceaux for p in m]
     if len(points) < 2:
         raise ValueError("Le chemin est vide : rien à imprimer.")
-    rayons = rayons_arrondi(points, imp["rayon_raccord"])
     rx, ry, rz = orientation_buse(outil.get("rotation_z", 0.0), repere)
     tcp = [v / 1000 for v in outil["tcp"][:3]] + list(outil["tcp"][3:])
     cog = [v / 1000 for v in outil["centre_gravite"]]
@@ -147,7 +157,11 @@ def generer(path, repere, reglages, entete=(), simulation=False):
               "# VALIDER DANS URSIM AVANT TOUT PASSAGE SUR LE ROBOT"]
     lignes += ["# " + ascii(t) for t in entete]
     lignes += ["# %d points, %.1f m de cordon, environ %d min a %g mm/s"
-               % (len(points), longueur / 1000, round(longueur / imp["vitesse"] / 60), imp["vitesse"]),
+               % (len(points), longueur / 1000, round(longueur / imp["vitesse"] / 60), imp["vitesse"])]
+    if pauses:
+        lignes.append("# %d pause(s) : le robot attend Continuer a cote du dessin ; le beton continue de couler"
+                      % len(pauses))
+    lignes += [
                "def trame_beton():",
                "  set_tcp(%s)" % pose(tcp),
                "  set_payload(%s, [%s])" % (nombre(outil["masse_kg"], 3), ", ".join(nombre(c) for c in cog)),
@@ -175,10 +189,19 @@ def generer(path, repere, reglages, entete=(), simulation=False):
                "  movel(%s, a=A, v=VA)" % p_txt(premier),
                "  extrusion_on()",
                '  textmsg("trame-beton : impression")']
-    for p, r in zip(points[1:-1], rayons[1:-1]):
-        lignes.append("  movep(%s, a=A, v=V, r=%s)" % (p_txt(p), nombre(r / 1000, 5)))
-    lignes += ["  movel(%s, a=A, v=V)" % p_txt(dernier),
-               "  extrusion_off()",
+    for numero, morceau in enumerate(morceaux):
+        rayons = rayons_arrondi(morceau, imp["rayon_raccord"])
+        for avant, p, r in zip(morceau, morceau[1:-1], rayons[1:-1]):
+            # montée et descente des pauses : à la vitesse d'approche
+            vitesse = "VA" if math.dist(avant[:2], p[:2]) < 0.01 else "V"
+            lignes.append("  movep(%s, a=A, v=%s, r=%s)" % (p_txt(p), vitesse, nombre(r / 1000, 5)))
+        lignes.append("  movel(%s, a=A, v=V)" % p_txt(morceau[-1]))
+        if numero < len(messages):
+            lignes += ['  textmsg("trame-beton : pause %d")' % (numero + 1),
+                       '  popup("%s", title="trame-beton : pause %d", blocking=True)'
+                       % (ascii(messages[numero]).replace('"', "'"), numero + 1),
+                       '  textmsg("trame-beton : reprise")']
+    lignes += ["  extrusion_off()",
                "  movel(%s, a=A, v=VA)" % p_txt(dernier, h),
                '  textmsg("trame-beton : fini")',
                "end",
