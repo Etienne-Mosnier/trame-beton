@@ -176,8 +176,10 @@ def calculer(reglages_json, texte, nom):
     """Calcul complet pour l'aperçu, à partir du fichier importé.
 
     reglages_json : {"calques": [noms des calques à imprimer, dans l'ordre d'impression],
+                     "pauses": [noms des calques après lesquels on fait une pause],
                      "moteur": {nom: valeur}, "taille": 0 à 1 ou absent, "vitesse": mm/s}
     Sans "calques" : les calques imprimés au départ, dans l'ordre alphabétique.
+    Une pause après le dernier calque imprimé : entre deux couches.
     """
     try:
         reglages = json.loads(reglages_json or "{}")
@@ -202,7 +204,10 @@ def calculer(reglages_json, texte, nom):
         largeur = beton["largeur_cordon"]
         marge = CONFIG["palette"]["marge"] + largeur / 2
         place = placer_dessin([par_nom[n]["courbes"] for n in noms], marge, plateau, reglages.get("taille"))
-        r = calculer_trace(place["courbes"], largeur, moteur["amp"], moteur["d"], moteur["couches"])
+        apres = set(reglages.get("pauses") or [])
+        r = calculer_trace(place["courbes"], largeur, moteur["amp"], moteur["d"], moteur["couches"],
+                           pauses=[n in apres for n in noms], levee=CONFIG["impression"]["hauteur_approche"],
+                           cadre=zone_de_travail() if apres else None)
 
         lignes = [[LineString(c) for c in courbes] for courbes in place["courbes"]]
         controles = controler_trace(r, lignes, noms, {
@@ -224,6 +229,9 @@ def calculer(reglages_json, texte, nom):
             "dimensions": place["dimensions"],
             "waves": [[arrondir(v) for v in serie] for serie in r["waves"]],
             "path": arrondir(r["path"] or []),
+            "deplacements": [arrondir(dep) for dep in r["deplacements"]],
+            "pauses": [{"point": [round(v, 1) for v in p["point"]], "calque": noms[p["calque"]],
+                        "couche": p["couche"], "libre": p["libre"]} for p in r["pauses"]],
             "jumps": [],
             "controle": r["controle"],
             "controles": [dict(c, points=arrondir(c["points"]), segments=[arrondir(s) for s in c["segments"]])
@@ -387,14 +395,21 @@ def cercle_ajuste(points):
     return cx, cy, math.sqrt(cx * cx + cy * cy - F)
 
 
-def portee(repere):
-    """Limites et orientation du robot, dans le repère du ROBOT (mm), au niveau de la palette :
-    zone où il amène la buse verticale (hauteurs d'impression et d'approche), partie de la
-    palette hors de portée, cercle de portée maximale, directions du nord."""
-    from shapely.geometry import Point, Polygon, box
+_anneaux = {}   # anneau de portée déjà calculé, pour chaque calibration et hauteur de buse
+
+
+def anneau_de_portee(repere):
+    """Zone où le robot amène la buse verticale au niveau de la palette (hauteurs d'impression et
+    d'approche) : un anneau (cx, cy, rayon extérieur, rayon intérieur), repère du ROBOT, en mm.
+    Le calcul (cinématique sur une grille) n'est fait qu'une fois par calibration."""
+    from shapely.geometry import box
     from shapely.ops import unary_union
 
     imp = reglages_impression()
+    cle = tuple(round(float(v), 3) for k in ("origine", "x", "y", "z") for v in repere[k]) + \
+        (imp["hauteur_buse"], imp["hauteur_approche"])
+    if cle in _anneaux:
+        return _anneaux[cle]
     outil = CONFIG["outil"]
     tcp = cinematique.matrice_pose([v / 1000 for v in outil["tcp"][:3]] + list(outil["tcp"][3:]))
     z_plan = repere["origine"][2]            # hauteur du dessus de la palette (repère robot)
@@ -424,6 +439,32 @@ def portee(repere):
         rayon_int = max(PIED, max(math.dist((cx, cy), c) for c in trous) + pas / 2)
     # un seul cercle intérieur, de même centre, qui englobe aussi le pied du robot
     rayon_int = max(rayon_int, math.hypot(cx, cy) + PIED)
+    _anneaux[cle] = (cx, cy, rayon_ext, rayon_int)
+    return _anneaux[cle]
+
+
+def zone_de_travail():
+    """Partie de la palette où la buse peut aller (portée du robot), dans le repère de la
+    PALETTE : les pauses y placent leur point d'attente et leurs trajets à vide."""
+    from shapely.geometry import Point, box
+
+    repere, _ = calibration()
+    cx, cy, rayon_ext, rayon_int = anneau_de_portee(repere)
+    axes = np.array([repere["x"], repere["y"], repere["z"]])          # lignes = axes de la palette
+    c = axes @ (np.array([cx, cy, repere["origine"][2]]) - np.array(repere["origine"], dtype=float))
+    centre = Point(c[0], c[1])
+    anneau = centre.buffer(rayon_ext, quad_segs=64).difference(centre.buffer(rayon_int, quad_segs=64))
+    return box(0, 0, CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]).intersection(anneau)
+
+
+def portee(repere):
+    """Limites et orientation du robot, dans le repère du ROBOT (mm), au niveau de la palette :
+    zone où il amène la buse verticale (hauteurs d'impression et d'approche), partie de la
+    palette hors de portée, cercle de portée maximale, directions du nord."""
+    from shapely.geometry import Point, Polygon
+
+    z_plan = repere["origine"][2]            # hauteur du dessus de la palette (repère robot)
+    cx, cy, rayon_ext, rayon_int = anneau_de_portee(repere)
     centre = Point(cx, cy)
     zone = centre.buffer(rayon_ext, quad_segs=64).difference(centre.buffer(rayon_int, quad_segs=64))
 
@@ -482,8 +523,14 @@ def reglages_impression():
     return imp
 
 
+PAUSES_A_VENIR = ("Pauses : le programme du robot et le G-code de la maquette ne savent pas encore "
+                  "les faire. Choisir « relié » partout pour exporter (prochaine étape).")
+
+
 def programme_robot(d):
     """Texte URScript du dernier calcul."""
+    if d["resultat"].get("pauses"):
+        raise ValueError(PAUSES_A_VENIR)
     repere, simulation = calibration()
     imp = reglages_impression()
     entete = [d["titre"]]
@@ -537,6 +584,8 @@ def exporter(format_fichier, options_json="{}"):
     d = _dernier
     options = json.loads(options_json or "{}")
     if format_fichier == "gcode":
+        if d["resultat"].get("pauses"):
+            return json.dumps({"erreur": PAUSES_A_VENIR})
         entete = [d["titre"]]
         entete.append("A CALIBRER : piston, tete malaxeuse et debit (docs/MAQUETTE.md)")
         essai = float(options.get("largeur_essai", CONFIG["cartesienne"]["largeur_cordon_essai"]))
@@ -595,10 +644,11 @@ def robot():
     liste_alertes = alertes.analyser(angles, hors_portee, tous, tcp, vers_palette,
                                      (CONFIG["palette"]["longueur"], CONFIG["palette"]["largeur"]))
 
-    # temps de passage (s) : approche et dégagement à la vitesse d'approche
+    # temps de passage (s) : approche, dégagement et montées des pauses à la vitesse d'approche
     temps = [0.0]
     for k in range(1, len(tous)):
-        v = imp["vitesse_approche"] if k in (1, len(tous) - 1) else imp["vitesse"]
+        vertical = math.dist(tous[k - 1][:2], tous[k][:2]) < 0.01
+        v = imp["vitesse_approche"] if k in (1, len(tous) - 1) or vertical else imp["vitesse"]
         temps.append(temps[-1] + math.dist(tous[k - 1], tous[k]) / v)
 
     # série de chaque point (pour déposer le cordon avec la bonne couleur)
@@ -607,9 +657,15 @@ def robot():
         for poly in serie:
             for p in poly:
                 serie_de.setdefault((round(p[0], 2), round(p[1], 2)), i)
+    # déplacements à vide des pauses : série -1 (aucun cordon déposé)
+    a_vide = {(round(q[0], 2), round(q[1], 2), round(q[2] + hb, 2))
+              for dep in d["resultat"].get("deplacements", []) for q in dep[1:-1]}
     series, courant = [], 0
     for p in tous:
-        courant = serie_de.get((round(p[0], 2), round(p[1], 2)), courant)
+        if (round(p[0], 2), round(p[1], 2), round(p[2], 2)) in a_vide:
+            courant = -1
+        else:
+            courant = serie_de.get((round(p[0], 2), round(p[1], 2)), courant)
         series.append(courant)
 
     # position du robot vue depuis la palette (inverse du repère de la palette)

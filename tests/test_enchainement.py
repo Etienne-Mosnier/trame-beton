@@ -97,3 +97,66 @@ def test_couches_empilees():
     hauteurs = [hauteur_a(w, 50, 100) for w in r["waves"][0]]
     assert sorted(round(h, 3) for h in hauteurs if h is not None) == [0, AMP, 2 * AMP]
     assert r["jumps"] == []
+
+
+# --- pauses ---------------------------------------------------------------------------
+
+from shapely.geometry import LineString as Ligne, MultiLineString, Point as Pt
+
+from trame.moteur.deplacements import chemin_libre, obstacles
+
+
+def survole(trajet, imprime, rayon):
+    """Le trajet à vide (sans ses deux bouts, au-dessus des cordons qu'il quitte et rejoint)
+    passe-t-il au-dessus d'un cordon imprimé ?"""
+    zone = MultiLineString([Ligne([p[:2] for p in poly]) for poly in imprime]).buffer(rayon - 0.5)
+    milieu = [p[:2] for p in trajet[2:-2]]
+    return len(milieu) > 1 and Ligne(milieu).intersects(zone)
+
+
+def test_pause_entre_deux_calques():
+    A = [[(0, 100), (400, 100)]]
+    B = [[(200, 0), (200, 300)]]
+    r = calculer_trace([A, B], largeur_cordon=10, amp=AMP, pauses=[True, False], levee=50)
+    assert len(r["troncons"]) == 2 and len(r["deplacements"]) == 1 and r["liaisons"] == []
+    pause = r["pauses"][0]
+    assert pause["libre"] and pause["calque"] == 0 and pause["couche"] == 1
+    trajet = r["deplacements"][0]
+    # la buse monte de 50 mm au-dessus du béton, puis sort sans survoler le calque A
+    assert trajet[1][2] == pytest.approx(50) and trajet[0][:2] == trajet[1][:2]
+    assert not survole(trajet, r["troncons"][0:1], 10)
+    # le point d'attente est à côté du dessin, pas dessus
+    assert Ligne([(0, 100), (400, 100)]).distance(Pt(pause["point"][:2])) > 20
+    # le parcours complet enchaîne tronçon, trajet à vide, tronçon
+    assert r["path"][0] == r["troncons"][0][0] and r["path"][-1] == r["troncons"][1][-1]
+    assert hauteur_a(r["troncons"][1], 200, 100) == AMP           # B passe toujours par-dessus A
+
+
+def test_sortie_d_une_spirale_par_le_couloir():
+    # spirale imprimée du bord vers le centre : la sortie suit le couloir entre les tours
+    spirale = [((30 + 60 * t / (2 * math.pi)) * math.cos(t), (30 + 60 * t / (2 * math.pi)) * math.sin(t))
+               for t in [k * 2 * math.pi / 72 for k in range(72 * 3 + 1)]]
+    spirale.reverse()
+    zone = obstacles([spirale], 10)
+    trajet = chemin_libre(spirale[-1], (400, 0), zone, (-400, -400, 400, 400), 5)
+    assert trajet is not None and len(trajet) > 3                 # pas en ligne droite
+    assert not Ligne(trajet[1:]).intersects(zone.buffer(-0.5))
+
+
+def test_pause_sans_passage_signalee():
+    # le calque B est enfermé dans un carré imprimé : impossible d'y entrer sans survoler
+    carre = [[(0, 0), (300, 0), (300, 300), (0, 300), (0, 5)]]
+    dedans = [[(140, 150), (160, 150)]]
+    r = calculer_trace([carre, dedans], largeur_cordon=10, amp=AMP, pauses=[True, False])
+    assert r["pauses"][0]["libre"] is False
+    assert r["controle"]["pauses_bloquees"] == 1
+
+
+def test_pause_entre_deux_couches():
+    A = [[(0, 100), (400, 100)]]
+    B = [[(200, 0), (200, 300)]]
+    r = calculer_trace([A, B], largeur_cordon=10, amp=AMP, couches=2, pauses=[False, True])
+    assert len(r["pauses"]) == 1 and r["pauses"][0]["couche"] == 1 and r["pauses"][0]["calque"] == 1
+    assert len(r["troncons"]) == 2
+    # la couche 2 repose sur la couche 1 malgré la pause
+    assert hauteur_a(r["troncons"][1], 50, 100) == AMP

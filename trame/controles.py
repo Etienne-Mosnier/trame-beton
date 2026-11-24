@@ -291,6 +291,21 @@ def liaisons_ajoutees(resultat, noms):
                     % (len(dans), ", ".join("« %s »" % n for n in calques)), segments=segments)
 
 
+def pauses_sans_survol(resultat, noms):
+    """Pendant chaque pause, la buse sort du dessin et y revient sans passer au-dessus du béton."""
+    pauses = resultat.get("pauses", [])
+    titre = "Pauses : %d, sans passer au-dessus du béton" % len(pauses)
+    bloquees = [(p, dep) for p, dep in zip(pauses, resultat["deplacements"]) if not p["libre"]]
+    if not bloquees:
+        return controle(titre, "ok", "La buse sort du dessin entre les lignes déjà imprimées, et y revient.")
+    ou = ", ".join("après « %s » (couche %d)" % (noms[p["calque"]], p["couche"]) for p, _ in bloquees)
+    segments = [[a, b] for _, dep in bloquees for a, b in zip(dep, dep[1:])]
+    return controle(titre, "erreur",
+                    "Pause %s : aucun passage entre les lignes déjà imprimées. La buse passerait au-dessus "
+                    "du béton (trajet en rouge). Choisir « relié » à cet endroit, ou changer l'ordre des "
+                    "calques." % ou, segments=segments)
+
+
 def controler_trace(resultat, calques, noms, reglages):
     """Contrôles d'un dessin importé (sans contour).
 
@@ -303,6 +318,7 @@ def controler_trace(resultat, calques, noms, reglages):
     return [
         sur_la_palette(resultat, reglages["palette"], 0.0),
         liaisons_ajoutees(resultat, noms),
+        *([pauses_sans_survol(resultat, noms)] if resultat.get("pauses") else []),
         lignes_trop_proches(calques, 2 * reglages["largeur_cordon"]),
         croisements_rasants(calques),
         virages_serres(toutes, reglages["rayon_courbure_min"], "dessin"),
@@ -311,10 +327,14 @@ def controler_trace(resultat, calques, noms, reglages):
 
 def quantites(resultat, largeur_cordon, hauteur_couche, vitesse):
     """Longueur de cordon (mm), durée (s) et volume de béton (litres), estimés."""
-    path = resultat["path"] or []
-    longueur = sum(math.dist(a, b) for a, b in zip(path, path[1:]))
+    longueur_de = lambda poly: sum(math.dist(a, b) for a, b in zip(poly, poly[1:]))
+    if "troncons" in resultat:
+        longueur = sum(longueur_de(t) for t in resultat["troncons"])
+        a_vide = sum(longueur_de(dep) for dep in resultat["deplacements"])
+    else:
+        longueur, a_vide = longueur_de(resultat["path"] or []), 0.0
     return {
         "longueur": round(longueur),
-        "duree": round(longueur / vitesse) if vitesse > 0 else None,
+        "duree": round((longueur + a_vide) / vitesse) if vitesse > 0 else None,
         "volume": round(longueur * largeur_cordon * hauteur_couche / 1e6, 1),
     }

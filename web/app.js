@@ -51,7 +51,8 @@ const groupeTrame = new THREE.Group();
 const groupeAlertes = new THREE.Group(); // endroits à problème, en rouge
 const groupeCordon = new THREE.Group();  // cordon déposé pendant l'animation du robot
 const groupeAlertesRobot = new THREE.Group(); // alertes robot, en rouge
-contenuPalette.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon, groupeAlertesRobot);
+const groupePauses = new THREE.Group();  // pauses : trajets à vide et points d'attente (toujours visibles)
+contenuPalette.add(groupePalette, groupeTrame, groupeAlertes, groupeCordon, groupeAlertesRobot, groupePauses);
 // groupes fixes par rapport au robot
 const groupeZone = new THREE.Group();    // partie de la palette hors de portée (mode placement)
 const groupePortee = new THREE.Group();  // portée du robot, ses axes et la boussole
@@ -198,6 +199,20 @@ function dessinerTrame(resultat, exageration) {
       groupeTrame.add(trait(points, COULEURS[i % COULEURS.length], LARGEUR_CORDON));
     }
   });
+  // pauses : trajet à vide de la buse (pointillés gris) et point d'attente
+  vider(groupePauses);
+  (resultat.deplacements || []).forEach((dep, k) => {
+    const points = dep.map((p, j) => [p[0], p[1], j === 0 || j === dep.length - 1 ? p[2] * exageration : p[2]]);
+    groupePauses.add(trait(points, "#737373", 2, true));
+    const pause = resultat.pauses[k];
+    const [x, y, z] = pause.point;
+    const anneau = new THREE.Mesh(new THREE.RingGeometry(12, 18, 32),
+                                  new THREE.MeshBasicMaterial({ color: "#c2410c", side: THREE.DoubleSide }));
+    anneau.position.set(x, y, z);
+    const texte = etiquette(`pause ${k + 1}`, "#c2410c", 34);
+    texte.position.set(x, y, z + 40);
+    groupePauses.add(anneau, texte);
+  });
   for (const saut of resultat.jumps) {
     groupeTrame.add(trait(saut.map((p) => [p[0], p[1], p[2] * exageration + 2]), "#000000", 2, true));
   }
@@ -280,7 +295,7 @@ function calculerRobot() {
   for (let k = 2; k <= d.points.length - 1; k++) {
     if (k === d.points.length - 1 || d.series[k] !== serie) {
       const points = d.points.slice(debut, k).map((q) => [q[0], q[1], q[2] * exageration + LARGEUR_CORDON / 4]);
-      if (points.length > 1) {
+      if (points.length > 1 && serie >= 0) {
         const ligne = trait(points, COULEURS[serie % COULEURS.length], LARGEUR_CORDON);
         groupeCordon.add(ligne);
         robot.lignes.push({ ligne, debut, fin: k - 1 });
@@ -475,7 +490,8 @@ function selectionner(e) {
 let app = null;
 const avecRobot = () => true;   // l'aperçu est toujours en vraie grandeur, avec le bras
 // dessin en cours : { nom, texte, calques: [{nom, couleur, imprime, lignes, longueur}],
-//                    ordre: [noms, dans l'ordre d'impression], eteints: Set(noms non imprimés) }
+//                    ordre: [noms, dans l'ordre d'impression], eteints: Set(noms non imprimés),
+//                    pauses: Set(noms des calques après lesquels on fait une pause) }
 let dessin = null;
 let dernierResultat = null;
 let dejaCadre = false; // la vue 3D est cadrée au premier calcul seulement
@@ -517,7 +533,7 @@ function memoriser() {
   if (!dessin) return;
   try {
     localStorage.setItem("trame-calques:" + dessin.nom,
-                         JSON.stringify({ ordre: dessin.ordre, eteints: [...dessin.eteints] }));
+                         JSON.stringify({ ordre: dessin.ordre, eteints: [...dessin.eteints], pauses: [...dessin.pauses] }));
   } catch { /* navigation privée : l'ordre n'est simplement pas retenu */ }
 }
 
@@ -535,11 +551,12 @@ function ouvrirDessin(nom, texte, garder = false) {
     return;
   }
   const memoire = garder && dessin?.nom === nom
-    ? { ordre: dessin.ordre, eteints: [...dessin.eteints] } : lireMemoire(nom);
+    ? { ordre: dessin.ordre, eteints: [...dessin.eteints], pauses: [...dessin.pauses] } : lireMemoire(nom);
   const noms = r.calques.map((c) => c.nom);
   const connus = (memoire?.ordre || []).filter((n) => noms.includes(n));
   dessin = { nom, texte, calques: r.calques, ordre: [...connus, ...noms.filter((n) => !connus.includes(n))] };
   dessin.eteints = new Set((memoire?.eteints || []).filter((n) => noms.includes(n)));
+  dessin.pauses = new Set((memoire?.pauses || []).filter((n) => noms.includes(n)));
   // nouveaux calques : imprimés sauf s'ils sont masqués dans le fichier (cadre, palette…)
   for (const c of r.calques) if (!connus.includes(c.nom) && !c.imprime) dessin.eteints.add(c.nom);
   // au plus 5 calques imprimés : les suivants sont éteints
@@ -577,6 +594,8 @@ function dessinerCalques() {
       <button type="button" class="oeil" title="${eteint ? "Imprimer ce calque" : "Ne pas imprimer ce calque"}"
         aria-label="${eteint ? "Imprimer" : "Ne pas imprimer"} le calque ${echapper(nom)}">${eteint ? OEIL_FERME : OEIL}</button>`;
     li.querySelector(".oeil").addEventListener("click", () => basculer(nom));
+    // après un calque imprimé : relié ou pause avant le suivant (après le dernier : entre deux couches)
+    const dernier = rang === ordreImpression.length - 1;
     li.addEventListener("dragstart", (e) => {
       glisse = nom;
       e.dataTransfer.effectAllowed = "move";
@@ -605,7 +624,25 @@ function dessinerCalques() {
       calculer();
     });
     liste.appendChild(li);
+    if (!eteint && (!dernier || (reglages.moteur.couches || 1) > 1)) liste.appendChild(jonction(nom, dernier));
   }
+}
+
+// entre deux calques : « relié » (le cordon continue) ou « pause » (la buse sort du dessin et attend)
+function jonction(nom, entreCouches) {
+  const pause = dessin.pauses.has(nom);
+  const li = document.createElement("li");
+  li.className = "jonction" + (pause ? " pause" : "");
+  const ou = entreCouches ? "entre deux couches" : "";
+  li.innerHTML = `<button type="button" title="${pause ? "Relier sans pause" : "Faire une pause ici : la buse sort du dessin et attend « Continuer »"}">
+    ${pause ? "⏸ pause" : "↓ relié"}${ou ? ` <span>${ou}</span>` : ""}</button>`;
+  li.querySelector("button").addEventListener("click", () => {
+    if (pause) dessin.pauses.delete(nom); else dessin.pauses.add(nom);
+    memoriser();
+    dessinerCalques();
+    calculer();
+  });
+  return li;
 }
 
 function basculer(nom) {
@@ -646,17 +683,21 @@ function afficherBilan(r) {
   $("legende").innerHTML = r.calques.map((nom, i) => {
     const role = i === 0 ? "imprimé en premier" : i === 1 ? "passe par-dessus 1"
       : i === 2 ? "passe par-dessus 1 et 2" : `passe par-dessus 1 à ${i}`;
-    return `<div><span class="pastille" style="background:${COULEURS[i % COULEURS.length]}"></span>${i + 1}. ${echapper(nom)} : ${role}</div>`;
+    const pause = r.pauses.some((p) => p.calque === nom && p.couche === 1) && i < r.calques.length - 1
+      ? `<div class="pause-legende">⏸ pause</div>` : "";
+    return `<div><span class="pastille" style="background:${COULEURS[i % COULEURS.length]}"></span>${i + 1}. ${echapper(nom)} : ${role}</div>${pause}`;
   }).join("");
 }
 
 function calculer() {
   if (!app || !dessin) return;
+  dessinerCalques();      // le nombre de couches change la liste (pause entre deux couches)
   etat.textContent = "Calcul…";
   // on laisse le navigateur afficher « Calcul… » avant de bloquer pendant le calcul
   setTimeout(() => {
     const debut = performance.now();
-    const r = JSON.parse(app.calculer(JSON.stringify({ ...reglages, calques: imprimes() }), dessin.texte, dessin.nom));
+    const r = JSON.parse(app.calculer(JSON.stringify({ ...reglages, calques: imprimes(), pauses: [...dessin.pauses] }),
+                                      dessin.texte, dessin.nom));
     if (r.erreur) {
       etat.textContent = "";
       $("bilan").innerHTML = `<p class="erreur">${echapper(r.erreur)}</p>`;

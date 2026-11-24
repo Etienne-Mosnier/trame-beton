@@ -33,7 +33,15 @@ if (r.erreur) throw new Error(r.erreur);
 console.log(`aperçu : ${r.path.length} points, ${r.calques.join(" > ")}, ${((performance.now() - debut) / 1000).toFixed(2)} s`);
 if (r.calques[0] !== "3 vagues" || r.jumps.length !== 0) throw new Error("Ordre des calques ou chemin inattendu");
 
-// exports DXF, SVG et programme du robot du dernier calcul
+// pauses : trajet à vide entre les lignes déjà imprimées (le plus long à calculer)
+const debutPause = performance.now();
+const rp = JSON.parse(app.calculer(JSON.stringify({ pauses: ["1 spirale", "2 boucles"], moteur: { couches: 2 } }), texte, "spirales.dxf"));
+if (rp.erreur) throw new Error(rp.erreur);
+console.log(`pauses : ${rp.pauses.length}, ${((performance.now() - debutPause) / 1000).toFixed(2)} s`);
+if (rp.pauses.length !== 4) throw new Error("4 pauses attendues (2 par couche)");
+
+// exports DXF, SVG et programme du robot du dernier calcul (sans pause)
+JSON.parse(app.calculer(JSON.stringify({ calques: ["3 vagues", "1 spirale", "2 boucles"] }), texte, "spirales.dxf"));
 for (const format of ["dxf", "svg", "script"]) {
   const e = JSON.parse(app.exporter(format));
   if (e.erreur || e.texte.length < 1000) throw new Error(`Export ${format} raté : ${e.erreur}`);

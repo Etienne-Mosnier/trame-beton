@@ -1,30 +1,40 @@
-"""Un dessin en calques -> un seul chemin d'impression continu, avec ses bosses.
+"""Un dessin en calques -> le chemin d'impression, avec ses bosses et ses pauses.
 
 Le dessin est imprimé tel qu'il est tracé. Le moteur :
-1. enchaîne les calques dans l'ordre d'impression (enchainer) : les lignes d'un calque, puis
-   celles du suivant, reliées par des liaisons droites. Départ et sens sont choisis tout seuls,
-   pour que les liaisons soient les plus courtes possible ;
+1. enchaîne les calques dans l'ordre d'impression (enchainer). Entre deux calques :
+   - « relié » : une liaison droite, imprimée, de la fin d'un calque au début du suivant ;
+   - « pause » : la pompe s'arrête, la buse sort du dessin et attend (voir deplacements.py).
+   Départ et sens sont choisis tout seuls : liaisons courtes qui évitent de passer sur une ligne
+   déjà imprimée et, autour d'une pause, des bouts de calque faciles à atteindre de l'extérieur ;
 2. répète le tout pour les couches 2, 3… (la trame réimprimée par-dessus elle-même) ;
-3. pose chaque point du chemin sur le béton déjà imprimé dessous (poser) : à chaque croisement,
+3. pose chaque point imprimé sur le béton déjà imprimé dessous (poser) : à chaque croisement,
    le passage le plus récent monte au-dessus des plus anciens, y compris dans un même calque
    (une boucle passe par-dessus son propre début). Les montées ont la pente des bosses :
-   une hauteur de couche (amp) sur une largeur de cordon (d).
+   une hauteur de couche (amp) sur une largeur de cordon (d) ;
+4. calcule le trajet à vide de chaque pause, sans passer au-dessus du béton.
 
 Utilisation :
-    r = calculer_trace([courbes_du_calque_1, courbes_du_calque_2, …], largeur_cordon=10, amp=5)
-    r["path"] -> le chemin 3D complet ; r["waves"] -> les morceaux 3D de chaque calque.
+    r = calculer_trace([courbes_du_calque_1, courbes_du_calque_2, …], largeur_cordon=10, amp=5,
+                       pauses=[False, True])       # une pause après le calque 2 (entre deux couches)
+    r["troncons"]     -> les morceaux imprimés d'un seul trait, séparés par les pauses
+    r["deplacements"] -> les trajets à vide des pauses ; r["path"] -> tout le parcours de la buse
 """
 
 import math
 
 import numpy as np
 import shapely
-from shapely.geometry import LineString, Point
-from shapely.ops import substring
+from shapely.geometry import LineString, MultiLineString, Point, box
+from shapely.ops import nearest_points, substring
+
+from trame.moteur.deplacements import trajet_de_pause
 
 TOL = 0.5      # mm : deux bouts plus proches que ça se touchent (courbe fermée, pas de liaison)
 PAS = 1.0      # mm : pas du calcul des hauteurs le long du chemin
 RAYON = 1.0    # mm : un cordon plus proche que ça (vu de dessus) est « dessous »
+PENALITE = 200.0         # mm : passer sur une ligne déjà imprimée « coûte » 200 mm de liaison en plus
+LARGEUR_RECHERCHE = 16   # nombre de débuts de chemin gardés pendant la recherche du meilleur départ
+MARGE_PAUSE = 5.0        # mm : pendant une pause, la buse reste à un demi-cordon + 5 mm du béton
 
 
 # --- 1. enchaîner les courbes -----------------------------------------------------------
@@ -56,14 +66,14 @@ def entrer_dans_boucle(points, depuis, ecart):
 def enchainer_calque(courbes, depuis, ecart, premiere=None):
     """Les courbes d'un calque, une à une, en allant chaque fois à la plus proche.
 
-    depuis   : point où se trouve la buse (fin du calque précédent), ou None au tout début
+    depuis   : point où se trouve la buse (fin du calque précédent), ou None (départ libre)
     premiere : (numéro, à l'envers) de la courbe par laquelle commencer, ou None
     Renvoie ([("liaison" ou "ligne", points), …], point d'arrivée).
     """
     restantes = list(range(len(courbes)))
     morceaux, position = [], depuis
     while restantes:
-        if premiere is not None and position is None:
+        if premiere is not None and not morceaux:
             k, inverse = premiere
         else:
             meilleur = None
@@ -95,55 +105,131 @@ def enchainer_calque(courbes, depuis, ecart, premiere=None):
 
 
 def departs_possibles(courbes, nb_max):
-    """Courbes (et sens) par lesquelles le dessin peut commencer : les bouts les plus éloignés
+    """Courbes (et sens) par lesquelles un calque peut commencer : les bouts les plus éloignés
     du centre du calque d'abord (un bon départ est souvent au bord du dessin)."""
     bouts = [p for c in courbes for p in (c[0], c[-1])]
     cx = sum(p[0] for p in bouts) / len(bouts)
     cy = sum(p[1] for p in bouts) / len(bouts)
     options = []
     for k, c in enumerate(courbes):
-        if est_fermee(c):
-            options.append((math.dist(c[0], (cx, cy)), (k, False)))
-        else:
-            options.append((math.dist(c[0], (cx, cy)), (k, False)))
+        options.append((math.dist(c[0], (cx, cy)), (k, False)))
+        if not est_fermee(c):
             options.append((math.dist(c[-1], (cx, cy)), (k, True)))
     options.sort(reverse=True)
     return [o for _, o in options[:nb_max]]
 
 
-def enchainer(calques, ecart):
+def facons(courbes, depuis, ecart, centre, nb_departs):
+    """Façons d'imprimer un calque à partir du point 'depuis' (None : départ libre, au début du
+    dessin ou après une pause). Renvoie [(morceaux, arrivée), …]."""
+    if len(courbes) == 1 and not est_fermee(courbes[0]):
+        return [enchainer_calque(courbes, depuis, ecart, (0, inverse)) for inverse in (False, True)]
+    if len(courbes) == 1:
+        if depuis is None:
+            # courbe fermée, départ libre : par son point le plus à l'extérieur du dessin
+            loin = max(courbes[0], key=lambda p: math.dist(p, centre))
+            suite, arrivee = enchainer_calque(courbes, loin, ecart)
+            return [([m for m in suite if m[0] == "ligne"], arrivee)]
+        return [enchainer_calque(courbes, depuis, ecart)]
+    if depuis is None:
+        return [enchainer_calque(courbes, None, ecart, d) for d in departs_possibles(courbes, nb_departs)]
+    return [enchainer_calque(courbes, depuis, ecart)]
+
+
+def croisements(points, imprime):
+    """Nombre de fois où la polyligne passe sur une ligne déjà imprimée (sans compter ses deux
+    bouts, qui touchent les lignes qu'elle relie)."""
+    if not imprime or len(points) < 2:
+        return 0
+    x = LineString(points).intersection(MultiLineString(imprime))
+    bouts = [Point(points[0]), Point(points[-1])]
+    n = 0
+    for g in getattr(x, "geoms", [x]):
+        if g.is_empty:
+            continue
+        if g.geom_type != "Point" or min(g.distance(b) for b in bouts) > 1.0:
+            n += 1
+    return n
+
+
+def cout_acces(point, imprime, enveloppe):
+    """Difficulté d'atteindre un point depuis l'extérieur du dessin (pour une pause) : la
+    distance jusqu'au tour du dessin, plus une pénalité par ligne imprimée à survoler."""
+    q = nearest_points(enveloppe.exterior, Point(point))[0]
+    segment = [tuple(point[:2]), (q.x, q.y)]
+    return math.dist(*segment) + PENALITE * croisements(segment, imprime)
+
+
+def enveloppe_du_dessin(calques):
+    """Forme du dessin entier vue de dessus (son enveloppe convexe)."""
+    lignes = [LineString(c) for courbes in calques for c in courbes if len(c) >= 2]
+    return MultiLineString(lignes).convex_hull.buffer(1.0)
+
+
+def enchainer(calques, ecart, pauses=None, pause_entre_couches=False):
     """calques : dans l'ordre d'impression, chacun une liste de courbes [(x, y), …].
-    ecart : distance laissée à la fin d'une courbe fermée (une largeur de cordon).
+    ecart    : distance laissée à la fin d'une courbe fermée (une largeur de cordon).
+    pauses   : pauses[i] vrai -> pause après le calque i (sinon : relié).
+    pause_entre_couches : la couche suivante reprend après une pause ; son début et la fin de
+                          celle-ci doivent alors aussi être faciles à atteindre.
 
     Renvoie la suite des morceaux, dans l'ordre d'impression :
-        {"calque": numéro, "nature": "ligne" ou "liaison", "points": [(x, y), …]}
-    On essaie plusieurs départs et on garde celui qui fait les liaisons les plus courtes.
+        {"calque": numéro, "nature": "ligne", "liaison" ou "pause", "points": [(x, y), …]}
+    (une pause a pour points [fin du calque, début du suivant]).
+    On garde, calque après calque, les meilleurs débuts de chemin (liaisons les plus courtes,
+    sans passer sur une ligne déjà imprimée ; bouts accessibles autour des pauses).
     """
     calques = [[c for c in courbes if len(c) >= 2] for courbes in calques]
-    if not any(calques):
-        return []
-    premier = next(i for i, c in enumerate(calques) if c)
+    pauses = list(pauses or []) + [False] * len(calques)
     nb_courbes = sum(len(c) for c in calques)
-    nb_departs = 24 if nb_courbes <= 60 else 2
+    if not nb_courbes:
+        return []
+    enveloppe = enveloppe_du_dessin(calques)
+    centre = enveloppe.centroid.coords[0]
+    grand = nb_courbes > 60
+    nb_departs, largeur = (2, 2) if grand else (24, LARGEUR_RECHERCHE)
 
-    def tout(depart):
-        morceaux, position = [], None
-        for i, courbes in enumerate(calques):
-            suite, position = enchainer_calque(courbes, position, ecart, depart if i == premier else None)
-            morceaux += [{"calque": i, "nature": n, "points": p} for n, p in suite]
-        return morceaux
+    etats = [(0.0, [], None, [])]      # coût, morceaux, position de la buse, lignes imprimées
+    precedent = None
+    for i, courbes in enumerate(calques):
+        if not courbes:
+            continue
+        pause = precedent is not None and pauses[precedent]
+        nouveaux = []
+        for cout, morceaux, position, imprime in etats:
+            for suite, arrivee in facons(courbes, None if pause else position, ecart, centre, nb_departs):
+                c, m, imp = cout, list(morceaux), list(imprime)
+                if pause:
+                    debut = suite[0][1][0]
+                    c += cout_acces(position, imp, enveloppe) + cout_acces(debut, imp, enveloppe)
+                    m.append({"calque": precedent, "nature": "pause", "points": [position, debut]})
+                for nature, pts in suite:
+                    if nature == "liaison":
+                        c += longueur(pts) + PENALITE * croisements(pts, imp)
+                    m.append({"calque": i, "nature": nature, "points": pts})
+                    imp.append(LineString(pts))
+                nouveaux.append((c, m, arrivee, imp))
+        nouveaux.sort(key=lambda e: e[0])
+        etats = nouveaux[:largeur]
+        precedent = i
+    if pause_entre_couches:
+        # la couche suivante repart du même début : il faut pouvoir sortir de la fin de celle-ci,
+        # puis rejoindre son début, sans survoler ce qui est imprimé
+        etats = sorted(etats, key=lambda e: e[0] + cout_acces(e[2], e[3], enveloppe)
+                       + cout_acces(e[1][0]["points"][0], e[3], enveloppe))
+    return etats[0][1]
 
-    essais = [tout(d) for d in departs_possibles(calques[premier], nb_departs)]
-    return min(essais, key=lambda m: sum(longueur(x["points"]) for x in m if x["nature"] == "liaison"))
 
-
-def repeter(morceaux, couches):
-    """Couches 2, 3… : la même suite de morceaux, reprise depuis le début ; une liaison droite
-    va de la fin d'une couche au début de la suivante."""
+def repeter(morceaux, couches, pause_entre_couches=False):
+    """Couches 2, 3… : la même suite de morceaux, reprise depuis le début. Entre deux couches,
+    une liaison droite, ou une pause."""
     sortie = [dict(m, couche=1) for m in morceaux]
     for couche in range(2, couches + 1):
         fin, debut = sortie[-1]["points"][-1], morceaux[0]["points"][0]
-        if math.dist(fin, debut) > TOL:
+        if pause_entre_couches:
+            sortie.append({"calque": sortie[-1]["calque"], "nature": "pause", "points": [fin, debut],
+                           "couche": couche - 1})
+        elif math.dist(fin, debut) > TOL:
             sortie.append({"calque": morceaux[0]["calque"], "nature": "liaison", "points": [fin, debut],
                            "couche": couche})
         sortie += [dict(m, couche=couche) for m in morceaux]
@@ -166,32 +252,48 @@ def reechantillonner(points, pas):
 
 
 def poser(morceaux, amp, d, exclusion=None):
-    """Hauteur de chaque point : le dessus du béton déjà imprimé dessous, montées en pente douce.
+    """Hauteur de chaque point imprimé : le dessus du béton déjà imprimé dessous, montées en
+    pente douce.
 
     Un point est « au-dessus » d'un passage plus ancien s'il en est à moins de RAYON (vu de
     dessus) et s'il est plus loin que 'exclusion' le long du chemin (ce qui vient juste avant
     n'est pas dessous : c'est le cordon que l'on est en train de poser).
-    Renvoie la liste des morceaux avec leurs points en 3D (x, y, z).
+    Les pauses coupent le chemin : rien n'est imprimé entre deux tronçons.
+    Renvoie la liste des morceaux avec leurs points en 3D (x, y, z) ; les pauses sont gardées telles quelles.
     """
     exclusion = 3 * d if exclusion is None else exclusion
-    P, sommets, bornes = [], [], []
+    P, sommets, bornes, coupes = [], [], [], []
+    nouvelle = True
     for morceau in morceaux:
+        if morceau["nature"] == "pause":
+            bornes.append(None)
+            nouvelle = True
+            continue
         pts, som = reechantillonner(morceau["points"], PAS)
-        if P and math.dist(P[-1], pts[0]) < 1e-6:
+        if P and not nouvelle and math.dist(P[-1], pts[0]) < 1e-6:
             debut = len(P) - 1          # le morceau part du dernier point du précédent
             pts, som = pts[1:], som[1:]
         else:
+            if P:
+                coupes.append(len(P))   # rien d'imprimé entre le point d'avant et celui-ci
             debut = len(P)
+        nouvelle = False
         P += pts
         sommets += som
         bornes.append((debut, len(P) - 1))
     P = np.array(P, dtype=float)
-    s = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(P, axis=0).T))])
+    longueurs = np.hypot(*np.diff(P, axis=0).T)
+    coupe = np.zeros(len(longueurs), dtype=bool)
+    if coupes:
+        coupe[np.array(coupes) - 1] = True
+    longueurs[coupe] = 1e6             # deux tronçons sont « très loin » l'un de l'autre
+    s = np.concatenate([[0.0], np.cumsum(longueurs)])
 
-    # paires (point, segment plus ancien juste dessous)
-    segments = shapely.linestrings(np.stack([P[:-1], P[1:]], axis=1))
-    arbre = shapely.STRtree(segments)
-    i_pt, i_seg = arbre.query(shapely.points(P), predicate="dwithin", distance=RAYON)
+    # paires (point, segment imprimé plus ancien juste dessous)
+    valides = np.flatnonzero(~coupe)
+    arbre = shapely.STRtree(shapely.linestrings(np.stack([P[valides], P[valides + 1]], axis=1)))
+    i_pt, i_rel = arbre.query(shapely.points(P), predicate="dwithin", distance=RAYON)
+    i_seg = valides[i_rel]
     garde = s[i_seg + 1] < s[i_pt] - exclusion
     i_pt, i_seg = i_pt[garde], i_seg[garde]
     a, b = P[i_seg], P[i_seg + 1]
@@ -222,7 +324,11 @@ def poser(morceaux, amp, d, exclusion=None):
         pentes = np.diff(z) / np.maximum(np.diff(s), 1e-9)
         garder[1:-1] |= np.abs(np.diff(pentes)) > 1e-7
     sortie = []
-    for morceau, (debut, fin) in zip(morceaux, bornes):
+    for morceau, borne in zip(morceaux, bornes):
+        if borne is None:
+            sortie.append(dict(morceau))
+            continue
+        debut, fin = borne
         indices = [k for k in range(debut, fin + 1) if garder[k] or k in (debut, fin)]
         points = [(round(float(P[k, 0]), 3), round(float(P[k, 1]), 3), round(float(z[k]), 3)) for k in indices]
         sortie.append(dict(morceau, points=points))
@@ -232,53 +338,98 @@ def poser(morceaux, amp, d, exclusion=None):
 # --- tout en un ---------------------------------------------------------------------------
 
 
-def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1):
-    """Des calques à plat (dans l'ordre d'impression) au chemin 3D continu.
+def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pauses=None,
+                   levee=50.0, cadre=None):
+    """Des calques à plat (dans l'ordre d'impression) au parcours 3D de la buse.
+
+    pauses : pauses[i] vrai -> pause après le calque i ; après le dernier : entre deux couches.
+    levee  : hauteur de la buse au-dessus de tout le béton imprimé, pendant une pause (mm).
+    cadre  : là où la buse peut aller pendant une pause : polygone (palette dans la portée du
+             robot) ou (xmin, ymin, xmax, ymax) ; par défaut, le dessin et 150 mm autour.
 
     Renvoie un dictionnaire proche de celui de chemin.calculer_chemin :
-        path     : liste de points (x, y, z) ; None s'il n'y a rien à imprimer
-        waves    : pour chaque calque, ses morceaux 3D (lignes et liaisons), toutes couches
-        lignes   : pour chaque calque, ses lignes 3D seulement
-        liaisons : liaisons droites ajoutées, 3D, avec "dans_calque" (calque en plusieurs morceaux)
-        jumps    : [] (le chemin est toujours d'un seul tenant)
-        controle, info
+        troncons     : morceaux imprimés d'un seul trait (3D), séparés par les pauses
+        deplacements : trajet à vide de chaque pause (3D), de la fin d'un tronçon au début du suivant
+        pauses       : {"point": point d'attente, "calque", "couche", "libre"} pour chaque pause
+        path         : tout le parcours de la buse (tronçons et déplacements, à la suite)
+        waves        : pour chaque calque, ses morceaux 3D (lignes et liaisons), toutes couches
+        lignes       : pour chaque calque, ses lignes 3D seulement
+        liaisons     : liaisons droites ajoutées, 3D, avec "dans_calque" (calque en plusieurs morceaux)
+        jumps        : [] ; controle, info
     """
     d = largeur_cordon if d is None else d
     couches = min(max(int(couches), 1), 5)
-    morceaux = enchainer(calques, largeur_cordon)
+    pauses = list(pauses or []) + [False] * len(calques)
+    dernier = max((i for i, c in enumerate(calques) if c), default=0)
+    pause_entre_couches = couches > 1 and pauses[dernier]
+    morceaux = enchainer(calques, largeur_cordon, pauses, pause_entre_couches)
+    vide = {"path": None, "troncons": [], "deplacements": [], "pauses": [], "waves": [[] for _ in calques],
+            "lignes": [[] for _ in calques], "liaisons": [], "jumps": [], "hits": [],
+            "controle": {"sauts": 0, "liaisons": 0, "liaisons_dans_calque": 0, "pauses": 0, "pauses_bloquees": 0},
+            "info": "rien à imprimer"}
     if not morceaux:
-        return {"path": None, "waves": [[] for _ in calques], "lignes": [[] for _ in calques],
-                "liaisons": [], "jumps": [], "hits": [],
-                "controle": {"sauts": 0, "liaisons": 0, "liaisons_dans_calque": 0}, "info": "rien à imprimer"}
-    morceaux = poser(repeter(morceaux, couches), amp, d)
+        return vide
+    morceaux = poser(repeter(morceaux, couches, pause_entre_couches), amp, d)
 
-    path, waves, lignes, liaisons = [], [[] for _ in calques], [[] for _ in calques], []
+    enveloppe = enveloppe_du_dessin(calques)
+    if cadre is None:
+        xmin, ymin, xmax, ymax = enveloppe.bounds
+        cadre = (xmin - 150, ymin - 150, xmax + 150, ymax + 150)
+    if isinstance(cadre, (tuple, list)):
+        cadre = box(*cadre)
+    rayon = largeur_cordon / 2 + MARGE_PAUSE
+
+    troncons, deplacements, infos_pauses, imprime = [[]], [], [], []
+    waves, lignes, liaisons = [[] for _ in calques], [[] for _ in calques], []
     for k, m in enumerate(morceaux):
+        if m["nature"] == "pause":
+            avant, suivant = troncons[-1], morceaux[k + 1]["points"]
+            hauteur = max(p[2] for poly in imprime for p in poly) + levee
+            t = trajet_de_pause(avant[-1], avant[-2], suivant[0], suivant[1], imprime, enveloppe, cadre,
+                                hauteur, rayon)
+            deplacements.append(t["points"])
+            infos_pauses.append({"point": t["attente"], "calque": m["calque"], "couche": m["couche"],
+                                 "libre": t["libre"]})
+            troncons.append([])
+            continue
         pts = m["points"]
-        path += pts[1:] if path and pts and math.dist(path[-1], pts[0]) < 1e-6 else pts
+        troncon = troncons[-1]
+        troncon += pts[1:] if troncon and math.dist(troncon[-1], pts[0]) < 1e-6 else pts
+        imprime.append(pts)
         waves[m["calque"]].append(pts)
         if m["nature"] == "ligne":
             lignes[m["calque"]].append(pts)
         else:
-            # liaison dans un calque : le calque d'avant et celui d'après sont les mêmes,
-            # et ce n'est pas le passage d'une couche à la suivante
+            # liaison dans un calque : le morceau d'avant est du même calque et de la même couche
             avant = morceaux[k - 1] if k > 0 else None
-            dans_calque = bool(avant and avant["calque"] == m["calque"] and avant["couche"] == m["couche"])
+            dans_calque = bool(avant and avant["nature"] != "pause" and avant["calque"] == m["calque"]
+                               and avant["couche"] == m["couche"])
             liaisons.append({"points": pts, "calque": m["calque"], "dans_calque": dans_calque})
 
+    # tout le parcours de la buse : tronçon, déplacement, tronçon…
+    path = list(troncons[0])
+    for deplacement, troncon in zip(deplacements, troncons[1:]):
+        path += deplacement[1:] + troncon[1:]
+
     n_dans = sum(1 for l in liaisons if l["dans_calque"])
+    n_bloquees = sum(1 for p in infos_pauses if not p["libre"])
     info = ["calques : %d, couches : %d" % (len(calques), couches),
             "courbes par calque : %s" % [len(c) for c in calques],
             "liaisons ajoutées : %d (dont %d dans un calque en plusieurs morceaux)" % (len(liaisons), n_dans),
-            "hauteur max : %.1f mm" % max(p[2] for p in path),
-            "path : 1 polyligne, %d points" % len(path)]
+            "pauses : %d (dont %d sans passage libre)" % (len(infos_pauses), n_bloquees),
+            "hauteur max : %.1f mm" % max(p[2] for t in troncons for p in t),
+            "tronçons imprimés : %d, %d points en tout" % (len(troncons), len(path))]
     return {
         "path": path,
+        "troncons": troncons,
+        "deplacements": deplacements,
+        "pauses": infos_pauses,
         "waves": waves,
         "lignes": lignes,
         "liaisons": liaisons,
         "jumps": [],
         "hits": [],
-        "controle": {"sauts": 0, "liaisons": len(liaisons), "liaisons_dans_calque": n_dans},
+        "controle": {"sauts": 0, "liaisons": len(liaisons), "liaisons_dans_calque": n_dans,
+                     "pauses": len(infos_pauses), "pauses_bloquees": n_bloquees},
         "info": "\n".join(info),
     }

@@ -129,3 +129,25 @@ def test_calculer_dessin_erreurs():
         "<g id='c%d'><path d='M0 %d L 100 %d' stroke='#000'/></g>" % (k, 10 * k, 10 * k) for k in range(6))
     r = json.loads(app.calculer("{}", six, "six.svg"))
     assert r["erreur"].startswith("6 calques à imprimer : 5 au plus")
+
+
+def test_calculer_avec_pause():
+    import io
+    import ezdxf
+    texte = (DESSINS / "vagues.svg").read_text()
+    r = json.loads(app.calculer(json.dumps({"pauses": ["A vagues"]}), texte, "vagues.svg"))
+    assert "erreur" not in r
+    assert r["pauses"][0]["calque"] == "A vagues" and r["pauses"][0]["libre"]
+    assert len(r["deplacements"]) == 1
+    # la buse attend sur la palette, levée de la hauteur d'approche au-dessus du béton
+    x, y, z = r["pauses"][0]["point"]
+    assert 0 <= x <= 1200 and 0 <= y <= 800 and z >= app.CONFIG["impression"]["hauteur_approche"]
+    titres = [c["titre"] for c in r["controles"]]
+    assert "Pauses : 1, sans passer au-dessus du béton" in titres
+    doc = ezdxf.read(io.StringIO(json.loads(app.exporter("dxf"))["texte"]))
+    assert {"DEPLACEMENTS", "PAUSES"} <= {c.dxf.name for c in doc.layers}
+    # le programme du robot ne sait pas encore faire les pauses : il le dit
+    assert "Pauses" in json.loads(app.exporter("script"))["erreur"]
+    # le robot ne dépose pas de cordon pendant le trajet à vide
+    bras = json.loads(app.robot())
+    assert -1 in bras["series"] and bras["hors_portee"] == []
