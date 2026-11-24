@@ -1,8 +1,9 @@
-"""Bilan des contrôles d'un motif, en texte, pour les pull requests.
+"""Bilan des contrôles d'un dessin, en texte (pour une pull request ou un essai rapide).
 
 Depuis la racine du dépôt :
-    python -m trame.bilan exemple                          (contour : haricot.dxf)
-    python -m trame.bilan groupe_1/vagues rectangle.svg
+    python -m trame.bilan dessins/vagues.svg
+    python -m trame.bilan mon_dessin.dxf
+Calques imprimés : ceux du départ, dans l'ordre alphabétique de leur nom.
 """
 
 import json
@@ -14,12 +15,14 @@ from trame.app import calculer
 SYMBOLES = {"ok": "OK", "alerte": "ATTENTION", "erreur": "ERREUR"}
 
 
-def bilan(motif, contour="haricot.dxf"):
-    chemin = pathlib.Path(__file__).resolve().parent.parent / "contours" / contour
-    r = json.loads(calculer(motif, "{}", chemin.read_text(encoding="utf-8"), contour))
+def bilan(chemin):
+    chemin = pathlib.Path(chemin)
+    r = json.loads(calculer("{}", chemin.read_text(encoding="utf-8"), chemin.name))
     if "erreur" in r:
         return "ERREUR : %s\n%s" % (r["erreur"], r.get("details", ""))
-    lignes = ["Motif %s sur %s (réglages par défaut)" % (motif, contour),
+    lignes = ["Dessin %s (réglages par défaut)" % chemin.name,
+              r["message_dessin"],
+              "Calques imprimés, dans l'ordre : %s" % ", ".join(r["calques"]),
               "Longueur de cordon : %.1f m, durée : environ %d min, béton : environ %s L"
               % (r["longueur"] / 1000, round(r["duree"] / 60), r["volume"]), ""]
     for c in r["controles"]:

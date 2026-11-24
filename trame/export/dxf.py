@@ -1,4 +1,4 @@
-"""Export DXF (3D) : un calque par série, calque des liaisons, chemin complet, palette.
+"""Export DXF (3D) : un calque par calque imprimé, liaisons, chemin complet, pauses, palette.
 
 Les hauteurs (z) sont les vraies hauteurs des bosses, en mm, sans exagération.
 """
@@ -7,19 +7,19 @@ import io
 
 import ezdxf
 
-from trame.export.commun import LETTRES, reperes_palette, separer_liaisons, sommets_des_bosses
+from trame.export.commun import attentes, lignes_et_liaisons, noms_des_calques, reperes_palette, sommets_des_bosses
 
 # couleurs AutoCAD (ACI) : gris, bleu, vert, magenta, orange — comme l'aperçu
 COULEURS = [8, 5, 3, 6, 30]
 
 
-def exporter_dxf(resultat, contour, palette, lane):
-    """Texte DXF du résultat de calculer_chemin, pour les étudiants ingénieurs."""
+def exporter_dxf(resultat, palette, noms=None):
+    """Texte DXF du résultat de enchainement.calculer_trace (hauteurs réelles, en mm)."""
     doc = ezdxf.new("R2010", setup=True)
     doc.header["$INSUNITS"] = 4            # millimètres
     msp = doc.modelspace()
     waves = resultat["waves"]
-    lignes, liaisons = separer_liaisons(waves, contour, lane)
+    lignes, liaisons = lignes_et_liaisons(resultat)
 
     def calque(nom, couleur, type_trait="Continuous"):
         doc.layers.add(nom, color=couleur, linetype=type_trait)
@@ -39,12 +39,10 @@ def exporter_dxf(resultat, contour, palette, lane):
     msp.add_text("Palette EPAL %g x %g mm - origine (0, 0) en bas a gauche" % (lx, ly),
                  height=15, dxfattribs=attributs).set_placement((0, -40))
 
-    attributs = calque("CONTOUR", 7, "DASHED")
-    msp.add_lwpolyline(list(contour.exterior.coords), close=True, dxfattribs=attributs)
 
     # une série par calque, dans l'ordre d'impression
     for i, morceaux in enumerate(lignes):
-        attributs = calque("SERIE_%s" % LETTRES[i], COULEURS[i % len(COULEURS)])
+        attributs = calque(noms_des_calques(len(lignes), noms)[i], COULEURS[i % len(COULEURS)])
         for poly in morceaux:
             msp.add_polyline3d(poly, dxfattribs=attributs)
 
@@ -56,9 +54,16 @@ def exporter_dxf(resultat, contour, palette, lane):
     for x, y, z in sommets_des_bosses(waves):
         msp.add_point((x, y, z), dxfattribs=attributs)
 
-    # le chemin complet, d'un seul tenant, dans l'ordre d'impression
+    # le parcours complet de la buse, d'un seul tenant, dans l'ordre d'impression
     if resultat["path"]:
         msp.add_polyline3d(resultat["path"], dxfattribs=calque("CHEMIN", 7))
+    # départ, pauses, fin : partie levée du parcours de la buse, et point d'attente
+    if attentes(resultat):
+        trajets, points = calque("DEPLACEMENTS", 8, "DASHED"), calque("PAUSES", 1)
+        for nom, trajet, (x, y, z) in attentes(resultat):
+            msp.add_polyline3d(trajet, dxfattribs=trajets)
+            msp.add_circle((x, y, z), 15, dxfattribs=points)
+            msp.add_text(nom, height=12, dxfattribs=points).set_placement((x + 20, y + 20, z))
     if resultat["jumps"]:
         attributs = calque("SAUTS", 1, "DASHED")
         for saut in resultat["jumps"]:
