@@ -422,18 +422,20 @@ def lire_dessin(texte, nom_fichier):
 # --- placement sur la palette -------------------------------------------------------
 
 
-def placer_dessin(courbes_par_calque, marge=20.0, palette=(1200.0, 800.0), taille=None, reference=None):
+def placer_dessin(courbes_par_calque, marge=20.0, palette=(1200.0, 800.0), echelle=None, reference=None):
     """Pose le dessin au centre de la palette, en gardant 'marge' mm sur les bords.
 
-    Sans 'taille' : à sa taille réelle s'il tient ; sinon tourné de 90° s'il tient ainsi ;
-    sinon réduit, dans le sens où il reste le plus grand.
-    taille (de 0 à 1) : part de la plus grande taille qui tient sur la palette.
+    Sans 'echelle' (nouveau dessin) : à sa taille réelle s'il tient ; sinon tourné de 90° s'il
+    tient ainsi ; sinon réduit, dans le sens où il reste le plus grand.
+    echelle : l'échelle choisie (1 = taille réelle). Elle est gardée telle quelle, même si le
+    dessin ne tient plus sur la palette (le message et les contrôles le disent) : l'échelle ne
+    change jamais toute seule.
     reference : courbes du dessin entier (calques éteints compris), qui décident de la taille et
     de la position ; par défaut, celles des calques placés. Ainsi, éteindre un calque ne change
     ni la taille ni la place des autres.
 
-    Renvoie {"courbes": mêmes listes que courbes_par_calque, placées ; "taille", "rotation",
-    "echelle", "dimensions" (du dessin entier), "message"}.
+    Renvoie {"courbes": mêmes listes que courbes_par_calque, placées ; "rotation", "echelle",
+    "echelle_max" (la plus grande qui tient), "tient", "dimensions" (du dessin entier), "message"}.
     """
     lignes = [LineString(c) for courbes in courbes_par_calque for c in courbes]
     if not lignes:
@@ -450,8 +452,9 @@ def placer_dessin(courbes_par_calque, marge=20.0, palette=(1200.0, 800.0), taill
     tourner = echelle_tourne > echelle_droit * 1.02
     echelle_max = echelle_tourne if tourner else echelle_droit
     tient = 1 - 1e-9   # évite qu'un arrondi fasse refuser un dessin qui tient pile
-    if taille is not None:
-        echelle = min(max(float(taille), 0.05), 1.0) * echelle_max
+    choisie = echelle is not None
+    if choisie:
+        echelle = max(float(echelle), 0.01)
         rotation = 90 if tourner and echelle > echelle_droit / tient else 0
     elif echelle_droit >= tient:
         rotation, echelle = 0, 1.0
@@ -482,9 +485,10 @@ def placer_dessin(courbes_par_calque, marge=20.0, palette=(1200.0, 800.0), taill
         "courbes": courbes,
         "rotation": rotation,
         "echelle": echelle,
-        "taille": echelle / echelle_max,
+        "echelle_max": echelle_max,
+        "tient": echelle <= echelle_max / tient,
         "dimensions": (round(xmax - xmin), round(ymax - ymin)),
-        "message": decrire(rotation, echelle, largeur, hauteur, choisie=taille is not None),
+        "message": decrire(rotation, echelle, largeur, hauteur, choisie=choisie, maximum=echelle_max),
     }
 
 
@@ -494,13 +498,16 @@ def pourcentage(echelle):
     return str(round(p)) if round(p) != 100 or abs(p - 100) < 0.05 else ("%.1f" % p).replace(".", ",")
 
 
-def decrire(rotation, echelle, largeur, hauteur, choisie=False):
+def decrire(rotation, echelle, largeur, hauteur, choisie=False, maximum=None):
     """Phrase qui explique ce qui est arrivé au dessin."""
     texte = "Dessin de %d × %d mm" % (round(largeur), round(hauteur))
     if rotation:
         texte += ", tourné de 90°"
+    if maximum is not None and echelle > maximum * (1 + 1e-9):
+        return texte + (", à %s %% de sa taille réelle : trop grand pour la palette, réduire la taille "
+                        "(%s %% au plus)." % (pourcentage(echelle), pourcentage(maximum)))
     if choisie:
-        return texte + ", mis à %s %% de sa taille réelle (taille choisie)." % pourcentage(echelle)
+        return texte + ", à %s %% de sa taille réelle (taille choisie)." % pourcentage(echelle)
     if abs(echelle - 1) < 1e-9:
         return texte + ", gardé à sa taille réelle."
     return texte + ", réduit à %s %% pour tenir sur la palette." % pourcentage(echelle)

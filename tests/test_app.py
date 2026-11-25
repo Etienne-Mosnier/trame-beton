@@ -167,9 +167,31 @@ def test_eteindre_un_calque_ne_change_pas_la_taille_des_autres():
         xs = [p[0] for w in a for p in w]
         return round(min(xs)), round(max(xs)), r["dimensions"]
     tous = ["A vagues", "B lignes"]
-    for taille in ({}, {"taille": 1.0}):
+    for taille in ({}, {"echelle": 1.2}):
         seul = calque_a(dict(taille, calques=["A vagues"], presents=tous))
         ensemble = calque_a(dict(taille, calques=tous, presents=tous))
         # même place (à 20 mm près : les prolongements d'entrée et de sortie changent), même taille
         assert seul[:2] == pytest.approx(ensemble[:2], abs=20)
         assert seul[2] == ensemble[2]
+
+
+
+def test_ajouter_un_calque_ne_change_pas_l_echelle():
+    # le labyrinthe seul, agrandi au maximum ; on ajoute la spirale, plus grande : il ne rétrécit pas
+    import re
+    texte = (DESSINS / "vagues.svg").read_text()
+    groupes = re.findall(r'<g inkscape:groupmode="layer".*?</g>', texte, re.S)
+    entete = texte[:texte.index("<g ")]
+    a = {"nom": "a.svg", "texte": entete + groupes[0] + "</svg>"}
+    b = {"nom": "b.svg", "texte": entete + groupes[1] + "</svg>"}
+    seul = json.loads(app.calculer("{}", json.dumps([a])))
+    echelle = seul["echelle_max"]
+    seul = json.loads(app.calculer(json.dumps({"echelle": echelle}), json.dumps([a])))
+    ensemble = json.loads(app.calculer(json.dumps({"echelle": echelle}), json.dumps([a, b])))
+    largeur = lambda r: (lambda xs: max(xs) - min(xs))([p[0] for w in r["waves"][r["calques"].index("a")] for p in w])
+    assert largeur(ensemble) == pytest.approx(largeur(seul), abs=40)          # même échelle (prolongements près)
+    assert ensemble["echelle"] == pytest.approx(echelle)
+    # B dépasse : rien n'est réduit en douce, le message et le contrôle le disent
+    if ensemble["echelle"] > ensemble["echelle_max"]:
+        assert "trop grand pour la palette" in ensemble["message_dessin"]
+        assert next(c for c in ensemble["controles"] if c["titre"] == "Sur la palette")["statut"] == "erreur"

@@ -144,7 +144,8 @@ def calculer(reglages_json, texte, nom=None):
     reglages_json : {"calques": [noms des calques à imprimer, dans l'ordre d'impression],
                      "presents": [noms des calques du dessin, imprimés ou non (sans ceux retirés)],
                      "pauses": [noms des calques après lesquels on fait une pause],
-                     "moteur": {nom: valeur}, "taille": 0 à 1 ou absent, "vitesse": mm/s}
+                     "moteur": {nom: valeur}, "echelle": 1 = taille réelle (absent : nouveau dessin),
+                     "vitesse": mm/s}
     Sans "calques" : les calques imprimés au départ, dans l'ordre alphabétique.
     Une pause après le dernier calque imprimé : entre deux couches.
     """
@@ -174,7 +175,7 @@ def calculer(reglages_json, texte, nom=None):
         # techniques et ceux retirés du dessin), pour qu'éteindre un calque ne bouge pas les autres
         presents = set(reglages.get("presents") or par_nom)
         entier = [c for nom, c in par_nom.items() if nom in presents and (c["imprime"] or nom in noms)]
-        place = placer_dessin([par_nom[n]["courbes"] for n in noms], marge, plateau, reglages.get("taille"),
+        place = placer_dessin([par_nom[n]["courbes"] for n in noms], marge, plateau, reglages.get("echelle"),
                               reference=[courbe for c in entier for courbe in c["courbes"]])
         apres = set(reglages.get("pauses") or [])
         r = calculer_trace(place["courbes"], largeur, moteur["amp"], moteur["d"], moteur["couches"],
@@ -199,7 +200,8 @@ def calculer(reglages_json, texte, nom=None):
             "palette": list(plateau),
             "calques": noms,
             "message_dessin": "%s %s." % (place["message"], dessin["message"].capitalize()),
-            "taille": round(place["taille"], 3),
+            "echelle": round(place["echelle"], 4),
+            "echelle_max": round(place["echelle_max"], 4),
             "dimensions": place["dimensions"],
             "waves": [[arrondir(v) for v in serie] for serie in r["waves"]],
             "path": arrondir(r["path"] or []),
