@@ -204,8 +204,12 @@ def test_placement_tourne_ou_reduit():
     assert haut["rotation"] == 90 and haut["echelle"] == 1 and "tourné" in haut["message"]
     grand = placer_dessin([[[(0, 0), (3000, 0)], [(0, 0), (0, 1000)]]], marge=20)
     assert grand["echelle"] == pytest.approx(1160 / 3000) and "réduit" in grand["message"]
-    choisi = placer_dessin([[[(0, 0), (300, 0)], [(0, 0), (0, 200)]]], marge=20, taille=0.5)
-    assert choisi["taille"] == pytest.approx(0.5)
+    choisi = placer_dessin([[[(0, 0), (300, 0)], [(0, 0), (0, 200)]]], marge=20, echelle=0.5)
+    assert choisi["echelle"] == 0.5 and choisi["dimensions"] == (150, 100) and choisi["tient"]
+    # une échelle trop grande est gardée telle quelle : le message dit de réduire
+    trop = placer_dessin([[[(0, 0), (300, 0)], [(0, 0), (0, 200)]]], marge=20, echelle=5)
+    assert trop["echelle"] == 5 and not trop["tient"]
+    assert "trop grand pour la palette" in trop["message"] and "380 % au plus" in trop["message"]
 
 
 def test_gabarits():
@@ -325,20 +329,22 @@ def test_fichiers_exportes_sans_plan_de_travail_centres():
 
 
 def test_placement_sur_le_dessin_entier():
-    # un calque éteint compte encore pour la taille et la place : les autres ne bougent pas
+    # un calque éteint compte encore pour la place : les autres ne bougent pas ; et à échelle
+    # donnée, la taille ne dépend jamais des autres calques
     grand, petit = [[(0, 0), (190, 190)]], [[(15, 15), (175, 175)]]
-    ensemble = placer_dessin([petit], marge=20, taille=1.0, reference=grand + petit)
-    seul = placer_dessin([petit], marge=20, taille=1.0)
-    deux = placer_dessin([grand, petit], marge=20, taille=1.0)
+    ensemble = placer_dessin([petit], marge=20, echelle=3.0, reference=grand + petit)
+    seul = placer_dessin([petit], marge=20, echelle=3.0)
+    deux = placer_dessin([grand, petit], marge=20, echelle=3.0)
     arrondi = lambda courbes: [[(round(x, 3), round(y, 3)) for x, y in c] for c in courbes]
     assert arrondi(ensemble["courbes"][0]) == arrondi(deux["courbes"][1])   # petit, grand éteint ou non
-    assert ensemble["dimensions"] == deux["dimensions"]
-    assert arrondi(seul["courbes"][0]) != arrondi(deux["courbes"][1])       # sans le grand : plus grand
+    assert ensemble["dimensions"] == deux["dimensions"] == (570, 570)
+    cote = lambda courbes: courbes[0][1][0] - courbes[0][0][0]
+    assert cote(seul["courbes"][0]) == pytest.approx(cote(deux["courbes"][1])) == pytest.approx(480)
 
 
 def test_pas_de_quart_de_tour_pour_presque_rien():
     # un dessin presque carré n'est pas tourné pour gagner moins de 2 %
-    presque_carre = placer_dessin([[[(0, 0), (160, 0), (160, 159), (0, 159)]]], marge=20, taille=1.0)
+    presque_carre = placer_dessin([[[(0, 0), (160, 0), (160, 159), (0, 159)]]], marge=20, echelle=4.75)
     assert presque_carre["rotation"] == 0
     # un dessin haut et étroit, lui, est tourné : il gagne beaucoup
-    assert placer_dessin([[[(0, 0), (0, 1000)], [(0, 0), (100, 0)]]], marge=20, taille=1.0)["rotation"] == 90
+    assert placer_dessin([[[(0, 0), (0, 1000)], [(0, 0), (100, 0)]]], marge=20)["rotation"] == 90
