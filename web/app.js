@@ -389,7 +389,9 @@ function calculerRobot() {
         groupeCordon.add(maille);
         robot.lignes.push({ maille, debut, fin: k - 1 });
       }
-      debut = k - 1;       // la série suivante repart du dernier point
+      // la série suivante repart du dernier point, sauf après un trajet buse levée (série -1) :
+      // le cordon commence alors en bas, là où la buse se pose
+      debut = serie === -1 ? k : k - 1;
       serie = d.series[k];
     }
   }
