@@ -322,3 +322,23 @@ def test_fichiers_exportes_sans_plan_de_travail_centres():
     assert "plan de travail" not in d["message"]
     # un seul fichier : rien ne bouge
     assert "plan de travail" not in lire_dessins([(svg_ajuste(80), "petit.svg")])["message"]
+
+
+def test_placement_sur_le_dessin_entier():
+    # un calque éteint compte encore pour la taille et la place : les autres ne bougent pas
+    grand, petit = [[(0, 0), (190, 190)]], [[(15, 15), (175, 175)]]
+    ensemble = placer_dessin([petit], marge=20, taille=1.0, reference=grand + petit)
+    seul = placer_dessin([petit], marge=20, taille=1.0)
+    deux = placer_dessin([grand, petit], marge=20, taille=1.0)
+    arrondi = lambda courbes: [[(round(x, 3), round(y, 3)) for x, y in c] for c in courbes]
+    assert arrondi(ensemble["courbes"][0]) == arrondi(deux["courbes"][1])   # petit, grand éteint ou non
+    assert ensemble["dimensions"] == deux["dimensions"]
+    assert arrondi(seul["courbes"][0]) != arrondi(deux["courbes"][1])       # sans le grand : plus grand
+
+
+def test_pas_de_quart_de_tour_pour_presque_rien():
+    # un dessin presque carré n'est pas tourné pour gagner moins de 2 %
+    presque_carre = placer_dessin([[[(0, 0), (160, 0), (160, 159), (0, 159)]]], marge=20, taille=1.0)
+    assert presque_carre["rotation"] == 0
+    # un dessin haut et étroit, lui, est tourné : il gagne beaucoup
+    assert placer_dessin([[[(0, 0), (0, 1000)], [(0, 0), (100, 0)]]], marge=20, taille=1.0)["rotation"] == 90

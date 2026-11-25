@@ -142,6 +142,7 @@ def calculer(reglages_json, texte, nom=None):
     """Calcul complet pour l'aperçu, à partir des fichiers importés (voir fichiers_de).
 
     reglages_json : {"calques": [noms des calques à imprimer, dans l'ordre d'impression],
+                     "presents": [noms des calques du dessin, imprimés ou non (sans ceux retirés)],
                      "pauses": [noms des calques après lesquels on fait une pause],
                      "moteur": {nom: valeur}, "taille": 0 à 1 ou absent, "vitesse": mm/s}
     Sans "calques" : les calques imprimés au départ, dans l'ordre alphabétique.
@@ -169,7 +170,12 @@ def calculer(reglages_json, texte, nom=None):
         # le dessin centré sur la palette, le bord du cordon à la marge de la palette
         largeur = beton["largeur_cordon"]
         marge = CONFIG["palette"]["marge"] + largeur / 2
-        place = placer_dessin([par_nom[n]["courbes"] for n in noms], marge, plateau, reglages.get("taille"))
+        # taille et position : celles du dessin entier (calques éteints compris, sauf les calques
+        # techniques et ceux retirés du dessin), pour qu'éteindre un calque ne bouge pas les autres
+        presents = set(reglages.get("presents") or par_nom)
+        entier = [c for nom, c in par_nom.items() if nom in presents and (c["imprime"] or nom in noms)]
+        place = placer_dessin([par_nom[n]["courbes"] for n in noms], marge, plateau, reglages.get("taille"),
+                              reference=[courbe for c in entier for courbe in c["courbes"]])
         apres = set(reglages.get("pauses") or [])
         r = calculer_trace(place["courbes"], largeur, moteur["amp"], moteur["d"], moteur["couches"],
                            pauses=[n in apres for n in noms], levee=CONFIG["impression"]["hauteur_approche"],
