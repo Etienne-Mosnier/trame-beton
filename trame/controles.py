@@ -79,7 +79,8 @@ def sur_la_palette(resultat, palette, marge):
 
 def liaisons_ajoutees(resultat, noms):
     """Liaisons droites ajoutées par le moteur : entre deux calques (choix « relié »), ou dans un
-    calque tracé en plusieurs morceaux (la règle est un calque = une seule ligne)."""
+    calque tracé en plusieurs morceaux (la règle est un calque = une seule ligne). Une liaison qui
+    passe par-dessus des cordons déjà imprimés se voit sur la trame (un cordon de plus, des bosses)."""
     liaisons = resultat.get("liaisons", [])
     longueur = sum(math.dist(a, b) for l in liaisons for a, b in zip(l["points"], l["points"][1:]))
     cordon = "%d mm" % round(longueur) if longueur < 1000 else ("%.1f m" % (longueur / 1000)).replace(".", ",")
@@ -87,14 +88,23 @@ def liaisons_ajoutees(resultat, noms):
     if not liaisons:
         return controle("Liaisons ajoutées : aucune", "ok", "Le dessin s'imprime d'un seul trait.")
     dans = [l for l in liaisons if l["dans_calque"]]
-    if not dans:
-        return controle(titre, "ok", "Une liaison droite entre deux calques qui se suivent.")
-    calques = sorted({noms[l["calque"]] for l in dans})
-    segments = [[p, q] for l in dans for p, q in zip(l["points"], l["points"][1:])]
-    return controle(titre, "alerte",
-                    "%d liaison(s) relient les morceaux d'un même calque (%s) : la règle est un calque = "
-                    "une seule ligne. Elles sont imprimées en ligne droite, montrées en rouge."
-                    % (len(dans), ", ".join("« %s »" % n for n in calques)), segments=segments)
+    dessus = [l for l in liaisons if l.get("survols")]
+    if not dans and not dessus:
+        return controle(titre, "ok", "Une liaison droite entre deux calques qui se suivent, sans passer "
+                                     "par-dessus le béton.")
+    messages = []
+    if dans:
+        calques = sorted({noms[l["calque"]] for l in dans})
+        messages.append("%d liaison(s) relient les morceaux d'un même calque (%s) : la règle est un calque = "
+                        "une seule ligne." % (len(dans), ", ".join("« %s »" % n for n in calques)))
+    if dessus:
+        messages.append("%d liaison(s) passent par-dessus des cordons déjà imprimés (%d fois) : un cordon droit "
+                        "de plus, avec ses bosses, qui se verra sur la trame. Le moteur n'a pas trouvé mieux ; "
+                        "pour l'éviter, changer l'ordre des calques, ou faire commencer ou finir les lignes "
+                        "ailleurs dans le dessin." % (len(dessus), sum(l["survols"] for l in dessus)))
+    montrees = [l for l in liaisons if l["dans_calque"] or l.get("survols")]
+    segments = [[p, q] for l in montrees for p, q in zip(l["points"], l["points"][1:])]
+    return controle(titre, "alerte", " ".join(messages) + " Liaisons en rouge.", segments=segments)
 
 
 def pauses_sans_survol(resultat, noms):
@@ -113,17 +123,29 @@ def pauses_sans_survol(resultat, noms):
 
 
 def depart_et_fin(resultat):
-    """Le béton coule déjà au départ, et encore à la fin : la buse attend à côté du dessin."""
+    """Le béton coule déjà au départ, et encore à la fin : la buse attend à côté du dessin, et ses
+    trajets buse levée ne passent ni au-dessus du béton imprimé, ni si possible au-dessus des
+    endroits où des cordons seront imprimés (le béton qui coule y tomberait)."""
     titre = "Départ et fin à côté du dessin"
-    bloques = [nom for cle, nom in (("depart", "le départ"), ("fin", "la fin"))
-               if resultat.get(cle) and not resultat[cle]["libre"]]
-    if not bloques:
-        return controle(titre, "ok", "La buse attend à côté du dessin que l'on démarre puis coupe la pompe.")
-    segments = [[a, b] for cle in ("depart", "fin") if resultat.get(cle) and not resultat[cle]["libre"]
-                for a, b in zip(resultat[cle]["trajet"], resultat[cle]["trajet"][1:])]
-    return controle(titre, "erreur",
-                    "Pour %s, aucun passage entre les lignes : la buse passerait au-dessus du béton (trajet "
-                    "en rouge). Changer l'ordre des calques." % " et ".join(bloques), segments=segments)
+    bloques = [cle for cle in ("depart", "fin") if resultat.get(cle) and not resultat[cle]["libre"]]
+    noms = {"depart": "le départ", "fin": "la fin"}
+
+    def segments_de(cles):
+        return [[a, b] for cle in cles for a, b in zip(resultat[cle]["trajet"], resultat[cle]["trajet"][1:])]
+
+    if bloques:
+        return controle(titre, "erreur",
+                        "Pour %s, aucun passage entre les lignes : la buse passerait au-dessus du béton (trajet "
+                        "en rouge). Changer l'ordre des calques." % " et ".join(noms[c] for c in bloques),
+                        segments=segments_de(bloques))
+    depart = resultat.get("depart")
+    if depart and not depart.get("evite_suite", True):
+        return controle(titre, "alerte",
+                        "Pour atteindre le début du premier calque, la buse passe au-dessus d'endroits où des "
+                        "cordons seront imprimés (trajet en rouge) : le béton qui coule déjà y tombe sur la "
+                        "palette. Pour l'éviter, commencer par un calque qui touche le bord du dessin (changer "
+                        "l'ordre des calques).", segments=segments_de(["depart"]))
+    return controle(titre, "ok", "La buse attend à côté du dessin que l'on démarre puis coupe la pompe.")
 
 
 def lignes_trop_proches(calques, ecart_min, pas=2.0):
