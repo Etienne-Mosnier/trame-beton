@@ -9,8 +9,8 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=d0c35d0863ca";
-import { creerBuse, creerRobot } from "./robot.js?v=d0c35d0863ca";
+import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=292694b3c68b";
+import { creerBuse, creerRobot } from "./robot.js?v=292694b3c68b";
 
 // une couleur par série, dans l'ordre d'impression
 // noir, orange, orange brûlé, orange clair, gris : le rouge est gardé pour les problèmes
@@ -668,7 +668,7 @@ function ouvrirDessin(fichiers, { garder = false, exemple = false, revenus = [] 
   for (const c of calques) if (!connus.includes(c.nom) && !c.imprime) dessin.eteints.add(c.nom);
   // au plus 5 calques imprimés : les suivants sont éteints
   imprimes().slice(MAX_CALQUES).forEach((n) => dessin.eteints.add(n));
-  if (!garder) delete reglages.taille;    // nouveau dessin : sa taille réelle s'il tient
+  if (!garder) delete reglages.echelle;   // nouveau dessin : sa taille réelle s'il tient
   memoriser();
   majTitreImport();
   majSuivi();
@@ -866,9 +866,12 @@ function calculer() {
     dessinerTrame(r, Number($("exageration").value));
     afficherBilan(r);
     majMaquette();
-    // curseur Taille : la part du maximum réellement utilisée, et la taille en mm
-    $("taille").value = Math.round(r.taille * 100);
-    $("valeur-taille").textContent = `${Math.round(r.taille * 100)} % : ${r.dimensions[0]} × ${r.dimensions[1]} mm`;
+    // curseur Taille : l'échelle (100 % = taille réelle), jusqu'à la plus grande qui tient. Elle
+    // est gardée : ajouter, retirer ou éteindre un calque ne la change plus
+    reglages.echelle = r.echelle;
+    $("taille").max = Math.max(5, Math.floor(r.echelle_max * 100));
+    $("taille").value = Math.round(r.echelle * 100);
+    $("valeur-taille").textContent = `${Math.round(r.echelle * 100)} % : ${r.dimensions[0]} × ${r.dimensions[1]} mm`;
     if (!$("vitesse-robot").value) $("vitesse-robot").value = r.vitesse;
     if (!dejaCadre) { if (avecRobot()) placer(null); vue3d(); dejaCadre = true; }
     // la nouvelle trame tout de suite ; le robot (plus long) juste après
@@ -1043,7 +1046,7 @@ async function demarrer() {
   $("export-gcode").onclick = () => telecharger("gcode");
   $("largeur-essai").addEventListener("input", majMaquette);
   $("taille").addEventListener("input", (e) => ($("valeur-taille").textContent = e.target.value + " %"));
-  $("taille").addEventListener("change", (e) => { reglages.taille = Number(e.target.value) / 100; calculer(); });
+  $("taille").addEventListener("change", (e) => { reglages.echelle = Number(e.target.value) / 100; calculer(); });
   // vitesse du robot : recalcul (durée, animation, programme) quand on valide le champ
   $("vitesse-robot").addEventListener("change", (e) => {
     const v = Number(e.target.value);
