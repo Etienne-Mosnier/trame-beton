@@ -287,3 +287,38 @@ def test_erreur_dans_un_des_fichiers():
     with pytest.raises(ValueError, match="« vide.svg »"):
         lire_dessins([(dxf_d_une_ligne((0, 0), (1, 1)), "a.dxf"),
                       ('<svg xmlns="http://www.w3.org/2000/svg"><text>x</text></svg>', "vide.svg")])
+
+
+def svg_ajuste(rayon, decalage=0.0):
+    """Comme « Exporter sous » d'Illustrator sans plan de travail : la page est ajustée au dessin
+    (un cercle), et le dessin est collé dans le coin de sa page, quelle que soit sa vraie position."""
+    cote = 2 * rayon + 10
+    return ('<svg id="Calque_1" data-name="Calque 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %g %g">'
+            '<defs><style>.cls-1{fill:none;stroke:#1d1d1b;stroke-width:10px;}</style></defs>'
+            '<circle class="cls-1" cx="%g" cy="%g" r="%g"/></svg>' % (cote, cote, cote / 2 + decalage, cote / 2, rayon))
+
+
+def centre(courbes):
+    xs = [p[0] for c in courbes for p in c]
+    ys = [p[1] for c in courbes for p in c]
+    return ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
+
+
+def test_fichiers_exportes_sans_plan_de_travail_centres():
+    # deux cercles de tailles différentes, chacun dans sa page ajustée : ils deviennent concentriques
+    d = lire_dessins([(svg_ajuste(200), "grand.svg"), (svg_ajuste(80), "petit.svg")])
+    assert centre(calque(d, "grand")["courbes"]) == pytest.approx(centre(calque(d, "petit")["courbes"]), abs=0.1)
+    assert "centrés les uns sur les autres" in d["message"]
+    # un DXF (sans page) garde sa place ; le SVG à page ajustée est centré sur lui
+    d = lire_dessins([(dxf_d_une_ligne((300, 400), (700, 400)), "ligne.dxf"), (svg_ajuste(80), "petit.svg")])
+    assert centre(calque(d, "petit")["courbes"]) == pytest.approx((500, 400), abs=0.1)
+    assert calque(d, "ligne")["courbes"][0] == [(300, 400), (700, 400)]
+    assert "« petit.svg » : exporté sans plan de travail" in d["message"]
+    # un SVG dont la page est plus grande que le dessin (plan de travail) garde sa position
+    page = ('<svg xmlns="http://www.w3.org/2000/svg" width="400mm" height="400mm" viewBox="0 0 400 400">'
+            '<circle cx="100" cy="300" r="50" fill="none" stroke="#000"/></svg>')
+    d = lire_dessins([(page, "page.svg"), (dxf_d_une_ligne((0, 0), (400, 400)), "diagonale.dxf")])
+    assert centre(calque(d, "page")["courbes"]) == pytest.approx((100, 100), abs=0.1)
+    assert "plan de travail" not in d["message"]
+    # un seul fichier : rien ne bouge
+    assert "plan de travail" not in lire_dessins([(svg_ajuste(80), "petit.svg")])["message"]
