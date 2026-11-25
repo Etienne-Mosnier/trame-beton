@@ -9,8 +9,8 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=2544e51f3271";
-import { creerBuse, creerRobot } from "./robot.js?v=2544e51f3271";
+import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=8edc8c1c8696";
+import { creerBuse, creerRobot } from "./robot.js?v=8edc8c1c8696";
 
 // une couleur par série, dans l'ordre d'impression
 // noir, orange, orange brûlé, orange clair, gris : le rouge est gardé pour les problèmes
@@ -389,7 +389,9 @@ function calculerRobot() {
         groupeCordon.add(maille);
         robot.lignes.push({ maille, debut, fin: k - 1 });
       }
-      debut = k - 1;       // la série suivante repart du dernier point
+      // la série suivante repart du dernier point, sauf après un trajet buse levée (série -1) :
+      // le cordon commence alors en bas, là où la buse se pose
+      debut = serie === -1 ? k : k - 1;
       serie = d.series[k];
     }
   }
