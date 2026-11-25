@@ -74,6 +74,31 @@ def test_liaisons_dans_un_calque_en_plusieurs_morceaux():
     assert controles.liaisons_ajoutees(seul, ["A", "B"])["statut"] == "ok"
 
 
+def test_liaison_par_dessus_le_beton_signalee():
+    # B est enfermé dans un carré imprimé avant lui, C est dehors : la liaison de B à C passe
+    # par-dessus le carré, et se voit
+    carre = [(0, 0), (300, 0), (300, 300), (0, 300), (0, 0)]
+    r = calculer_trace([[carre], [[(140, 150), (160, 150)]], [[(400, 0), (400, 300)]]], largeur_cordon=10, amp=5)
+    c = controles.liaisons_ajoutees(r, ["A", "B", "C"])
+    assert c["statut"] == "alerte" and "par-dessus des cordons déjà imprimés" in c["message"] and c["segments"]
+    # sans rien franchir : rien à signaler
+    a_cote = calculer_trace([[[(0, 0), (300, 0)]], [[(310, 10), (310, 300)]]], largeur_cordon=10, amp=5)
+    assert controles.liaisons_ajoutees(a_cote, ["A", "B"])["statut"] == "ok"
+
+
+def test_depart_au_dessus_des_cordons_a_venir_signale():
+    # le premier calque est enfermé dans un carré imprimé ensuite : pour l'atteindre, la buse
+    # (le béton coule déjà) passe au-dessus de l'endroit où sera le carré
+    carre = [(0, 0), (300, 0), (300, 300), (0, 300), (0, 0)]
+    r = calculer_trace([[[(140, 150), (160, 150)]], [carre]], largeur_cordon=10, amp=5)
+    c = controles.depart_et_fin(r)
+    assert c["statut"] == "alerte" and "début du premier calque" in c["message"] and c["segments"]
+    # dans l'autre ordre, le départ est au bord du dessin (c'est alors la fin qui est enfermée)
+    r = calculer_trace([[carre], [[(140, 150), (160, 150)]]], largeur_cordon=10, amp=5)
+    assert r["depart"]["evite_suite"] and not r["fin"]["libre"]
+    assert controles.depart_et_fin(r)["statut"] == "erreur"
+
+
 def test_controler_un_dessin():
     A = [[(0, 100), (400, 100)]]
     B = [[(200, 0), (200, 300)]]

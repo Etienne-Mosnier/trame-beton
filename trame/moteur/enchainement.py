@@ -6,8 +6,12 @@ temps, le programme ne peut pas arrêter la pompe. Le moteur :
    - « relié » : une liaison droite, imprimée, de la fin d'un calque au début du suivant ;
    - « pause » : la buse sort du dessin sans passer au-dessus du béton, attend « Continuer »
      à côté du dessin, puis revient (voir deplacements.py).
-   Départ et sens sont choisis tout seuls : liaisons courtes qui évitent de passer sur une ligne
-   déjà imprimée et, autour d'une pause, des bouts de calque faciles à atteindre de l'extérieur ;
+   Départ et sens sont choisis tout seuls (une boucle fermée peut commencer n'importe où) :
+   liaisons courtes qui évitent de passer sur une ligne déjà imprimée et, au départ, autour
+   d'une pause et à la fin, des bouts faciles à atteindre de l'extérieur. Passer buse levée
+   au-dessus du béton déjà imprimé (il coule encore) compte double d'une liaison imprimée par-dessus ;
+   au départ, passer au-dessus d'une ligne à venir compte moitié (le filet tombé sur la palette est
+   recouvert ensuite) ;
 2. répète le tout pour les couches 2, 3… (la trame réimprimée par-dessus elle-même) ;
 3. trace le trajet de chaque pause, et du départ et de la fin (tracer_pauses) : un petit
    prolongement imprimé pour sortir du cordon, un trajet buse levée, un petit prolongement pour
@@ -38,6 +42,9 @@ from trame.moteur.deplacements import trajet_de_pause
 TOL = 0.5      # mm : deux bouts plus proches que ça se touchent (courbe fermée, pas de liaison)
 PAS = 1.0      # mm : pas du calcul des hauteurs le long du chemin
 PENALITE = 200.0         # mm : passer sur une ligne déjà imprimée « coûte » 200 mm de liaison en plus
+PENALITE_LEVEE = 400.0   # mm : buse levée au-dessus d'une ligne imprimée (le béton qui coule tombe dessus)
+PENALITE_DEPART = 100.0  # mm : au départ, buse levée au-dessus d'une ligne à venir (un filet de béton
+                         # tombe sur la palette nue, puis le cordon le recouvre)
 LARGEUR_RECHERCHE = 16   # nombre de débuts de chemin gardés pendant la recherche du meilleur départ
 MARGE_PAUSE = 5.0        # mm : pendant une pause, le béton qui tombe de la buse reste à 5 mm des cordons
 
@@ -131,10 +138,17 @@ def facons(courbes, depuis, ecart, centre, nb_departs):
         return [enchainer_calque(courbes, depuis, ecart, (0, inverse)) for inverse in (False, True)]
     if len(courbes) == 1:
         if depuis is None:
-            # courbe fermée, départ libre : par son point le plus à l'extérieur du dessin
+            # courbe fermée, départ libre : elle peut commencer n'importe où. On essaie son point le
+            # plus à l'extérieur du dessin, et des points répartis tout le long.
+            boucle = LineString(courbes[0])
             loin = max(courbes[0], key=lambda p: math.dist(p, centre))
-            suite, arrivee = enchainer_calque(courbes, loin, ecart)
-            return [([m for m in suite if m[0] == "ligne"], arrivee)]
+            departs = [loin] + [boucle.interpolate(boucle.length * k / nb_departs).coords[0]
+                                for k in range(nb_departs)]
+            sorties = []
+            for depart in departs:
+                suite, arrivee = enchainer_calque(courbes, depart, ecart)
+                sorties.append(([m for m in suite if m[0] == "ligne"], arrivee))
+            return sorties
         return [enchainer_calque(courbes, depuis, ecart)]
     if depuis is None:
         return [enchainer_calque(courbes, None, ecart, d) for d in departs_possibles(courbes, nb_departs)]
@@ -157,12 +171,26 @@ def croisements(points, imprime):
     return n
 
 
-def cout_acces(point, imprime, enveloppe):
-    """Difficulté d'atteindre un point depuis l'extérieur du dessin (pour une pause) : la
-    distance jusqu'au tour du dessin, plus une pénalité par ligne imprimée à survoler."""
+def cout_acces(point, lignes, enveloppe, penalite=PENALITE_LEVEE):
+    """Difficulté d'atteindre un point depuis l'extérieur du dessin, buse levée (départ, pause,
+    fin) : la distance jusqu'au tour du dessin, plus une pénalité par ligne à survoler."""
     q = nearest_points(enveloppe.exterior, Point(point))[0]
     segment = [tuple(point[:2]), (q.x, q.y)]
-    return math.dist(*segment) + PENALITE * croisements(segment, imprime)
+    return math.dist(*segment) + penalite * croisements(segment, lignes)
+
+
+def cout_de_fin(arrivee, morceaux, imprime, enveloppe, couches, pause_entre_couches):
+    """Ce que coûte la fin du dernier calque : en sortir buse levée sans survoler le béton et,
+    s'il y a plusieurs couches, rejoindre le début de la couche suivante."""
+    debut = morceaux[0]["points"][0]
+    if couches > 1 and pause_entre_couches:
+        # sortir de la fin de cette couche, puis rejoindre son début, sans survoler le béton
+        return cout_acces(arrivee, imprime, enveloppe) + cout_acces(debut, imprime, enveloppe)
+    cout = cout_acces(arrivee, imprime, enveloppe)
+    if couches > 1:
+        # liaison imprimée vers le début de la couche suivante
+        cout += math.dist(arrivee, debut) + PENALITE * croisements([arrivee, debut], imprime)
+    return cout
 
 
 def enveloppe_du_dessin(calques):
@@ -171,18 +199,19 @@ def enveloppe_du_dessin(calques):
     return MultiLineString(lignes).convex_hull.buffer(1.0)
 
 
-def enchainer(calques, ecart, pauses=None, pause_entre_couches=False):
+def enchainer(calques, ecart, pauses=None, pause_entre_couches=False, couches=1):
     """calques : dans l'ordre d'impression, chacun une liste de courbes [(x, y), …].
     ecart    : distance laissée à la fin d'une courbe fermée (une largeur de cordon).
     pauses   : pauses[i] vrai -> pause après le calque i (sinon : relié).
-    pause_entre_couches : la couche suivante reprend après une pause ; son début et la fin de
-                          celle-ci doivent alors aussi être faciles à atteindre.
+    pause_entre_couches : la couche suivante reprend après une pause.
+    couches  : nombre de couches (la fin de l'une rejoint le début de la suivante).
 
     Renvoie la suite des morceaux, dans l'ordre d'impression :
         {"calque": numéro, "nature": "ligne", "liaison" ou "pause", "points": [(x, y), …]}
     (une pause a pour points [fin du calque, début du suivant]).
-    On garde, calque après calque, les meilleurs débuts de chemin (liaisons les plus courtes,
-    sans passer sur une ligne déjà imprimée ; bouts accessibles autour des pauses).
+    On garde, calque après calque, les meilleurs débuts de chemin : liaisons les plus courtes,
+    sans passer sur une ligne déjà imprimée ; départ, bouts autour des pauses et fin faciles à
+    atteindre de l'extérieur (le béton coule déjà au départ, et encore à la fin).
     """
     calques = [[c for c in courbes if len(c) >= 2] for courbes in calques]
     pauses = list(pauses or []) + [False] * len(calques)
@@ -193,6 +222,8 @@ def enchainer(calques, ecart, pauses=None, pause_entre_couches=False):
     centre = enveloppe.centroid.coords[0]
     grand = nb_courbes > 60
     nb_departs, largeur = (2, 2) if grand else (24, LARGEUR_RECHERCHE)
+    tout_le_dessin = [LineString(c) for courbes in calques for c in courbes]
+    dernier = max(i for i, courbes in enumerate(calques) if courbes)
 
     etats = [(0.0, [], None, [])]      # coût, morceaux, position de la buse, lignes imprimées
     precedent = None
@@ -204,6 +235,10 @@ def enchainer(calques, ecart, pauses=None, pause_entre_couches=False):
         for cout, morceaux, position, imprime in etats:
             for suite, arrivee in facons(courbes, None if pause else position, ecart, centre, nb_departs):
                 c, m, imp = cout, list(morceaux), list(imprime)
+                if precedent is None:
+                    # départ : la buse arrive de l'extérieur, le béton coule déjà ; il tombe sur la
+                    # palette, là où des cordons seront imprimés si l'on passe au-dessus du dessin
+                    c += cout_acces(suite[0][1][0], tout_le_dessin, enveloppe, PENALITE_DEPART)
                 if pause:
                     debut = suite[0][1][0]
                     c += cout_acces(position, imp, enveloppe) + cout_acces(debut, imp, enveloppe)
@@ -213,15 +248,14 @@ def enchainer(calques, ecart, pauses=None, pause_entre_couches=False):
                         c += longueur(pts) + PENALITE * croisements(pts, imp)
                     m.append({"calque": i, "nature": nature, "points": pts})
                     imp.append(LineString(pts))
+                if i == dernier:
+                    c += cout_de_fin(arrivee, m, imp, enveloppe, couches, pause_entre_couches)
                 nouveaux.append((c, m, arrivee, imp))
         nouveaux.sort(key=lambda e: e[0])
-        etats = nouveaux[:largeur]
+        # tous les départs possibles du premier calque sont gardés : le meilleur dépend aussi de
+        # la liaison vers le calque suivant
+        etats = nouveaux if precedent is None else nouveaux[:largeur]
         precedent = i
-    if pause_entre_couches:
-        # la couche suivante repart du même début : il faut pouvoir sortir de la fin de celle-ci,
-        # puis rejoindre son début, sans survoler ce qui est imprimé
-        etats = sorted(etats, key=lambda e: e[0] + cout_acces(e[2], e[3], enveloppe)
-                       + cout_acces(e[1][0]["points"][0], e[3], enveloppe))
     return etats[0][1]
 
 
@@ -379,7 +413,7 @@ def tracer_pauses(morceaux, enveloppe, cadre, rayon):
       - un prolongement imprimé, à hauteur de cordon, pour sortir du cordon (sauf au départ) :
         ajouté au bout de la ligne qui se termine ;
       - le trajet buse levée, qui ne pose pas de béton : {"nature": "pause", "role": "depart",
-        "pause" ou "fin", "route": [(x, y), …], "attente", "libre"} ;
+        "pause" ou "fin", "route": [(x, y), …], "attente", "libre", "evite_suite"} ;
       - un prolongement imprimé pour entrer dans le calque suivant (sauf à la fin) : ajouté au
         début de sa première ligne.
     Les trajets sont calculés dans l'ordre : chacun évite aussi les prolongements déjà imprimés.
@@ -392,7 +426,8 @@ def tracer_pauses(morceaux, enveloppe, cadre, rayon):
         i_sortie = 1 if t["sortie"] is not None else 0
         i_entree = len(points) - 2 if t["entree"] is not None else len(points) - 1
         pause = {"calque": m["calque"], "couche": m["couche"], "nature": "pause", "role": role,
-                 "route": points[i_sortie:i_entree + 1], "attente": t["attente"], "libre": t["libre"], "points": []}
+                 "route": points[i_sortie:i_entree + 1], "attente": t["attente"], "libre": t["libre"],
+                 "evite_suite": t["evite_suite"], "points": []}
         sortie = tuple(points[1]) if t["sortie"] is not None else None
         entree = tuple(points[-2]) if t["entree"] is not None else None
         return pause, sortie, entree
@@ -438,12 +473,13 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
         path         : tout le parcours de la buse (x, y, z), d'un seul tenant
         pauses       : {"point": point d'attente, "indice": sa place dans path, "calque", "couche",
                         "libre"} pour chaque pause
-        depart, fin  : {"point", "indice", "libre", "trajet"} : le parcours commence et finit à
-                       côté du dessin (le béton coule déjà au départ, et encore à la fin)
+        depart, fin  : {"point", "indice", "libre", "evite_suite", "trajet"} : le parcours commence
+                       et finit à côté du dessin (le béton coule déjà au départ, et encore à la fin)
         deplacements : partie levée du parcours de chaque pause (3D)
         waves        : pour chaque calque, ses morceaux 3D (lignes et liaisons), toutes couches
         lignes       : pour chaque calque, ses lignes 3D seulement
         liaisons     : liaisons droites ajoutées, 3D, avec "dans_calque" (calque en plusieurs morceaux)
+                       et "survols" (nombre de cordons déjà imprimés qu'elles franchissent)
         jumps        : [] ; controle, info
     """
     d = largeur_cordon if d is None else d
@@ -451,7 +487,7 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
     pauses = list(pauses or []) + [False] * len(calques)
     dernier = max((i for i, c in enumerate(calques) if c), default=0)
     pause_entre_couches = couches > 1 and pauses[dernier]
-    morceaux = enchainer(calques, largeur_cordon, pauses, pause_entre_couches)
+    morceaux = enchainer(calques, largeur_cordon, pauses, pause_entre_couches, couches)
     if not morceaux:
         return {"path": None, "pauses": [], "deplacements": [], "waves": [[] for _ in calques],
                 "lignes": [[] for _ in calques], "liaisons": [], "jumps": [], "hits": [],
@@ -475,6 +511,7 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
     waves, lignes, liaisons = [[] for _ in calques], [[] for _ in calques], []
     plus_haut = 0.0
     trajet_en_cours = None      # trajet levé que l'on dessine : il finit au point suivant
+    deja_imprime = []           # lignes et liaisons déjà imprimées, vues de dessus
     for k, m in enumerate(morceaux):
         if m["nature"] == "pause":
             # buse levée au-dessus de tout le béton imprimé
@@ -482,7 +519,8 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
             leve = [(x, y, hauteur) for x, y in m["route"]]
             attente = min(range(len(leve)), key=lambda i: math.dist(leve[i][:2], m["attente"]))
             trajet = ([path[-1]] if path else []) + leve
-            info = {"point": leve[attente], "indice": len(path) + attente, "libre": m["libre"], "trajet": trajet}
+            info = {"point": leve[attente], "indice": len(path) + attente, "libre": m["libre"],
+                    "evite_suite": m["evite_suite"], "trajet": trajet}
             if m["role"] == "pause":
                 deplacements.append(trajet)
                 infos_pauses.append(dict(info, calque=m["calque"], couche=m["couche"]))
@@ -503,7 +541,11 @@ def calculer_trace(calques, largeur_cordon=10.0, amp=5.0, d=None, couches=1, pau
             avant = morceaux[k - 1] if k > 0 else None
             dans_calque = bool(avant and avant["nature"] == "ligne" and avant["calque"] == m["calque"]
                                and avant["couche"] == m["couche"])
-            liaisons.append({"points": pts, "calque": m["calque"], "dans_calque": dans_calque})
+            # une liaison droite qui passe par-dessus des cordons déjà imprimés se voit (bosses)
+            survols = croisements([p[:2] for p in pts], deja_imprime)
+            liaisons.append({"points": pts, "calque": m["calque"], "dans_calque": dans_calque,
+                             "survols": survols})
+        deja_imprime.append(LineString([p[:2] for p in pts]))
         path += pts[1:] if path and math.dist(path[-1], pts[0]) < 1e-6 else pts
 
     n_dans = sum(1 for l in liaisons if l["dans_calque"])

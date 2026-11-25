@@ -94,6 +94,39 @@ def test_depart_au_plus_court():
     assert math.dist(*liaison["points"]) == pytest.approx(math.hypot(10, 10))
 
 
+def test_une_boucle_fermee_commence_pres_du_calque_suivant():
+    # A : un cercle (il peut commencer n'importe où) ; B part de sa droite. A doit commencer et
+    # finir à droite : une liaison courte, qui ne passe pas par-dessus le cercle
+    cercle = [(100 * math.cos(2 * math.pi * k / 72), 100 * math.sin(2 * math.pi * k / 72)) for k in range(73)]
+    r = calculer_trace([[cercle], [[(130, 0), (300, 0)]]], largeur_cordon=10, amp=AMP)
+    assert len(r["liaisons"]) == 1
+    liaison = [p[:2] for p in r["liaisons"][0]["points"]]
+    assert math.dist(liaison[0], liaison[-1]) < 40
+    assert r["liaisons"][0]["survols"] == 0
+
+
+def test_la_fin_est_au_bord_du_dessin():
+    # spirale tracée du bord vers le centre : le moteur l'imprime du centre vers le bord, pour que
+    # la buse sorte du dessin sans passer au-dessus du béton (il coule encore à la fin)
+    spirale = [((30 + 60 * t / (2 * math.pi)) * math.cos(t), (30 + 60 * t / (2 * math.pi)) * math.sin(t))
+               for t in [k * 2 * math.pi / 72 for k in range(72 * 3 + 1)]]
+    spirale.reverse()
+    r = calculer_trace([[spirale]], largeur_cordon=10, amp=AMP)
+    ligne = r["lignes"][0][0]
+    fin_du_dessin = ligne[-2][:2]                 # avant le prolongement de sortie
+    assert math.hypot(*fin_du_dessin) > 200
+    assert r["fin"]["libre"]
+
+
+def test_liaison_par_dessus_le_beton_comptee():
+    # B est enfermé dans un carré imprimé avant lui ; C est dehors : la liaison de B à C passe
+    # forcément par-dessus le carré
+    carre = [(0, 0), (300, 0), (300, 300), (0, 300), (0, 0)]
+    r = calculer_trace([[carre], [[(140, 150), (160, 150)]], [[(400, 0), (400, 300)]]], largeur_cordon=10, amp=AMP)
+    assert [l["survols"] for l in r["liaisons"]] == [0, 1]
+    assert r["fin"]["libre"]
+
+
 def test_couches_empilees():
     A = [[(0, 100), (400, 100)]]
     B = [[(200, 0), (200, 300)]]
