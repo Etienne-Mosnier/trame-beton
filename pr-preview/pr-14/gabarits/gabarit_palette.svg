@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gabarit trame-beton : palette EPAL 1200 x 800 mm.
+     Dessiner chaque calque (A, B, C...) d'une seule ligne, sans lever le crayon.
+     Le calque "palette" n'est pas imprime. -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+     width="1200mm" height="800mm" viewBox="0 0 1200 800">
+  <g inkscape:groupmode="layer" id="palette" inkscape:label="palette" sodipodi:insensitive="true">
+    <rect x="0" y="0" width="1200" height="800" fill="none" stroke="#9ca3af" stroke-width="2"/>
+    <rect x="25" y="25" width="1150" height="750" fill="none" stroke="#9ca3af"
+          stroke-width="1" stroke-dasharray="8 6"/>
+    <text x="25" y="830" font-family="sans-serif" font-size="18" fill="#6b7280">Palette 1200 × 800 mm : rester dans le cadre en pointillés (marge de 25 mm). Un calque = une ligne d'un seul trait.</text>
+  </g>
+  <g inkscape:groupmode="layer" id="calque_A" inkscape:label="A"/>
+  <g inkscape:groupmode="layer" id="calque_B" inkscape:label="B"/>
+  <g inkscape:groupmode="layer" id="calque_C" inkscape:label="C"/>
+</svg>
