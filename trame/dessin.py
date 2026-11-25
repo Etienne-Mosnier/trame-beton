@@ -5,9 +5,15 @@ Un calque = une série, que l'étudiant trace en une seule ligne (spirale, zigza
 
 Utilisation :
     dessin = lire_dessin(texte_du_fichier, "trame.dxf")
+    dessin = lire_dessins([(texte_1, "a_vagues.dxf"), (texte_2, "b_lignes.dxf")])   # plusieurs fichiers
     dessin["calques"] -> liste de calques, rangés dans l'ordre alphabétique de leur nom :
-        {"nom": "A vagues", "courbes": [[(x, y), …], …], "couleur": "#rrggbb",
+        {"nom": "A vagues", "courbes": [[(x, y), …], …], "couleur": "#rrggbb", "fichier": "trame.dxf",
          "imprime": True}     # False : calque masqué dans le fichier, cadre, palette…
+
+Plusieurs fichiers : certains étudiants mettent chaque calque dans son propre fichier. Les
+fichiers sont superposés tels quels (ils doivent venir de la même page, ou du même plan, dans le
+logiciel). Un fichier qui n'a qu'un calque prend toujours le nom du fichier (même seul) : ainsi
+le nom ne change pas quand on ajoute ou retire d'autres fichiers.
     place = placer_dessin([calque["courbes"] for calque in a_imprimer], marge, palette)
 
 Logiciels prévus : Rhino et AutoCAD (DXF), Illustrator et Inkscape (SVG). Unités : mm.
@@ -139,6 +145,9 @@ def lire_svg(texte, pas=2.0):
     ET.register_namespace("", SVG)
     svg = svgelements.SVG.parse(io.StringIO(ET.tostring(racine, encoding="unicode")), ppi=ppi)
     mm_par_px = 25.4 / ppi
+    # en SVG, y descend depuis le haut de la page ; on le compte depuis le bas, comme dans un DXF :
+    # un calque exporté en SVG et un autre en DXF, depuis la même page, se superposent
+    hauteur = float(svg.height) if isinstance(svg.height, (int, float)) else 0.0
 
     calques = [{"nom": nom, "masque": masque, "courbes": []} for nom, masque in reperes]
     sans_calque = None
@@ -156,13 +165,14 @@ def lire_svg(texte, pas=2.0):
         if trait is None and element.fill is not None and element.fill.value is not None:
             nb_remplies += 1   # forme remplie sans trait : peut-être un trait vectorisé
         couleur = (trait or element.fill or svgelements.Color("black")).hexrgb
-        for points in points_svg(element, mm_par_px, pas):
+        for points in points_svg(element, mm_par_px, hauteur, pas):
             calques[int(numero)]["courbes"].append((points, couleur))
     return calques, nb_remplies
 
 
-def points_svg(element, mm_par_px, pas):
-    """Une forme SVG -> listes de points (x, y) en mm, une par sous-chemin."""
+def points_svg(element, mm_par_px, hauteur, pas):
+    """Une forme SVG -> listes de points (x, y) en mm, une par sous-chemin (y depuis le bas de la
+    page, de hauteur 'hauteur' pixels)."""
     sortie = []
     for sous_chemin in svgelements.Path(element).as_subpaths():
         points = []
@@ -174,7 +184,7 @@ def points_svg(element, mm_par_px, pas):
                 n = max(2, math.ceil(longueur_approchee(segment) * mm_par_px / pas))
                 points.extend(segment.point(k / n) for k in range(1, n + 1))
         # en SVG, y descend : on le retourne pour que le dessin ne soit pas en miroir
-        points = [(p.x * mm_par_px, -p.y * mm_par_px) for p in points if p is not None]
+        points = [(p.x * mm_par_px, (hauteur - p.y) * mm_par_px) for p in points if p is not None]
         points = [p for k, p in enumerate(points) if k == 0 or p != points[k - 1]]
         if len(points) >= 2:
             sortie.append(points)
@@ -263,8 +273,10 @@ def lire_dxf(texte, ecart=0.1):
 # --- tout en un -----------------------------------------------------------------------
 
 
-def lire_dessin(texte, nom_fichier):
-    """Lit un fichier SVG ou DXF et renvoie ses calques (voir le début du module) et un message."""
+def lire_fichier(texte, nom_fichier):
+    """Calques d'un seul fichier, sans calque vide : [{"nom", "masque", "courbes": [(points,
+    couleur), …]}, …]. Un seul calque en plusieurs couleurs : chaque couleur devient un calque.
+    Renvoie (calques, nombre de formes remplies sans trait)."""
     extension = nom_fichier.lower().rsplit(".", 1)[-1]
     if extension == "svg":
         calques, nb_remplies = lire_svg(texte)
@@ -275,24 +287,55 @@ def lire_dessin(texte, nom_fichier):
 
     calques = [c for c in calques if c["courbes"]]
     if not calques:
-        raise ValueError("Aucune ligne dans le fichier : il ne contient que du texte, des images "
-                         "ou des hachures.")
-    # tout sur un seul calque, mais en plusieurs couleurs : chaque couleur devient un calque
+        raise ValueError("Aucune ligne dans « %s » : il ne contient que du texte, des images "
+                         "ou des hachures." % nom_fichier)
     if len(calques) == 1 and len({couleur for _, couleur in calques[0]["courbes"]}) > 1:
         seul = calques[0]
         couleurs = sorted({couleur for _, couleur in seul["courbes"]})
         calques = [{"nom": "Couleur %s" % couleur, "masque": seul["masque"],
                     "courbes": [(p, c) for p, c in seul["courbes"] if c == couleur]} for couleur in couleurs]
+    return calques, nb_remplies
 
-    # noms : jamais vides, jamais deux fois le même
-    vus = set()
+
+def nom_court(nom_fichier):
+    """« dossier/A vagues.dxf » -> « A vagues »."""
+    return re.split(r"[\\/]", nom_fichier)[-1].rsplit(".", 1)[0]
+
+
+def lire_dessins(fichiers):
+    """Lit un ou plusieurs fichiers SVG ou DXF, fichiers = [(texte, nom du fichier), …], et réunit
+    leurs calques (voir le début du module). Renvoie {"calques", "fichiers", "message"}."""
+    plusieurs = len(fichiers) > 1
+    calques, nb_remplies, boites = [], 0, []
+    for texte, nom_fichier in fichiers:
+        du_fichier, n = lire_fichier(texte, nom_fichier)
+        nb_remplies += n
+        # un calque par fichier : le fichier porte le nom du calque (le calque, souvent « 0 » ou
+        # « Calque 1 », ne dit rien) ; sauf un cadre ou une palette, qui garde son nom
+        if len(du_fichier) == 1 and simplifier_nom(du_fichier[0]["nom"]) not in NON_IMPRIMES:
+            du_fichier[0]["nom"] = nom_court(nom_fichier)
+        for calque in du_fichier:
+            calque["fichier"] = nom_fichier
+        boites.append((nom_fichier, MultiLineString([LineString(courbe) for c in du_fichier
+                                                     for courbe, _ in c["courbes"]]).envelope.buffer(1.0)))
+        calques += du_fichier
+
+    # noms : jamais vides, jamais deux fois le même (le même nom dans deux fichiers : le nom
+    # du fichier entre parenthèses)
     for numero, calque in enumerate(calques):
-        nom = calque["nom"] or "Calque %d" % (numero + 1)
-        base, k = nom, 2
-        while nom in vus:
-            nom, k = "%s (%d)" % (base, k), k + 1
-        vus.add(nom)
-        calque["nom"] = nom
+        calque["nom"] = calque["nom"] or "Calque %d" % (numero + 1)
+    if plusieurs:
+        tous = [c["nom"] for c in calques]
+        doublons = {nom for nom in tous if tous.count(nom) > 1}
+        for calque in calques:
+            if calque["nom"] in doublons:
+                calque["nom"] = "%s (%s)" % (calque["nom"], nom_court(calque["fichier"]))
+    vus = set()
+    for calque in calques:
+        base, k = calque["nom"], 2
+        while calque["nom"] in vus:
+            calque["nom"], k = "%s (%d)" % (base, k), k + 1
+        vus.add(calque["nom"])
 
     sortie = []
     for calque in sorted(calques, key=lambda c: cle_de_tri(c["nom"])):
@@ -301,13 +344,27 @@ def lire_dessin(texte, nom_fichier):
             "nom": calque["nom"],
             "courbes": [p for p, _ in calque["courbes"]],
             "couleur": max(set(couleurs), key=couleurs.count),
+            "fichier": calque["fichier"],
             "imprime": not calque["masque"] and simplifier_nom(calque["nom"]) not in NON_IMPRIMES,
         })
     message = "%d calque%s" % (len(sortie), "s" if len(sortie) > 1 else "")
+    if plusieurs:
+        message = "%d fichiers, %s" % (len(fichiers), message)
+        # un fichier qui ne recouvre aucun autre : sans doute exporté avec une autre page
+        for nom_fichier, boite in boites:
+            autres = [b for n, b in boites if n != nom_fichier]
+            if not any(boite.intersects(b) for b in autres):
+                message += (" ; « %s » ne recouvre aucun autre fichier : vérifier que tous les fichiers "
+                            "viennent de la même page (ou du même plan de travail)" % nom_fichier)
     if nb_remplies:
         message += (" ; %d forme(s) remplie(s) sans trait : si ce sont des traits vectorisés, "
                     "chaque ligne sera imprimée deux fois (son contour)" % nb_remplies)
-    return {"calques": sortie, "message": message}
+    return {"calques": sortie, "fichiers": [nom for _, nom in fichiers], "message": message}
+
+
+def lire_dessin(texte, nom_fichier):
+    """Lit un seul fichier SVG ou DXF (voir lire_dessins)."""
+    return lire_dessins([(texte, nom_fichier)])
 
 
 # --- placement sur la palette -------------------------------------------------------

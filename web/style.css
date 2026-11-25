@@ -230,6 +230,11 @@ p.erreur, span.erreur { color: var(--erreur); white-space: pre-wrap; }
   display: grid; place-items: center; border: none; background: none; color: var(--noir);
 }
 .calque .oeil:hover { background: var(--orange-pale); color: var(--noir); }
+.calque .retirer {
+  width: 22px; height: 24px; padding: 0; flex: none; border: none; background: none;
+  color: var(--gris); font-size: 16px; line-height: 1; font-weight: 500;
+}
+.calque .retirer:hover { background: #fee2e2; color: var(--erreur); }
 .calque.eteint .nom, .calque.eteint .info, .calque.eteint .oeil { color: var(--gris); }
 .calque.eteint .nom { font-weight: 500; text-decoration: line-through; }
 .calque.eteint .pastille { border-color: var(--gris); }
