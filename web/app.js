@@ -15,7 +15,8 @@ import { creerBuse, creerRobot } from "./robot.js";
 // une couleur par série, dans l'ordre d'impression
 // noir, orange, orange brûlé, orange clair, gris : le rouge est gardé pour les problèmes
 const COULEURS = ["#111111", "#f97316", "#9a3412", "#fdba74", "#737373"];
-const LARGEUR_CORDON = 4; // mm, pour le dessin seulement
+// dimensions du cordon (mm) : celles réglées dans le panneau, reçues à chaque calcul
+const cordonReel = { largeur: 10, hauteur: 5 };
 
 const $ = (id) => document.getElementById(id);
 const etat = $("etat");
@@ -172,6 +173,83 @@ function trait(points, couleur, epaisseur, pointilles = false) {
   return ligne;
 }
 
+// Section d'un cordon : une « pilule » (rectangle aux coins arrondis, demi-cercles aux bouts)
+// de la largeur et de la hauteur du cordon. Points (u en travers, v vers le haut), v de 0 à hauteur.
+const POINTS_PAR_QUART = 4;
+function sectionPilule(largeur, hauteur) {
+  const r = Math.min(largeur, hauteur) / 2;
+  const cu = largeur / 2 - r, bas = r, haut = hauteur - r;
+  const coins = [[cu, bas, -90], [cu, haut, 0], [-cu, haut, 90], [-cu, bas, 180]];
+  const points = [];
+  for (const [u0, v0, debut] of coins) {
+    for (let k = 0; k <= POINTS_PAR_QUART; k++) {
+      const a = THREE.MathUtils.degToRad(debut + (90 * k) / POINTS_PAR_QUART);
+      points.push([u0 + r * Math.cos(a), v0 + r * Math.sin(a)]);
+    }
+  }
+  return points;
+}
+
+// Un cordon de béton en volume : la section en pilule poussée le long du chemin. Le chemin passe
+// sous le cordon, au milieu de sa largeur ; la section reste perpendiculaire au chemin (elle se
+// penche dans les montées des bosses). Pour l'animation, la géométrie se dessine segment par
+// segment (userData.parSegment : indices d'un segment).
+function cordon(points, largeur, hauteur, couleur) {
+  const profil = sectionPilule(largeur, hauteur);
+  const m = profil.length, n = points.length;
+  const positions = new Float32Array((n * m + 2) * 3);
+  const haut = new THREE.Vector3(0, 0, 1), T = new THREE.Vector3(), N = new THREE.Vector3(0, 1, 0);
+  const B = new THREE.Vector3(), cote = new THREE.Vector3();
+  const centres = [];
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    const a = points[Math.max(i - 1, 0)], b = points[Math.min(i + 1, n - 1)];
+    T.set(b[0] - a[0], b[1] - a[1], (b[2] ?? 0) - (a[2] ?? 0));
+    if (T.lengthSq() > 1e-12) {
+      T.normalize();
+      cote.crossVectors(haut, T);
+      if (cote.lengthSq() > 1e-9) N.copy(cote.normalize());
+    }
+    B.crossVectors(T, N).normalize();
+    const [x, y, z] = [points[i][0], points[i][1], points[i][2] ?? 0];
+    for (const [u, v] of profil) {
+      positions[k++] = x + N.x * u + B.x * v;
+      positions[k++] = y + N.y * u + B.y * v;
+      positions[k++] = z + N.z * u + B.z * v;
+    }
+    if (i === 0 || i === n - 1) centres.push([x + B.x * hauteur / 2, y + B.y * hauteur / 2, z + B.z * hauteur / 2]);
+  }
+  for (const c of centres) { positions[k++] = c[0]; positions[k++] = c[1]; positions[k++] = c[2]; }
+  // les segments d'abord (dans l'ordre du chemin), puis les deux bouts
+  const indices = [];
+  for (let i = 0; i < n - 1; i++) {
+    for (let j = 0; j < m; j++) {
+      const a = i * m + j, b = i * m + ((j + 1) % m), c = (i + 1) * m + ((j + 1) % m), d = (i + 1) * m + j;
+      indices.push(a, b, c, a, c, d);
+    }
+  }
+  const debut = n * m, fin = n * m + 1;
+  for (let j = 0; j < m; j++) {
+    indices.push(debut, (j + 1) % m, j);
+    indices.push(fin, (n - 1) * m + j, (n - 1) * m + ((j + 1) % m));
+  }
+  const geometrie = new THREE.BufferGeometry();
+  geometrie.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometrie.setIndex(indices);
+  geometrie.computeVertexNormals();
+  const maille = new THREE.Mesh(geometrie, new THREE.MeshStandardMaterial({
+    color: couleur, roughness: 0.8, metalness: 0, side: THREE.DoubleSide }));
+  maille.userData.parSegment = m * 6;
+  maille.userData.segments = n - 1;
+  return maille;
+}
+
+// cordon dessiné jusqu'au segment 'segments' (animation du robot) ; tout, bouts compris, à la fin
+function devoiler(maille, segments) {
+  const tout = segments >= maille.userData.segments;
+  maille.geometry.setDrawRange(0, tout ? Infinity : Math.max(0, segments) * maille.userData.parSegment);
+}
+
 function dessinerPalette() {
   vider(groupePalette);
   const [lx, ly] = palette;
@@ -189,17 +267,30 @@ function dessinerPalette() {
   groupePalette.add(plateau, bache);
 }
 
+// les cordons en volume, aux dimensions réglées ; « Bosses exagérées » étire la trame en hauteur
 function dessinerTrame(resultat, exageration) {
   vider(groupeTrame);
   materiaux.length = 0;
   resultat.waves.forEach((serie, i) => {
     for (const vague of serie) {
       if (vague.length < 2) continue;
-      const points = vague.map((p) => [p[0], p[1], p[2] * exageration + LARGEUR_CORDON / 4]);
-      groupeTrame.add(trait(points, COULEURS[i % COULEURS.length], LARGEUR_CORDON));
+      groupeTrame.add(cordon(vague, cordonReel.largeur, cordonReel.hauteur, COULEURS[i % COULEURS.length]));
     }
   });
-  // pauses, départ et fin : parcours de la buse levée (pointillés gris) et point d'attente
+  exagerer(resultat, exageration);
+  redimensionner();
+}
+
+// « Bosses exagérées » : la trame et le cordon du robot étirés en hauteur ; pauses et alertes suivent
+function exagerer(resultat, exageration) {
+  groupeTrame.scale.z = groupeCordon.scale.z = exageration;
+  dessinerPauses(resultat, exageration);
+  dessinerAlertes(resultat, exageration);
+  if (robot.donnees) marquer(groupeAlertesRobot, robot.donnees.alertes, exageration);
+}
+
+// pauses, départ et fin : parcours de la buse levée (pointillés gris) et point d'attente
+function dessinerPauses(resultat, exageration) {
   vider(groupePauses);
   const attente = (trajet, point, nom) => {
     const points = trajet.map((p, j) => [p[0], p[1], j === 0 || j === trajet.length - 1 ? p[2] * exageration : p[2]]);
@@ -215,14 +306,9 @@ function dessinerTrame(resultat, exageration) {
   (resultat.deplacements || []).forEach((dep, k) => attente(dep, resultat.pauses[k].point, `pause ${k + 1}`));
   if (resultat.depart) attente(resultat.depart.trajet, resultat.depart.point, "départ");
   if (resultat.fin) attente(resultat.fin.trajet, resultat.fin.point, "fin");
-  for (const saut of resultat.jumps) {
-    groupeTrame.add(trait(saut.map((p) => [p[0], p[1], p[2] * exageration + 2]), "#000000", 2, true));
-  }
-  dessinerAlertes(resultat, exageration);
-  redimensionner();
 }
 
-// les endroits signalés par les contrôles : anneaux et traits rouges, un peu au-dessus
+// les endroits signalés par les contrôles : anneaux et traits rouges, au-dessus des cordons
 function dessinerAlertes(resultat, exageration) {
   marquer(groupeAlertes, resultat.controles, exageration);
 }
@@ -234,14 +320,14 @@ function marquer(groupe, liste, exageration) {
   for (const c of liste) {
     if (c.statut === "ok") continue;
     for (const s of c.segments || []) {
-      groupe.add(trait(s.map((p) => [p[0], p[1], (p[2] ?? 0) * exageration + 3]), rouge, 6));
+      groupe.add(trait(s.map((p) => [p[0], p[1], ((p[2] ?? 0) + cordonReel.hauteur) * exageration + 2]), rouge, 6));
     }
     for (const p of c.points) {
       const anneau = new THREE.Mesh(
         new THREE.RingGeometry(9, 13, 24),
         new THREE.MeshBasicMaterial({ color: rouge, side: THREE.DoubleSide }),
       );
-      anneau.position.set(p[0], p[1], 4);
+      anneau.position.set(p[0], p[1], cordonReel.hauteur * exageration + 2);
       groupe.add(anneau);
     }
   }
@@ -289,18 +375,19 @@ function calculerRobot() {
   robot.modele.tool0.clear();
   robot.modele.tool0.add(creerBuse(d.tcp));
 
-  // cordon : une ligne par série, sur la plage de points de cette série (sans approche/dégagement)
+  // cordon : un volume par série, sur la plage de points de cette série (sans approche/dégagement)
   vider(groupeCordon);
   robot.lignes = [];
   const exageration = Number($("exageration").value);
+  groupeCordon.scale.z = exageration;
   let debut = 1, serie = d.series[1];
   for (let k = 2; k <= d.points.length - 1; k++) {
     if (k === d.points.length - 1 || d.series[k] !== serie) {
-      const points = d.points.slice(debut, k).map((q) => [q[0], q[1], q[2] * exageration + LARGEUR_CORDON / 4]);
+      const points = d.points.slice(debut, k);
       if (points.length > 1 && serie >= 0) {
-        const ligne = trait(points, COULEURS[serie % COULEURS.length], LARGEUR_CORDON);
-        groupeCordon.add(ligne);
-        robot.lignes.push({ ligne, debut, fin: k - 1 });
+        const maille = cordon(points, cordonReel.largeur, cordonReel.hauteur, COULEURS[serie % COULEURS.length]);
+        groupeCordon.add(maille);
+        robot.lignes.push({ maille, debut, fin: k - 1 });
       }
       debut = k - 1;       // la série suivante repart du dernier point
       serie = d.series[k];
@@ -341,9 +428,7 @@ function poserRobot(t) {
   // bras teinté en rouge quand la pose actuelle déclenche une alerte
   const rouge = robot.enAlerte?.has(bas) && $("montrer-alertes").checked;
   for (const m of robot.materiaux) m.emissive?.set(rouge ? "#b00020" : "#000000");
-  for (const { ligne, debut, fin } of robot.lignes) {
-    ligne.geometry.instanceCount = Math.max(0, Math.min(bas, fin) - debut);
-  }
+  for (const { maille, debut, fin } of robot.lignes) devoiler(maille, Math.min(bas, fin) - debut);
   $("temps").value = t;
   const s = Math.round(t);
   $("valeur-temps").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -770,6 +855,9 @@ function calculer() {
     }
     dernierResultat = r;
     palette = r.palette;
+    // les cordons de l'aperçu ont les dimensions réglées dans le panneau
+    cordonReel.largeur = r.beton.largeur_cordon;
+    cordonReel.hauteur = r.beton.hauteur_couche;
     positionnerPalette();
     dessinerPalette();
     dessinerTrame(r, Number($("exageration").value));
@@ -964,8 +1052,7 @@ async function demarrer() {
   });
   $("exageration").addEventListener("input", (e) => {
     $("valeur-exageration").textContent = "× " + e.target.value;
-    if (dernierResultat) dessinerTrame(dernierResultat, Number(e.target.value));
-    if (robot.donnees) calculerRobot();
+    if (dernierResultat) exagerer(dernierResultat, Number(e.target.value));
   });
 
   try {
