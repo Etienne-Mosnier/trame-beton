@@ -168,7 +168,8 @@ def test_eteindre_un_calque_ne_change_pas_la_taille_des_autres():
         return round(min(xs)), round(max(xs)), r["dimensions"]
     tous = ["A vagues", "B lignes"]
     for taille in ({}, {"taille": 1.0}):
-        assert calque_a(dict(taille, calques=["A vagues"], presents=tous)) == \
-            pytest.approx(calque_a(dict(taille, calques=tous, presents=tous)), abs=20)
-        assert calque_a(dict(taille, calques=["A vagues"], presents=tous))[2] == \
-            calque_a(dict(taille, calques=tous, presents=tous))[2]
+        seul = calque_a(dict(taille, calques=["A vagues"], presents=tous))
+        ensemble = calque_a(dict(taille, calques=tous, presents=tous))
+        # même place (à 20 mm près : les prolongements d'entrée et de sortie changent), même taille
+        assert seul[:2] == pytest.approx(ensemble[:2], abs=20)
+        assert seul[2] == ensemble[2]
