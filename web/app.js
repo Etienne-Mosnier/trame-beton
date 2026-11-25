@@ -9,8 +9,8 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=8edc8c1c8696";
-import { creerBuse, creerRobot } from "./robot.js?v=8edc8c1c8696";
+import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=d0c35d0863ca";
+import { creerBuse, creerRobot } from "./robot.js?v=d0c35d0863ca";
 
 // une couleur par série, dans l'ordre d'impression
 // noir, orange, orange brûlé, orange clair, gris : le rouge est gardé pour les problèmes
@@ -847,7 +847,8 @@ function calculer() {
   // on laisse le navigateur afficher « Calcul… » avant de bloquer pendant le calcul
   setTimeout(() => {
     const debut = performance.now();
-    const r = JSON.parse(app.calculer(JSON.stringify({ ...reglages, calques: imprimes(), pauses: [...dessin.pauses] }),
+    const r = JSON.parse(app.calculer(JSON.stringify({ ...reglages, calques: imprimes(), presents: dessin.ordre,
+                                                       pauses: [...dessin.pauses] }),
                                       pourPython(dessin.fichiers)));
     if (r.erreur) {
       etat.textContent = "";
