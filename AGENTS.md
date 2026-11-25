@@ -38,6 +38,9 @@ dessin DXF / SVG ──> CALQUES (trame/dessin.py) : un calque = une ligne d'un 
   compté depuis le bas de la page, comme en DXF) ; un fichier d'un seul calque prend le nom du fichier.
 - **Ordre d'impression** = ordre de la liste dans l'aperçu (alphabétique au départ, glisser pour
   le changer). Départ et sens de chaque calque sont choisis par le moteur.
+- **Taille et position sur la palette** : celles du dessin entier, calques éteints compris (sauf
+  les calques techniques et ceux retirés avec ×) : éteindre un calque ne bouge pas les autres.
+  Un dessin n'est tourné de 90° que s'il y gagne au moins 2 % de taille.
 - **Bosses** : à chaque croisement, le passage le plus récent monte au-dessus des plus anciens,
   sur toute la largeur du cordon franchi, y compris quand une ligne se recroise elle-même. Pente :
   une hauteur de couche sur une largeur de cordon. Des cordons trop serrés pour que la buse

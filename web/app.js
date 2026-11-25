@@ -847,7 +847,8 @@ function calculer() {
   // on laisse le navigateur afficher « Calcul… » avant de bloquer pendant le calcul
   setTimeout(() => {
     const debut = performance.now();
-    const r = JSON.parse(app.calculer(JSON.stringify({ ...reglages, calques: imprimes(), pauses: [...dessin.pauses] }),
+    const r = JSON.parse(app.calculer(JSON.stringify({ ...reglages, calques: imprimes(), presents: dessin.ordre,
+                                                       pauses: [...dessin.pauses] }),
                                       pourPython(dessin.fichiers)));
     if (r.erreur) {
       etat.textContent = "";

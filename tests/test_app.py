@@ -157,3 +157,18 @@ def test_bilan_de_plusieurs_fichiers(tmp_path):
     (tmp_path / "a.dxf").write_text((DESSINS / "spirales.dxf").read_text())
     texte = bilan(tmp_path / "a.dxf", DESSINS / "vagues.svg")
     assert "Dessin a.dxf, vagues.svg" in texte and "2 fichiers" in texte
+
+
+def test_eteindre_un_calque_ne_change_pas_la_taille_des_autres():
+    texte = (DESSINS / "vagues.svg").read_text()
+    def calque_a(reglages):
+        r = json.loads(app.calculer(json.dumps(reglages), texte, "vagues.svg"))
+        a = r["waves"][r["calques"].index("A vagues")]
+        xs = [p[0] for w in a for p in w]
+        return round(min(xs)), round(max(xs)), r["dimensions"]
+    tous = ["A vagues", "B lignes"]
+    for taille in ({}, {"taille": 1.0}):
+        assert calque_a(dict(taille, calques=["A vagues"], presents=tous)) == \
+            pytest.approx(calque_a(dict(taille, calques=tous, presents=tous)), abs=20)
+        assert calque_a(dict(taille, calques=["A vagues"], presents=tous))[2] == \
+            calque_a(dict(taille, calques=tous, presents=tous))[2]

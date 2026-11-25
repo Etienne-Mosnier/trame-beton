@@ -422,50 +422,62 @@ def lire_dessin(texte, nom_fichier):
 # --- placement sur la palette -------------------------------------------------------
 
 
-def placer_dessin(courbes_par_calque, marge=20.0, palette=(1200.0, 800.0), taille=None):
+def placer_dessin(courbes_par_calque, marge=20.0, palette=(1200.0, 800.0), taille=None, reference=None):
     """Pose le dessin au centre de la palette, en gardant 'marge' mm sur les bords.
 
     Sans 'taille' : à sa taille réelle s'il tient ; sinon tourné de 90° s'il tient ainsi ;
     sinon réduit, dans le sens où il reste le plus grand.
     taille (de 0 à 1) : part de la plus grande taille qui tient sur la palette.
+    reference : courbes du dessin entier (calques éteints compris), qui décident de la taille et
+    de la position ; par défaut, celles des calques placés. Ainsi, éteindre un calque ne change
+    ni la taille ni la place des autres.
 
     Renvoie {"courbes": mêmes listes que courbes_par_calque, placées ; "taille", "rotation",
-    "echelle", "dimensions", "message"}.
+    "echelle", "dimensions" (du dessin entier), "message"}.
     """
     lignes = [LineString(c) for courbes in courbes_par_calque for c in courbes]
     if not lignes:
         raise ValueError("Aucun calque à imprimer : rallumer au moins un calque (œil) dans la liste.")
     dessin = MultiLineString(lignes)
+    entier = MultiLineString([LineString(c) for c in reference]) if reference else dessin
     utile_x, utile_y = palette[0] - 2 * marge, palette[1] - 2 * marge
-    xmin, ymin, xmax, ymax = dessin.bounds
+    xmin, ymin, xmax, ymax = entier.bounds
     largeur, hauteur = max(xmax - xmin, 1e-6), max(ymax - ymin, 1e-6)
 
     echelle_droit = min(utile_x / largeur, utile_y / hauteur)
     echelle_tourne = min(utile_x / hauteur, utile_y / largeur)
-    echelle_max = max(echelle_droit, echelle_tourne)
+    # on ne tourne le dessin que si cela lui fait vraiment gagner de la place (2 % au moins)
+    tourner = echelle_tourne > echelle_droit * 1.02
+    echelle_max = echelle_tourne if tourner else echelle_droit
     tient = 1 - 1e-9   # évite qu'un arrondi fasse refuser un dessin qui tient pile
     if taille is not None:
         echelle = min(max(float(taille), 0.05), 1.0) * echelle_max
-        rotation = 0 if echelle <= echelle_droit / tient else 90
+        rotation = 90 if tourner and echelle > echelle_droit / tient else 0
     elif echelle_droit >= tient:
         rotation, echelle = 0, 1.0
     elif echelle_tourne >= tient:
         rotation, echelle = 90, 1.0
-    elif echelle_droit >= echelle_tourne:
+    elif not tourner:
         rotation, echelle = 0, echelle_droit
     else:
         rotation, echelle = 90, echelle_tourne
 
+    # le dessin entier, tourné et mis à l'échelle autour de son centre, puis centré sur la palette ;
+    # les calques placés suivent exactement le même mouvement
     centre = ((xmin + xmax) / 2, (ymin + ymax) / 2)
-    dessin = affinity.rotate(dessin, rotation, origin=centre)
-    dessin = affinity.scale(dessin, echelle, echelle, origin=centre)
-    xmin, ymin, xmax, ymax = dessin.bounds
-    dessin = affinity.translate(dessin, palette[0] / 2 - (xmin + xmax) / 2, palette[1] / 2 - (ymin + ymax) / 2)
+
+    def bouger(geometrie):
+        geometrie = affinity.rotate(geometrie, rotation, origin=centre)
+        return affinity.scale(geometrie, echelle, echelle, origin=centre)
+
+    entier = bouger(entier)
+    xmin, ymin, xmax, ymax = entier.bounds
+    dx, dy = palette[0] / 2 - (xmin + xmax) / 2, palette[1] / 2 - (ymin + ymax) / 2
+    dessin = affinity.translate(bouger(dessin), dx, dy)
 
     # on range les lignes placées dans leurs calques, dans le même ordre
     placees = iter(list(g.coords) for g in dessin.geoms)
     courbes = [[next(placees) for _ in calque] for calque in courbes_par_calque]
-    xmin, ymin, xmax, ymax = dessin.bounds
     return {
         "courbes": courbes,
         "rotation": rotation,
