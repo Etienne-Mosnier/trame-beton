@@ -9,8 +9,8 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=f3e008c231de";
-import { creerBuse, creerRobot } from "./robot.js?v=f3e008c231de";
+import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=d3f8cf401ce3";
+import { creerBuse, creerRobot } from "./robot.js?v=d3f8cf401ce3";
 
 // une couleur par série, dans l'ordre d'impression
 // noir, orange, orange brûlé, orange clair, gris : le rouge est gardé pour les problèmes
@@ -492,9 +492,10 @@ function selectionner(e) {
 
 let app = null;
 const avecRobot = () => true;   // l'aperçu est toujours en vraie grandeur, avec le bras
-// dessin en cours : { nom, texte, calques: [{nom, couleur, imprime, lignes, longueur}],
-//                    ordre: [noms, dans l'ordre d'impression], eteints: Set(noms non imprimés),
-//                    pauses: Set(noms des calques après lesquels on fait une pause) }
+// dessin en cours : { cle, exemple, fichiers: [{nom, texte, poignee, date}],
+//   calques: [{nom, fichier, couleur, imprime, lignes, longueur}] (sans les calques retirés),
+//   ordre: [noms, dans l'ordre d'impression], eteints: Set(noms non imprimés),
+//   pauses: Set(noms des calques après lesquels on fait une pause), supprimes: Set(noms retirés) }
 let dessin = null;
 let dernierResultat = null;
 let dejaCadre = false; // la vue 3D est cadrée au premier calcul seulement
@@ -526,47 +527,104 @@ function curseur(conteneur, nom, p, cible) {
   conteneur.appendChild(bloc);
 }
 
-// --- ordre des calques : retenu par le navigateur, fichier par fichier ---------------------
+// --- le dessin : un ou plusieurs fichiers, que l'on ajoute ou retire ----------------------
+// L'ordre, les pauses et les calques retirés sont retenus par le navigateur, pour chaque
+// ensemble de fichiers.
 
-function lireMemoire(nom) {
-  try { return JSON.parse(localStorage.getItem("trame-calques:" + nom)); } catch { return null; }
+const cleDes = (fichiers) => fichiers.map((f) => f.nom).sort().join(" + ");
+// les fichiers tels que Python les lit (sans les poignées des fichiers suivis)
+const pourPython = (fichiers) => JSON.stringify(fichiers.map(({ nom, texte }) => ({ nom, texte })));
+
+function lireMemoire(cle) {
+  try { return JSON.parse(localStorage.getItem("trame-calques:" + cle)); } catch { return null; }
 }
 
 function memoriser() {
-  if (!dessin) return;
+  if (!dessin || dessin.exemple) return;
   try {
-    localStorage.setItem("trame-calques:" + dessin.nom,
-                         JSON.stringify({ ordre: dessin.ordre, eteints: [...dessin.eteints], pauses: [...dessin.pauses] }));
+    localStorage.setItem("trame-calques:" + dessin.cle, JSON.stringify({
+      ordre: dessin.ordre, eteints: [...dessin.eteints], pauses: [...dessin.pauses], supprimes: [...dessin.supprimes] }));
   } catch { /* navigation privée : l'ordre n'est simplement pas retenu */ }
 }
 
 const imprimes = () => dessin ? dessin.ordre.filter((n) => !dessin.eteints.has(n)) : [];
 
-// Ouvre un fichier (exemple, import, dépôt sur la vue, fichier réenregistré).
-// garder = true : même fichier modifié, on garde l'ordre et la taille choisis.
-function ouvrirDessin(nom, texte, garder = false) {
+// Ouvre le dessin fait de ces fichiers [{nom, texte, poignee?, date?}].
+//   garder  : on reprend l'ordre, les pauses et la taille du dessin en cours (fichier ajouté,
+//             retiré ou réenregistré) ; les nouveaux calques vont à la fin de la liste
+//   exemple : dessin d'exemple (un import le remplace au lieu de s'y ajouter)
+//   revenus : fichiers que l'on vient d'importer à nouveau : leurs calques retirés reviennent
+function ouvrirDessin(fichiers, { garder = false, exemple = false, revenus = [] } = {}) {
   if (!app) return;
-  const r = JSON.parse(app.lire_calques(texte, nom));
+  const cle = cleDes(fichiers);
+  const r = JSON.parse(app.lire_calques(pourPython(fichiers)));
   if (r.erreur) {
     $("message-dessin").innerHTML = `<span class="erreur">${echapper(r.erreur)}</span>`;
     $("bilan").innerHTML = `<p class="erreur">${echapper(r.erreur)}</p>`;
     $("info").textContent = r.details || "";
     return;
   }
-  const memoire = garder && dessin?.nom === nom
-    ? { ordre: dessin.ordre, eteints: [...dessin.eteints], pauses: [...dessin.pauses] } : lireMemoire(nom);
-  const noms = r.calques.map((c) => c.nom);
+  // un exemple repart toujours de son état d'origine : le navigateur ne retient rien pour lui
+  const memoire = garder && dessin
+    ? { ordre: dessin.ordre, eteints: [...dessin.eteints], pauses: [...dessin.pauses], supprimes: [...dessin.supprimes] }
+    : exemple ? null : lireMemoire(cle);
+  const supprimes = new Set((memoire?.supprimes || []).filter(
+    (n) => !r.calques.some((c) => c.nom === n && revenus.includes(c.fichier))));
+  const calques = r.calques.filter((c) => !supprimes.has(c.nom));
+  const noms = calques.map((c) => c.nom);
   const connus = (memoire?.ordre || []).filter((n) => noms.includes(n));
-  dessin = { nom, texte, calques: r.calques, ordre: [...connus, ...noms.filter((n) => !connus.includes(n))] };
+  dessin = { cle, fichiers, exemple, calques, supprimes,
+             ordre: [...connus, ...noms.filter((n) => !connus.includes(n))] };
   dessin.eteints = new Set((memoire?.eteints || []).filter((n) => noms.includes(n)));
   dessin.pauses = new Set((memoire?.pauses || []).filter((n) => noms.includes(n)));
   // nouveaux calques : imprimés sauf s'ils sont masqués dans le fichier (cadre, palette…)
-  for (const c of r.calques) if (!connus.includes(c.nom) && !c.imprime) dessin.eteints.add(c.nom);
+  for (const c of calques) if (!connus.includes(c.nom) && !c.imprime) dessin.eteints.add(c.nom);
   // au plus 5 calques imprimés : les suivants sont éteints
   imprimes().slice(MAX_CALQUES).forEach((n) => dessin.eteints.add(n));
-  if (!garder) delete reglages.taille;    // nouvelle forme : sa taille réelle si elle tient
+  if (!garder) delete reglages.taille;    // nouveau dessin : sa taille réelle s'il tient
+  memoriser();
+  majTitreImport();
+  majSuivi();
+  if (!calques.length) { viderDessin(); return; }
   dessinerCalques();
   calculer();
+}
+
+// retire un calque du dessin ; un fichier dont tous les calques sont retirés quitte le dessin
+function supprimer(nom) {
+  const calque = dessin.calques.find((c) => c.nom === nom);
+  dessin.supprimes.add(nom);
+  const restants = dessin.fichiers.filter((f) => f.nom !== calque.fichier
+    || dessin.calques.some((c) => c.fichier === f.nom && !dessin.supprimes.has(c.nom)));
+  if (!restants.length) { viderDessin(); return; }
+  ouvrirDessin(restants, { garder: true, exemple: dessin.exemple });
+}
+
+// plus aucun calque : la vue et le bilan se vident
+function viderDessin() {
+  dessin = null;
+  dernierResultat = null;
+  robot.donnees = null;
+  robot.lignes = [];
+  for (const g of [groupeTrame, groupePauses, groupeAlertes, groupeCordon, groupeAlertesRobot]) vider(g);
+  $("calques").innerHTML = "";
+  $("legende").innerHTML = "";
+  $("message-dessin").textContent = "";
+  $("info").textContent = "";
+  $("bilan").innerHTML = "<p>Aucun calque : importer un ou plusieurs fichiers.</p>";
+  majTitreImport();
+  majSuivi();
+}
+
+// la liste déroulante : un exemple, ou « importé : … » (les fichiers du dessin en cours)
+function majTitreImport() {
+  const choix = $("choix-dessin");
+  choix.querySelectorAll('option[value="importe"], option[value=""]').forEach((o) => o.remove());
+  if (dessin?.exemple) return;
+  if (!dessin) { choix.add(new Option("aucun dessin", "", true, true)); return; }
+  const noms = dessin.fichiers.map((f) => f.nom);
+  const titre = noms.length === 1 ? noms[0] : `${noms.length} fichiers (${noms.join(", ")})`;
+  choix.add(new Option("importé : " + titre, "importe", true, true));
 }
 
 // la liste des calques : glisser une ligne pour changer l'ordre, l'œil pour (ne pas) imprimer
@@ -592,11 +650,14 @@ function dessinerCalques() {
       <span class="poignee" aria-hidden="true">⋮⋮</span>
       <span class="rang">${eteint ? "" : rang + 1}</span>
       <span class="pastille" style="background:${eteint ? "transparent" : COULEURS[rang % COULEURS.length]}"></span>
-      <span class="nom">${echapper(nom)}</span>
+      <span class="nom" title="${echapper(nom)} (fichier ${echapper(calque.fichier)})">${echapper(nom)}</span>
       <span class="info">${calque.lignes > 1 ? calque.lignes + " morceaux · " : ""}${metres} m</span>
       <button type="button" class="oeil" title="${eteint ? "Imprimer ce calque" : "Ne pas imprimer ce calque"}"
-        aria-label="${eteint ? "Imprimer" : "Ne pas imprimer"} le calque ${echapper(nom)}">${eteint ? OEIL_FERME : OEIL}</button>`;
+        aria-label="${eteint ? "Imprimer" : "Ne pas imprimer"} le calque ${echapper(nom)}">${eteint ? OEIL_FERME : OEIL}</button>
+      <button type="button" class="retirer" title="Retirer ce calque du dessin"
+        aria-label="Retirer le calque ${echapper(nom)}">×</button>`;
     li.querySelector(".oeil").addEventListener("click", () => basculer(nom));
+    li.querySelector(".retirer").addEventListener("click", () => supprimer(nom));
     // après un calque imprimé : relié ou pause avant le suivant (après le dernier : entre deux couches)
     const dernier = rang === ordreImpression.length - 1;
     li.addEventListener("dragstart", (e) => {
@@ -700,7 +761,7 @@ function calculer() {
   setTimeout(() => {
     const debut = performance.now();
     const r = JSON.parse(app.calculer(JSON.stringify({ ...reglages, calques: imprimes(), pauses: [...dessin.pauses] }),
-                                      dessin.texte, dessin.nom));
+                                      pourPython(dessin.fichiers)));
     if (r.erreur) {
       etat.textContent = "";
       $("bilan").innerHTML = `<p class="erreur">${echapper(r.erreur)}</p>`;
@@ -730,44 +791,55 @@ function calculer() {
 
 // --- import : bouton, dépôt sur la vue, suivi du fichier ----------------------------------
 
-// Chrome et Edge savent relire un fichier choisi : l'aperçu se met à jour dès qu'il est
-// réenregistré (dans Rhino, Illustrator…). Ailleurs, on le glisse à nouveau sur la vue.
-let suivi = null;   // { poignee, date }
-
-function suivre(poignee, fichier) {
-  suivi = poignee ? { poignee, date: fichier.lastModified } : null;
-  $("suivi-fichier").textContent = suivi
-    ? `« ${fichier.name} » : l'aperçu se met à jour à chaque enregistrement du fichier.` : "";
+// Chrome et Edge savent relire un fichier choisi : l'aperçu se met à jour dès qu'un des
+// fichiers est réenregistré (dans Rhino, Illustrator…). Ailleurs, on l'importe à nouveau.
+function majSuivi() {
+  const n = dessin?.fichiers.filter((f) => f.poignee).length || 0;
+  $("suivi-fichier").textContent = !n ? ""
+    : n === 1 ? "Fichier suivi : l'aperçu se met à jour à chaque enregistrement."
+    : `${n} fichiers suivis : l'aperçu se met à jour à chaque enregistrement de l'un d'eux.`;
 }
 
 setInterval(async () => {
-  if (!suivi) return;
-  try {
-    const fichier = await suivi.poignee.getFile();
-    if (fichier.lastModified === suivi.date) return;
-    suivi.date = fichier.lastModified;
-    ouvrirDessin(fichier.name, await fichier.text(), true);
-  } catch {
-    suivre(null);     // fichier déplacé ou supprimé : on arrête de le suivre
+  const suivis = dessin?.fichiers.filter((f) => f.poignee) || [];
+  let change = false;
+  for (const f of suivis) {
+    try {
+      const fichier = await f.poignee.getFile();
+      if (fichier.lastModified === f.date) continue;
+      f.date = fichier.lastModified;
+      f.texte = await fichier.text();
+      change = true;
+    } catch {
+      f.poignee = null;     // fichier déplacé ou supprimé : on arrête de le suivre
+      majSuivi();
+    }
   }
+  if (change) ouvrirDessin(dessin.fichiers, { garder: true });
 }, 1500);
 
 const DESSIN_ACCEPTE = /\.(svg|dxf)$/i;
 
-async function importer(fichier, poignee = null) {
-  if (!DESSIN_ACCEPTE.test(fichier.name)) {
-    $("message-dessin").innerHTML = `<span class="erreur">« ${echapper(fichier.name)} » : importer un fichier .svg ou .dxf.</span>`;
+// Importe un ou plusieurs fichiers : ils s'ajoutent au dessin en cours (un fichier du même nom
+// est remplacé par sa nouvelle version) ; un dessin d'exemple, lui, est remplacé.
+async function importer(fichiers, poignees = []) {
+  const refuses = fichiers.filter((f) => !DESSIN_ACCEPTE.test(f.name));
+  if (!fichiers.length || refuses.length) {
+    const noms = refuses.map((f) => `« ${echapper(f.name)} »`).join(", ");
+    $("message-dessin").innerHTML = `<span class="erreur">${noms} : importer des fichiers .svg ou .dxf.</span>`;
     return;
   }
-  suivre(poignee, fichier);
-  $("choix-dessin").querySelector('option[value="importe"]')?.remove();
-  $("choix-dessin").add(new Option("importé : " + fichier.name, "importe", true, true));
-  ouvrirDessin(fichier.name, await fichier.text());
+  const nouveaux = await Promise.all(fichiers.map(async (f, i) => (
+    { nom: f.name, texte: await f.text(), poignee: poignees[i] || null, date: f.lastModified })));
+  const ajout = !!dessin && !dessin.exemple;
+  const anciens = ajout ? dessin.fichiers.filter((f) => !nouveaux.some((n) => n.nom === f.nom)) : [];
+  ouvrirDessin([...anciens, ...nouveaux], { garder: ajout, revenus: nouveaux.map((n) => n.nom) });
 }
 
 // télécharge le fichier DXF ou SVG du dernier calcul
 function telecharger(format) {
   if (!app) return;
+  if (!dessin) { alert("Rien à exporter : importer d'abord un dessin."); return; }
   const options = format === "gcode" ? { largeur_essai: Number($("largeur-essai").value) } : {};
   const r = JSON.parse(app.exporter(format, JSON.stringify(options)));
   if (r.erreur) { alert(r.erreur); return; }
@@ -849,28 +921,29 @@ async function demarrer() {
   $("scene").addEventListener("dragleave", () => $("scene").classList.remove("depot"));
   $("scene").addEventListener("drop", async (e) => {
     $("scene").classList.remove("depot");
-    const element = [...e.dataTransfer.items].find((i) => i.kind === "file");
-    if (!element) return;
+    const elements = [...e.dataTransfer.items].filter((i) => i.kind === "file");
+    if (!elements.length) return;
     e.preventDefault();
-    // les deux demandes partent tout de suite : après un « await », l'élément n'est plus lisible
-    const demandePoignee = element.getAsFileSystemHandle?.();
-    const fichier = element.getAsFile();
-    const poignee = await demandePoignee?.catch(() => null);
-    importer(fichier, poignee?.kind === "file" ? poignee : null);
+    // toutes les demandes partent tout de suite : après un « await », les éléments ne sont plus lisibles
+    const demandes = elements.map((el) => el.getAsFileSystemHandle?.());
+    const fichiers = elements.map((el) => el.getAsFile());
+    const poignees = await Promise.all(demandes.map((d) => d?.catch(() => null)));
+    importer(fichiers, poignees.map((p) => (p?.kind === "file" ? p : null)));
   });
   // bouton Importer : dans Chrome et Edge, on garde une poignée vers le fichier pour le suivre
   $("bouton-import").addEventListener("click", async (e) => {
     if (!window.showOpenFilePicker) return;         // autres navigateurs : sélecteur habituel
     e.preventDefault();
     try {
-      const [poignee] = await window.showOpenFilePicker({
+      const poignees = await window.showOpenFilePicker({
+        multiple: true,
         types: [{ description: "Dessin DXF ou SVG", accept: { "application/octet-stream": [".dxf", ".svg"] } }],
       });
-      importer(await poignee.getFile(), poignee);
+      importer(await Promise.all(poignees.map((p) => p.getFile())), poignees);
     } catch { /* sélection annulée */ }
   });
   $("fichier-dessin").addEventListener("change", (e) => {
-    if (e.target.files[0]) importer(e.target.files[0]);
+    if (e.target.files.length) importer([...e.target.files]);
     e.target.value = "";
   });
   $("export-dxf").onclick = () => telecharger("dxf");
@@ -913,11 +986,10 @@ async function demarrer() {
     const parDefaut = exemples.find((f) => f.includes("vagues")) || exemples[0];
     $("choix-dessin").value = parDefaut;
     const choisirExemple = async (chemin) => {
-      suivre(null);
-      ouvrirDessin(chemin.split("/").pop(), await lireTexte(chemin));
+      ouvrirDessin([{ nom: chemin.split("/").pop(), texte: await lireTexte(chemin) }], { exemple: true });
     };
     $("choix-dessin").onchange = (e) => {
-      if (e.target.value !== "importe") choisirExemple(e.target.value);
+      if (e.target.value.startsWith("dessins/")) choisirExemple(e.target.value);
     };
     await choisirExemple(parDefaut);
     chargerRobot();
