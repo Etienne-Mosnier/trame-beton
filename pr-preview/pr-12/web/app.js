@@ -9,8 +9,8 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=3175de8b1663";
-import { creerBuse, creerRobot } from "./robot.js?v=3175de8b1663";
+import { preparer, URL_PYODIDE } from "./pyodide_trame.mjs?v=5becad89088f";
+import { creerBuse, creerRobot } from "./robot.js?v=5becad89088f";
 
 // une couleur par série, dans l'ordre d'impression
 // noir, orange, orange brûlé, orange clair, gris : le rouge est gardé pour les problèmes
