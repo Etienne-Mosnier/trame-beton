@@ -39,13 +39,15 @@ dessin DXF / SVG ──> CALQUES (trame/dessin.py) : un calque = une ligne d'un 
 - **Ordre d'impression** = ordre de la liste dans l'aperçu (alphabétique au départ, glisser pour
   le changer). Départ et sens de chaque calque sont choisis par le moteur.
 - **Bosses** : à chaque croisement, le passage le plus récent monte au-dessus des plus anciens,
-  y compris quand une ligne se recroise elle-même. Pente : une hauteur de couche sur une largeur
-  de cordon.
+  sur toute la largeur du cordon franchi, y compris quand une ligne se recroise elle-même. Pente :
+  une hauteur de couche sur une largeur de cordon. Des cordons trop serrés pour que la buse
+  redescende au sol (sur au moins une largeur de cordon) se franchissent d'un seul plateau.
 - **Extrusion continue** (robot et WASP) : le programme ne coupe jamais la pompe. Le parcours
   commence et finit **à côté du dessin**, buse levée, avec un arrêt (« démarrer la pompe »,
   « couper la pompe »). Une **pause** sort la buse du dessin **sans jamais passer au-dessus du
-  béton** (écart d'un cordon + 5 mm), attend « Continuer », puis revient. Le béton qui tombe
-  pendant le trajet compte comme posé.
+  béton** (écart d'un cordon + 5 mm), attend « Continuer », puis revient. La buse sort d'une ligne
+  et y entre par un petit prolongement imprimé (dessiné avec la ligne) ; le trajet buse levée ne
+  compte pas comme béton posé (pas de bosse au-dessus).
 - Le **robot** ne va que dans sa zone de portée (`zone_de_travail` dans `trame/app.py`).
 - **Maquette WASP 2040** : delta, Marlin, plateau rond de 200 mm, extrusion par un boîtier
   externe (aucun axe E dans le G-code), arrêts `M0`. Voir `docs/MAQUETTE.md`.

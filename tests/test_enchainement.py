@@ -27,7 +27,10 @@ def test_une_ligne_par_calque_gardee_telle_quelle():
     r = calculer_trace([A], largeur_cordon=10, amp=AMP)
     assert r["liaisons"] == []
     ligne = r["lignes"][0][0]
-    assert [p[:2] for p in ligne] in ([(0, 0), (100, 0), (100, 100)], [(100, 100), (100, 0), (0, 0)])
+    # le dessin, intact, entre un prolongement d'entrée et un de sortie (17 mm, à hauteur de
+    # cordon : la buse arrive de côté et repart sans s'arrêter sur le cordon)
+    assert [p[:2] for p in ligne[1:-1]] in ([(0, 0), (100, 0), (100, 100)], [(100, 100), (100, 0), (0, 0)])
+    assert math.dist(ligne[0][:2], ligne[1][:2]) == pytest.approx(17) and math.dist(ligne[-2][:2], ligne[-1][:2]) == pytest.approx(17)
     assert all(p[2] == 0 for p in ligne)
     # extrusion continue : le parcours commence et finit à côté du dessin, buse levée
     assert r["path"][0] == r["depart"]["point"] and r["path"][-1] == r["fin"]["point"]
@@ -68,8 +71,9 @@ def test_courbe_fermee_arretee_avant_son_depart():
     cercle = [(100 * math.cos(2 * math.pi * k / 72), 100 * math.sin(2 * math.pi * k / 72)) for k in range(73)]
     r = calculer_trace([[cercle]], largeur_cordon=10, amp=AMP)
     ligne = r["lignes"][0][0]
-    # la buse s'arrête une largeur de cordon avant de revenir à son départ
-    assert math.dist(ligne[0][:2], ligne[-1][:2]) == pytest.approx(10, abs=1)
+    # la buse s'arrête une largeur de cordon avant de revenir à son départ (entre les
+    # prolongements d'entrée et de sortie)
+    assert math.dist(ligne[1][:2], ligne[-2][:2]) == pytest.approx(10, abs=1)
     assert max(p[2] for p in ligne) == 0                           # elle ne repasse pas dessus
 
 
@@ -175,3 +179,37 @@ def test_le_beton_tombe_pendant_une_pause_compte():
                 {"calque": 1, "nature": "ligne", "points": [(0, 200), (0, 260), (75, 260), (75, 100)]}]
     poses = poser(morceaux, AMP, 10)
     assert hauteur_a(poses[2]["points"], 75, 200) == AMP
+
+
+# --- bosses : largeur du cordon, cordons serrés, trajets levés -------------------------
+
+
+def test_bosse_sur_toute_la_largeur_du_cordon():
+    # B reste en haut tant qu'il est au-dessus du cordon A (10 mm de large), pas seulement sur son axe
+    r = calculer_trace([[[(0, 100), (400, 100)]], [[(200, 0), (200, 300)]]], largeur_cordon=10, amp=AMP)
+    b = r["lignes"][1][0]
+    assert hauteur_a(b, 200, 96) == AMP and hauteur_a(b, 200, 104) == AMP
+    assert hauteur_a(b, 200, 60) == 0
+
+
+def test_cordons_serres_franchis_d_un_coup():
+    # deux cordons de A à 18 mm l'un de l'autre : B les franchit d'un seul plateau, sans redescendre
+    serres = calculer_trace([[[(0, 100), (400, 100)], [(400, 118), (0, 118)]], [[(200, 0), (200, 300)]]],
+                            largeur_cordon=10, amp=AMP)
+    b = serres["lignes"][1][0]
+    assert all(hauteur_a(b, 200, y) == AMP for y in range(96, 123, 2))
+    # à 80 mm l'un de l'autre : deux bosses, et B redescend au sol entre les deux
+    ecartes = calculer_trace([[[(0, 100), (400, 100)], [(400, 180), (0, 180)]], [[(200, 0), (200, 300)]]],
+                             largeur_cordon=10, amp=AMP)
+    b = ecartes["lignes"][1][0]
+    assert hauteur_a(b, 200, 100) == AMP and hauteur_a(b, 200, 180) == AMP and hauteur_a(b, 200, 140) == 0
+
+
+def test_le_trajet_leve_ne_pose_pas_de_beton():
+    # le trajet buse levée d'une pause passe là où B sera imprimé ensuite : B ne monte pas dessus
+    from trame.moteur.enchainement import poser
+    morceaux = [{"calque": 0, "couche": 1, "nature": "ligne", "points": [(0, 0), (100, 0)]},
+                {"calque": 0, "couche": 1, "nature": "pause", "route": [(100, 0), (150, 100), (0, 100)], "points": []},
+                {"calque": 1, "couche": 1, "nature": "ligne", "points": [(50, 150), (50, 50)]}]
+    poses = poser(morceaux, AMP, 10)
+    assert max(p[2] for p in poses[2]["points"]) == 0
