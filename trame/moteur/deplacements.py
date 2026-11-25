@@ -24,6 +24,7 @@ import shapely
 from shapely.geometry import LineString, MultiLineString, Point, box
 from shapely.ops import nearest_points, unary_union
 
+MARGE_CADRE = 50.0     # mm : le point d'attente reste à cette distance du bord de la palette et de la portée
 ECART_ATTENTE = 60.0   # mm : le point d'attente est à cette distance du dessin, en plus du rayon
                        # (le béton qui coule pendant la pause y fait un tas)
 
@@ -136,12 +137,15 @@ def raccourcir(points, zone, fenetre=80):
 
 
 def point_d_attente(depuis, enveloppe, cadre, zone, rayon):
-    """Point d'attente juste à côté du dessin : hors du dessin (élargi), dans le cadre (à 5 mm de
-    son bord au moins), au plus près de 'depuis'. À défaut, n'importe quel point libre du cadre.
-    None s'il n'y en a aucun."""
-    utile = cadre.buffer(-5)
-    for region in (utile.difference(enveloppe.buffer(rayon + ECART_ATTENTE, quad_segs=8)),
-                   utile.difference(zone) if zone is not None else utile):
+    """Point d'attente juste à côté du dessin : hors du dessin (élargi), au plus près de 'depuis',
+    et à MARGE_CADRE du bord du cadre (palette et portée du robot) : au bord de la portée, le bras
+    tournerait brusquement en remontant (à la fin, la buse remonte encore au-dessus de ce point).
+    S'il n'y a pas la place, on se rapproche du bord (5 mm) ; à défaut, n'importe quel point libre
+    du cadre. None s'il n'y en a aucun."""
+    hors_dessin = enveloppe.buffer(rayon + ECART_ATTENTE, quad_segs=8)
+    regions = [cadre.buffer(-marge).difference(hors_dessin) for marge in (MARGE_CADRE, 5)]
+    regions.append(cadre.buffer(-5).difference(zone) if zone is not None else cadre.buffer(-5))
+    for region in regions:
         if not region.is_empty:
             q = nearest_points(region, Point(depuis))[0]
             return (q.x, q.y)

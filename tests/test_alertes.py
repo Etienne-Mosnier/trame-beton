@@ -140,3 +140,16 @@ def test_portee_et_orientation_du_robot():
                 assert inverse(T @ tcp_inv), (k, r)
     # la palette de simulation est presque entièrement atteignable
     assert p["atteignable"] >= 90
+
+
+def test_attente_loin_du_bord_de_la_portee():
+    # cordon de 25 mm : le dessin rétrécit un peu ; le point d'attente de fin restait au bord de la
+    # portée, et le bras tournait brusquement en remontant. Il reste maintenant à 50 mm du bord.
+    from shapely.geometry import Point
+    texte = (RACINE / "dessins" / "vagues.svg").read_text()
+    r = json.loads(app.calculer(json.dumps({"moteur": {"largeur_cordon": 25}}), texte, "vagues.svg"))
+    zone = app.zone_de_travail()
+    for bout in (r["depart"], r["fin"]):
+        point = Point(bout["point"][:2])
+        assert zone.contains(point) and zone.boundary.distance(point) >= 49
+    assert all(a["statut"] == "ok" for a in json.loads(app.robot())["alertes"])
