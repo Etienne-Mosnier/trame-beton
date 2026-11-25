@@ -32,6 +32,10 @@ dessin DXF / SVG ──> CALQUES (trame/dessin.py) : un calque = une ligne d'un 
 - **Le dessin est imprimé tel qu'il est tracé** : pas de découpe, pas de contour, pas de spirale
   automatique. Chaque calque est une ligne d'un seul trait ; un calque en plusieurs morceaux est
   relié au plus court, avec un avertissement. 5 calques imprimés au plus.
+- **Plusieurs fichiers** : un dessin peut arriver en plusieurs fichiers (souvent un calque par
+  fichier). Chaque import s'ajoute au dessin en cours ; × retire un calque (et le fichier, quand il
+  n'en a plus). Les fichiers sont superposés tels quels (même page dans le logiciel ; en SVG, y est
+  compté depuis le bas de la page, comme en DXF) ; un fichier d'un seul calque prend le nom du fichier.
 - **Ordre d'impression** = ordre de la liste dans l'aperçu (alphabétique au départ, glisser pour
   le changer). Départ et sens de chaque calque sont choisis par le moteur.
 - **Bosses** : à chaque croisement, le passage le plus récent monte au-dessus des plus anciens,

@@ -1,9 +1,11 @@
 """Point d'entrée appelé par la page web : dessin en calques + réglages -> résultat JSON.
 
 La page appelle :
-    lire_calques(texte, nom)          -> les calques du dessin importé (SVG ou DXF)
+    lire_calques(fichiers)            -> les calques du dessin importé (un ou plusieurs SVG / DXF)
     reglages_moteur()                 -> réglages du béton (curseurs)
-    calculer(reglages, texte, nom)    -> tout ce qu'il faut pour dessiner l'aperçu
+    calculer(reglages, fichiers)      -> tout ce qu'il faut pour dessiner l'aperçu
+fichiers : texte JSON [{"nom": "a_vagues.dxf", "texte": "…"}, …] ; pour un seul fichier, on peut
+aussi donner (texte, nom).
 Toutes les fonctions renvoient un texte JSON. En cas d'erreur, elles renvoient
 {"erreur": "message en français"} au lieu de planter.
 """
@@ -11,6 +13,7 @@ Toutes les fonctions renvoient un texte JSON. En cas d'erreur, elles renvoient
 import json
 import math
 import pathlib
+import re
 import sys
 import tomllib
 import traceback
@@ -18,7 +21,7 @@ import traceback
 from shapely.geometry import LineString
 
 from trame.controles import controler, quantites
-from trame.dessin import lire_dessin, placer_dessin
+from trame.dessin import lire_dessins, nom_court, placer_dessin
 from trame.export.dxf import exporter_dxf
 from trame.export import gcode
 from trame.export.svg import exporter_svg
@@ -89,14 +92,25 @@ def arrondir(points, chiffres=2):
 # --- dessin importé, en calques -------------------------------------------------------
 
 MAX_CALQUES = 5          # 2 à 5 niveaux de cordon (cahier des charges)
-_dessins = {}            # dernier fichier lu (gardé en mémoire : on ne le relit pas à chaque calcul)
+_dessins = {}            # derniers fichiers lus (gardés en mémoire : on ne les relit pas à chaque calcul)
 
 
-def dessin_lu(texte, nom):
-    cle = (nom, len(texte), hash(texte))
+def fichiers_de(texte, nom=None):
+    """[(texte, nom), …] : un seul fichier (texte, nom), ou nom absent et texte = JSON
+    [{"nom", "texte"}, …] (plusieurs fichiers, comme les envoie la page web)."""
+    if nom is not None:
+        return [(texte, nom)]
+    fichiers = [(f["texte"], f["nom"]) for f in json.loads(texte)]
+    if not fichiers:
+        raise ValueError("Aucun fichier : importer un ou plusieurs fichiers .svg ou .dxf.")
+    return fichiers
+
+
+def dessin_lu(fichiers):
+    cle = tuple((nom, len(texte), hash(texte)) for texte, nom in fichiers)
     if cle not in _dessins:
         _dessins.clear()
-        _dessins[cle] = lire_dessin(texte, nom)
+        _dessins[cle] = lire_dessins(fichiers)
     return _dessins[cle]
 
 
@@ -107,14 +121,15 @@ def en_erreur(e):
     return json.dumps({"erreur": "%s : %s" % (type(e).__name__, e), "details": traceback.format_exc()})
 
 
-def lire_calques(texte, nom):
-    """Les calques du fichier, dans l'ordre alphabétique : nom, couleur dans le fichier,
-    imprimé au départ ou non, nombre de lignes, longueur (mm)."""
+def lire_calques(texte, nom=None):
+    """Les calques du ou des fichiers, dans l'ordre alphabétique : nom, fichier, couleur dans le
+    fichier, imprimé au départ ou non, nombre de lignes, longueur (mm)."""
     try:
-        dessin = dessin_lu(texte, nom)
+        dessin = dessin_lu(fichiers_de(texte, nom))
         return json.dumps({
             "message": dessin["message"],
-            "calques": [{"nom": c["nom"], "couleur": c["couleur"], "imprime": c["imprime"],
+            "fichiers": dessin["fichiers"],
+            "calques": [{"nom": c["nom"], "fichier": c["fichier"], "couleur": c["couleur"], "imprime": c["imprime"],
                          "lignes": len(c["courbes"]),
                          "longueur": round(sum(LineString(p).length for p in c["courbes"]))}
                         for c in dessin["calques"]],
@@ -123,8 +138,8 @@ def lire_calques(texte, nom):
         return en_erreur(e)
 
 
-def calculer(reglages_json, texte, nom):
-    """Calcul complet pour l'aperçu, à partir du fichier importé.
+def calculer(reglages_json, texte, nom=None):
+    """Calcul complet pour l'aperçu, à partir des fichiers importés (voir fichiers_de).
 
     reglages_json : {"calques": [noms des calques à imprimer, dans l'ordre d'impression],
                      "pauses": [noms des calques après lesquels on fait une pause],
@@ -138,7 +153,7 @@ def calculer(reglages_json, texte, nom):
         vitesse = min(max(float(reglages.get("vitesse") or CONFIG["impression"]["vitesse"]), 1.0), 250.0)
         beton = valeurs(MOTEUR, reglages.get("moteur"))
         moteur = reglages_du_moteur(beton)
-        dessin = dessin_lu(texte, nom)
+        dessin = dessin_lu(fichiers_de(texte, nom))
 
         par_nom = {c["nom"]: c for c in dessin["calques"]}
         noms = reglages.get("calques")
@@ -167,9 +182,11 @@ def calculer(reglages_json, texte, nom):
             "palette": plateau,
         })
         q = quantites(r, largeur, moteur["amp"], vitesse)
-        nom_court = pathlib.Path(nom).stem
+        # fichiers exportés : trame_<nom du dessin>.dxf (plusieurs fichiers : leurs noms à la suite)
+        nom_export = re.sub(r"[^\w\-+ ]+", "_", "+".join(nom_court(n) for n in dessin["fichiers"]))[:60]
         _dernier.clear()
-        _dernier.update(resultat=r, titre="Dessin : %s" % nom, nom_export=nom_court, noms=noms, largeur=largeur,
+        _dernier.update(resultat=r, titre="Dessin : %s" % ", ".join(dessin["fichiers"]), nom_export=nom_export,
+                        noms=noms, largeur=largeur,
                         amp=moteur["amp"], palette=plateau, vitesse=vitesse)
         return json.dumps({
             "vitesse": vitesse,

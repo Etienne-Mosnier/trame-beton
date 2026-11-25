@@ -128,3 +128,32 @@ def test_calculer_avec_pause():
     # le robot ne dépose pas de cordon pendant le trajet à vide
     bras = json.loads(app.robot())
     assert -1 in bras["series"] and bras["hors_portee"] == []
+
+
+def test_plusieurs_fichiers():
+    # les deux calques de vagues.svg, chacun dans son propre fichier
+    import re
+    texte = (DESSINS / "vagues.svg").read_text()
+    groupes = re.findall(r'<g inkscape:groupmode="layer".*?</g>', texte, re.S)
+    entete = texte[:texte.index("<g ")]
+    fichiers = [{"nom": "a_vagues.svg", "texte": entete + groupes[0] + "</svg>"},
+                {"nom": "b_lignes.svg", "texte": entete + groupes[1] + "</svg>"}]
+    lus = json.loads(app.lire_calques(json.dumps(fichiers)))
+    assert [c["nom"] for c in lus["calques"]] == ["a_vagues", "b_lignes"]
+    assert lus["fichiers"] == ["a_vagues.svg", "b_lignes.svg"] and lus["message"] == "2 fichiers, 2 calques"
+    r = json.loads(app.calculer("{}", json.dumps(fichiers)))
+    seul = json.loads(app.calculer("{}", texte, "vagues.svg"))
+    # même dessin que le fichier unique : mêmes hauteurs, même longueur
+    assert r["longueur"] == seul["longueur"]
+    assert max(p[2] for serie in r["waves"] for w in serie for p in w) == \
+        max(p[2] for serie in seul["waves"] for w in serie for p in w)
+    json.loads(app.calculer("{}", json.dumps(fichiers)))
+    e = json.loads(app.exporter("script"))
+    assert e["nom"] == "trame_a_vagues+b_lignes.script" and "Dessin : a_vagues.svg, b_lignes.svg" in e["texte"]
+
+
+def test_bilan_de_plusieurs_fichiers(tmp_path):
+    from trame.bilan import bilan
+    (tmp_path / "a.dxf").write_text((DESSINS / "spirales.dxf").read_text())
+    texte = bilan(tmp_path / "a.dxf", DESSINS / "vagues.svg")
+    assert "Dessin a.dxf, vagues.svg" in texte and "2 fichiers" in texte

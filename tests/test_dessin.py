@@ -112,7 +112,7 @@ def test_illustrator_un_seul_calque_separe_par_couleur():
 def test_svg_sans_calque_une_couleur():
     svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M0 0 L 100 0" stroke="#000"/></svg>'
     d = lire_dessin(svg, "trait.svg")
-    assert noms(d) == ["Calque 1"]
+    assert noms(d) == ["trait"]                                   # un seul calque : le nom du fichier
     assert d["calques"][0]["imprime"]
 
 
@@ -216,3 +216,74 @@ def test_gabarits():
         d = lire_dessin((dossier / nom).read_text(encoding="utf-8"), nom)
         assert [(c["nom"], c["imprime"]) for c in d["calques"]] == [("palette", False)]
         assert taille(d["calques"][0]["courbes"]) == pytest.approx((1200, 800))
+
+
+# --- plusieurs fichiers (un calque par fichier, ou plusieurs) --------------------------
+
+from trame.dessin import lire_dessins
+
+
+def dxf_d_une_ligne(debut, fin, calque="0"):
+    doc = ezdxf.new("R2010")
+    doc.header["$INSUNITS"] = 4
+    if calque != "0":
+        doc.layers.add(calque)
+    doc.modelspace().add_line(debut, fin, dxfattribs={"layer": calque})
+    return texte_dxf(doc)
+
+
+def test_un_calque_par_fichier():
+    # deux fichiers exportés depuis le même plan, chacun avec son calque « 0 »
+    d = lire_dessins([(dxf_d_une_ligne((0, 100), (400, 100)), "A vagues.dxf"),
+                      (dxf_d_une_ligne((200, 0), (200, 300)), "dossier/B lignes.dxf")])
+    assert noms(d) == ["A vagues", "B lignes"]                    # le nom du fichier, sans extension
+    assert [c["fichier"] for c in d["calques"]] == ["A vagues.dxf", "dossier/B lignes.dxf"]
+    # les fichiers sont superposés tels quels : le croisement reste en (200, 100)
+    a, b = calque(d, "A vagues")["courbes"][0], calque(d, "B lignes")["courbes"][0]
+    assert a == [(0, 100), (400, 100)] and b == [(200, 0), (200, 300)]
+    assert d["message"] == "2 fichiers, 2 calques"
+    # un seul fichier d'un seul calque : le même nom (il ne change pas si l'on ajoute un fichier)
+    assert noms(lire_dessins([(dxf_d_une_ligne((0, 0), (10, 0)), "A vagues.dxf")])) == ["A vagues"]
+
+
+def test_un_svg_et_un_dxf_se_superposent():
+    # la même page de 1200 × 800 mm : un trait à 700 mm du haut en SVG = à 100 mm du bas en DXF
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="1200mm" height="800mm" viewBox="0 0 1200 800">'
+           '<path d="M 100 700 L 500 700" stroke="#000"/></svg>')
+    d = lire_dessins([(svg, "a.svg"), (dxf_d_une_ligne((100, 100), (500, 300)), "b.dxf")])
+    assert calque(d, "a")["courbes"][0][0] == pytest.approx((100, 100), abs=0.01)
+    assert calque(d, "b")["courbes"][0][0] == (100, 100)
+
+
+def test_meme_nom_de_calque_dans_deux_fichiers():
+    def deux_calques(decalage):
+        doc = ezdxf.new("R2010")
+        for nom in ("A", "B"):
+            doc.layers.add(nom)
+            doc.modelspace().add_line((0, decalage), (100, decalage + 50), dxfattribs={"layer": nom})
+        return texte_dxf(doc)
+    d = lire_dessins([(deux_calques(0), "essai1.dxf"), (deux_calques(10), "essai2.dxf")])
+    assert noms(d) == ["A (essai1)", "A (essai2)", "B (essai1)", "B (essai2)"]
+
+
+def test_fichier_qui_ne_recouvre_aucun_autre():
+    # exporté avec une autre page (par exemple « exporter la sélection ») : il est signalé
+    d = lire_dessins([(dxf_d_une_ligne((0, 0), (100, 100)), "a.dxf"),
+                      (dxf_d_une_ligne((5000, 0), (5100, 100)), "b.dxf")])
+    assert "« b.dxf » ne recouvre aucun autre fichier" in d["message"]
+    assert "ne recouvre" not in lire_dessins([(dxf_d_une_ligne((0, 0), (100, 100)), "a.dxf"),
+                                              (dxf_d_une_ligne((0, 100), (100, 0)), "b.dxf")])["message"]
+
+
+def test_gabarit_et_dessin_dans_deux_fichiers():
+    import pathlib
+    gabarit = (pathlib.Path(__file__).resolve().parent.parent / "gabarits" / "gabarit_palette.dxf").read_text()
+    d = lire_dessins([(gabarit, "gabarit_palette.dxf"), (dxf_d_une_ligne((100, 100), (900, 600)), "trame.dxf")])
+    # le cadre garde son nom « palette » et n'est pas imprimé
+    assert [(c["nom"], c["imprime"]) for c in d["calques"]] == [("palette", False), ("trame", True)]
+
+
+def test_erreur_dans_un_des_fichiers():
+    with pytest.raises(ValueError, match="« vide.svg »"):
+        lire_dessins([(dxf_d_une_ligne((0, 0), (1, 1)), "a.dxf"),
+                      ('<svg xmlns="http://www.w3.org/2000/svg"><text>x</text></svg>', "vide.svg")])

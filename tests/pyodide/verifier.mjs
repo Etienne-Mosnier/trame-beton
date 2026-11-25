@@ -25,6 +25,15 @@ for (const [nom, attendus] of [["vagues.svg", 2], ["spirales.dxf", 3]]) {
   console.log(`${nom} : ${c.calques.map((k) => k.nom).join(", ")}`);
 }
 
+// plusieurs fichiers : chaque calque de vagues.svg dans son propre fichier
+const vagues = await readFile("dessins/vagues.svg", "utf8");
+const groupes = vagues.match(/<g inkscape:groupmode="layer"[\s\S]*?<\/g>/g);
+const entete = vagues.slice(0, vagues.indexOf("<g "));
+const separes = groupes.map((g, i) => ({ nom: `calque_${i + 1}.svg`, texte: entete + g + "</svg>" }));
+const multi = JSON.parse(app.calculer("{}", JSON.stringify(separes)));
+if (multi.erreur || multi.calques.join() !== "calque_1,calque_2") throw new Error(`Plusieurs fichiers : ${multi.erreur || multi.calques}`);
+console.log(`plusieurs fichiers : ${multi.calques.join(" > ")}`);
+
 // le calcul complet de l'aperçu : dessin d'exemple, ordre des calques choisi
 const debut = performance.now();
 const texte = await readFile("dessins/spirales.dxf", "utf8");

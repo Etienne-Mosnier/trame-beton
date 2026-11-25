@@ -3,6 +3,7 @@
 Depuis la racine du dépôt :
     python -m trame.bilan dessins/vagues.svg
     python -m trame.bilan mon_dessin.dxf
+    python -m trame.bilan a_vagues.dxf b_lignes.dxf      (calques dans plusieurs fichiers)
 Calques imprimés : ceux du départ, dans l'ordre alphabétique de leur nom.
 """
 
@@ -15,12 +16,13 @@ from trame.app import calculer
 SYMBOLES = {"ok": "OK", "alerte": "ATTENTION", "erreur": "ERREUR"}
 
 
-def bilan(chemin):
-    chemin = pathlib.Path(chemin)
-    r = json.loads(calculer("{}", chemin.read_text(encoding="utf-8"), chemin.name))
+def bilan(*chemins):
+    chemins = [pathlib.Path(c) for c in chemins]
+    fichiers = [{"nom": c.name, "texte": c.read_text(encoding="utf-8")} for c in chemins]
+    r = json.loads(calculer("{}", json.dumps(fichiers)))
     if "erreur" in r:
         return "ERREUR : %s\n%s" % (r["erreur"], r.get("details", ""))
-    lignes = ["Dessin %s (réglages par défaut)" % chemin.name,
+    lignes = ["Dessin %s (réglages par défaut)" % ", ".join(c.name for c in chemins),
               r["message_dessin"],
               "Calques imprimés, dans l'ordre : %s" % ", ".join(r["calques"]),
               "Longueur de cordon : %.1f m, durée : environ %d min, béton : environ %s L"
