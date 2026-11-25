@@ -30,7 +30,7 @@ import svgelements
 from ezdxf import colors as couleurs_dxf
 from ezdxf import path as chemins_dxf
 from shapely import affinity
-from shapely.geometry import LineString, MultiLineString
+from shapely.geometry import LineString, MultiLineString, box
 
 # Code d'unité d'un DXF ($INSUNITS) -> nombre de mm pour une unité.
 # 0 = « sans unité » : on considère que le dessin est en mm.
@@ -134,8 +134,9 @@ def vient_d_illustrator(texte, racine):
 
 
 def lire_svg(texte, pas=2.0):
-    """Courbes d'un SVG, rangées par calque. Renvoie (calques, nb_remplies) avec
-    calques = [{"nom", "masque", "courbes": [(points, couleur), …]}, …]."""
+    """Courbes d'un SVG, rangées par calque. Renvoie (calques, nb_remplies, page) avec
+    calques = [{"nom", "masque", "courbes": [(points, couleur), …]}, …] et page = (largeur,
+    hauteur) de la page en mm (le dessin est dans le rectangle (0, 0) – (largeur, hauteur))."""
     try:
         racine = ET.fromstring(texte)
     except ET.ParseError as e:
@@ -167,7 +168,8 @@ def lire_svg(texte, pas=2.0):
         couleur = (trait or element.fill or svgelements.Color("black")).hexrgb
         for points in points_svg(element, mm_par_px, hauteur, pas):
             calques[int(numero)]["courbes"].append((points, couleur))
-    return calques, nb_remplies
+    largeur = float(svg.width) if isinstance(svg.width, (int, float)) else 0.0
+    return calques, nb_remplies, (largeur * mm_par_px, hauteur * mm_par_px)
 
 
 def points_svg(element, mm_par_px, hauteur, pas):
@@ -234,7 +236,7 @@ def couleur_dxf(entite, table):
 
 
 def lire_dxf(texte, ecart=0.1):
-    """Courbes d'un DXF, rangées par calque (mêmes sorties que lire_svg).
+    """Courbes d'un DXF, rangées par calque (mêmes sorties que lire_svg, sans page : None).
     Les arcs et courbes sont suivis à 'ecart' mm près. Seul l'espace objet est lu."""
     try:
         document = ezdxf.read(io.StringIO(texte))
@@ -267,7 +269,7 @@ def lire_dxf(texte, ecart=0.1):
     for calque, court in zip(calques, courts):
         if court and courts.count(court) == 1:
             calque["nom"] = court
-    return calques, 0
+    return calques, 0, None
 
 
 # --- tout en un -----------------------------------------------------------------------
@@ -276,12 +278,12 @@ def lire_dxf(texte, ecart=0.1):
 def lire_fichier(texte, nom_fichier):
     """Calques d'un seul fichier, sans calque vide : [{"nom", "masque", "courbes": [(points,
     couleur), …]}, …]. Un seul calque en plusieurs couleurs : chaque couleur devient un calque.
-    Renvoie (calques, nombre de formes remplies sans trait)."""
+    Renvoie (calques, nombre de formes remplies sans trait, page en mm ou None)."""
     extension = nom_fichier.lower().rsplit(".", 1)[-1]
     if extension == "svg":
-        calques, nb_remplies = lire_svg(texte)
+        calques, nb_remplies, page = lire_svg(texte)
     elif extension == "dxf":
-        calques, nb_remplies = lire_dxf(texte)
+        calques, nb_remplies, page = lire_dxf(texte)
     else:
         raise ValueError("Format non reconnu : « %s ». Importer un fichier .svg ou .dxf." % nom_fichier)
 
@@ -294,7 +296,7 @@ def lire_fichier(texte, nom_fichier):
         couleurs = sorted({couleur for _, couleur in seul["courbes"]})
         calques = [{"nom": "Couleur %s" % couleur, "masque": seul["masque"],
                     "courbes": [(p, c) for p, c in seul["courbes"] if c == couleur]} for couleur in couleurs]
-    return calques, nb_remplies
+    return calques, nb_remplies, page
 
 
 def nom_court(nom_fichier):
@@ -302,13 +304,53 @@ def nom_court(nom_fichier):
     return re.split(r"[\\/]", nom_fichier)[-1].rsplit(".", 1)[0]
 
 
+def boite(calques):
+    """(xmin, ymin, xmax, ymax) de toutes les courbes de ces calques."""
+    return MultiLineString([LineString(courbe) for c in calques for courbe, _ in c["courbes"]]).bounds
+
+
+def page_ajustee(cadre, page, part=0.03):
+    """La page d'un SVG est ajustée à son dessin quand le dessin touche presque ses quatre bords
+    (à 'part' de la page près) : c'est le cas d'un export sans plan de travail (« Exporter sous »
+    d'Illustrator, case « Utiliser les plans de travail » décochée). La position du dessin sur
+    la page ne dit alors plus rien de sa position dans le document d'origine."""
+    if not page or not page[0] or not page[1]:
+        return False
+    largeur, hauteur = page
+    xmin, ymin, xmax, ymax = cadre
+    marge = part * max(largeur, hauteur)
+    return xmin <= marge and ymin <= marge and largeur - xmax <= marge and hauteur - ymax <= marge
+
+
+def decaler(calques, dx, dy):
+    for calque in calques:
+        calque["courbes"] = [([(x + dx, y + dy) for x, y in points], couleur) for points, couleur in calque["courbes"]]
+
+
+def centrer_pages_ajustees(lus):
+    """Plusieurs fichiers : ceux dont la page est ajustée au dessin sont centrés sur les autres
+    (sur le premier, si tous le sont). lus = [(nom du fichier, calques, page)]. Renvoie les noms
+    des fichiers centrés."""
+    ajustes = [l for l in lus if page_ajustee(boite(l[1]), l[2])]
+    if not ajustes:
+        return []
+    fixes = [l for l in lus if l not in ajustes] or ajustes[:1]
+    cadres = [boite(calques) for _, calques, _ in fixes]
+    cx = (min(c[0] for c in cadres) + max(c[2] for c in cadres)) / 2
+    cy = (min(c[1] for c in cadres) + max(c[3] for c in cadres)) / 2
+    for _, calques, _ in ajustes:
+        xmin, ymin, xmax, ymax = boite(calques)
+        decaler(calques, cx - (xmin + xmax) / 2, cy - (ymin + ymax) / 2)
+    return [nom for nom, _, _ in ajustes]
+
+
 def lire_dessins(fichiers):
     """Lit un ou plusieurs fichiers SVG ou DXF, fichiers = [(texte, nom du fichier), …], et réunit
     leurs calques (voir le début du module). Renvoie {"calques", "fichiers", "message"}."""
     plusieurs = len(fichiers) > 1
-    calques, nb_remplies, boites = [], 0, []
+    lus, nb_remplies = [], 0
     for texte, nom_fichier in fichiers:
-        du_fichier, n = lire_fichier(texte, nom_fichier)
+        du_fichier, n, page = lire_fichier(texte, nom_fichier)
         nb_remplies += n
         # un calque par fichier : le fichier porte le nom du calque (le calque, souvent « 0 » ou
         # « Calque 1 », ne dit rien) ; sauf un cadre ou une palette, qui garde son nom
@@ -316,9 +358,10 @@ def lire_dessins(fichiers):
             du_fichier[0]["nom"] = nom_court(nom_fichier)
         for calque in du_fichier:
             calque["fichier"] = nom_fichier
-        boites.append((nom_fichier, MultiLineString([LineString(courbe) for c in du_fichier
-                                                     for courbe, _ in c["courbes"]]).envelope.buffer(1.0)))
-        calques += du_fichier
+        lus.append((nom_fichier, du_fichier, page))
+    centres = centrer_pages_ajustees(lus) if plusieurs else []
+    calques = [c for _, du_fichier, _ in lus for c in du_fichier]
+    boites = [(nom, box(*boite(du_fichier)).buffer(1.0)) for nom, du_fichier, _ in lus]
 
     # noms : jamais vides, jamais deux fois le même (le même nom dans deux fichiers : le nom
     # du fichier entre parenthèses)
@@ -350,10 +393,19 @@ def lire_dessins(fichiers):
     message = "%d calque%s" % (len(sortie), "s" if len(sortie) > 1 else "")
     if plusieurs:
         message = "%d fichiers, %s" % (len(fichiers), message)
+        if centres:
+            noms = ", ".join("« %s »" % n for n in centres)
+            if len(centres) == len(fichiers):
+                message += (" ; %s : exportés sans plan de travail (page ajustée au dessin), donc centrés "
+                            "les uns sur les autres" % noms)
+            else:
+                pluriel = "s" if len(centres) > 1 else ""
+                message += (" ; %s : exporté%s sans plan de travail (page ajustée au dessin), donc centré%s "
+                            "sur les autres fichiers" % (noms, pluriel, pluriel))
         # un fichier qui ne recouvre aucun autre : sans doute exporté avec une autre page
-        for nom_fichier, boite in boites:
+        for nom_fichier, cadre in boites:
             autres = [b for n, b in boites if n != nom_fichier]
-            if not any(boite.intersects(b) for b in autres):
+            if not any(cadre.intersects(b) for b in autres):
                 message += (" ; « %s » ne recouvre aucun autre fichier : vérifier que tous les fichiers "
                             "viennent de la même page (ou du même plan de travail)" % nom_fichier)
     if nb_remplies:
