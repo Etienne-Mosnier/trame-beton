@@ -52,9 +52,10 @@ def libre(zone, a, b=None):
 
 def degager(point, direction, zone, distance):
     """Premier point libre à 'distance' du point : d'abord droit devant (dans le prolongement de
-    la ligne), puis en tournant de plus en plus. None si tout est occupé."""
+    la ligne), puis en tournant de plus en plus, par petits pas (le prolongement est imprimé :
+    moins il tourne, moins il se voit). None si tout est occupé."""
     angle = math.atan2(direction[1], direction[0])
-    for ecart in (0, 30, -30, 60, -60, 90, -90, 120, -120, 150, -150, 180):
+    for ecart in (0, 10, -10, 20, -20, 30, -30, 45, -45, 60, -60, 90, -90, 120, -120, 150, -150, 180):
         a = angle + math.radians(ecart)
         q = (point[0] + distance * math.cos(a), point[1] + distance * math.sin(a))
         if libre(zone, q):
@@ -165,13 +166,15 @@ def trajet_de_pause(fin, avant_fin, debut, apres_debut, imprime, futur, envelopp
     imprime, futur     : polylignes déjà imprimées, et celles à imprimer ensuite
     enveloppe          : forme du dessin entier (vu de dessus), pour placer le point d'attente
     cadre              : là où la buse peut aller (polygone : palette dans la portée du robot)
-    Renvoie {"points", "sortie", "entree", "attente", "libre"} : entre 'fin' et 'sortie', et entre
-    'entree' et 'debut', la buse est à hauteur de cordon ; entre les deux, elle est levée.
-    Au départ du dessin, le trajet commence au point d'attente ; à la fin, il s'y arrête.
-    'libre' est faux s'il a fallu passer au-dessus du béton déjà imprimé.
+    Renvoie {"points", "sortie", "entree", "attente", "libre", "evite_suite"} : entre 'fin' et
+    'sortie', et entre 'entree' et 'debut', la buse est à hauteur de cordon ; entre les deux, elle
+    est levée. Au départ du dessin, le trajet commence au point d'attente ; à la fin, il s'y arrête.
+    'libre' est faux s'il a fallu passer au-dessus du béton déjà imprimé ; 'evite_suite' est faux
+    s'il a fallu passer au-dessus de lignes à imprimer ensuite (le béton qui coule y tombe).
     """
     essai = None
     for lignes in (list(imprime) + list(futur), list(imprime)):
+        evite_suite = len(lignes) == len(imprime) + len(futur)
         zone = obstacles(lignes, rayon, cadre)
         marge = rayon + 2.0
         ok = True
@@ -200,7 +203,8 @@ def trajet_de_pause(fin, avant_fin, debut, apres_debut, imprime, futur, envelopp
             retour = chemin_libre(attente, entree, zone, cadre.bounds, pas)
             ok = ok and retour is not None
             points += (retour or [attente, entree])[1:] + [tuple(debut[:2])]
-        essai = {"points": points, "sortie": sortie, "entree": entree, "attente": attente, "libre": ok}
+        essai = {"points": points, "sortie": sortie, "entree": entree, "attente": attente, "libre": ok,
+                 "evite_suite": ok and evite_suite}
         if ok:
             break
     return essai

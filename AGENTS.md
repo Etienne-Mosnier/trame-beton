@@ -37,7 +37,11 @@ dessin DXF / SVG ──> CALQUES (trame/dessin.py) : un calque = une ligne d'un 
   n'en a plus). Les fichiers sont superposés tels quels (même page dans le logiciel ; en SVG, y est
   compté depuis le bas de la page, comme en DXF) ; un fichier d'un seul calque prend le nom du fichier.
 - **Ordre d'impression** = ordre de la liste dans l'aperçu (alphabétique au départ, glisser pour
-  le changer). Départ et sens de chaque calque sont choisis par le moteur.
+  le changer). Départ et sens de chaque calque sont choisis par le moteur (une boucle fermée peut
+  commencer n'importe où). Il cherche, dans cet ordre de gravité : ne pas passer buse levée
+  au-dessus du béton imprimé (il coule encore, à la fin et pendant les pauses), des liaisons courtes
+  qui ne passent pas par-dessus le béton, un départ atteint sans passer au-dessus des lignes à venir.
+  Quand il ne peut pas éviter l'un d'eux, le bilan le signale (liaison ou trajet en rouge).
 - **Taille et position sur la palette** : la position est celle du dessin entier, calques éteints
   compris (sauf les calques techniques et ceux retirés avec ×) : éteindre un calque ne bouge pas
   les autres. **L'échelle ne change jamais toute seule** : « Taille » est l'échelle par rapport à
